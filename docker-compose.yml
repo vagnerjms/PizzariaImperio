@@ -16,9 +16,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3002:8080"
-    volumes:
-      - .:/app
-      - /app/node_modules
     depends_on:
       - db
     environment:
@@ -37,6 +34,7 @@ services:
     environment:
       - N8N_PORT=5678
       - GENERIC_TIMEZONE=America/Sao_Paulo
+      - N8N_SECURE_COOKIE=false
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
