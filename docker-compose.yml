@@ -1,0 +1,84 @@
+services:
+  db:
+    image: mongo:6.0
+    container_name: pizzaria_db
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=adminpassword
+    volumes:
+      - mongo_data:/data/db
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:8080"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - db
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - DOCKER=true
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    env_file:
+      - .env
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: pizzaria_n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - db
+
+  evolution_api:
+    image: evoapicloud/evolution-api:latest
+    container_name: pizzaria_evolution
+    ports:
+      - "8085:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=http://localhost:8085
+      - SERVER_TYPE=http
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/evolution?schema=public
+      - CACHE_REDIS_ENABLED=false
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=pizzaria_evolution_secret_key_2026
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      - db
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: pizzaria_postgres
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  mongo_data:
+  n8n_data:
+  evolution_instances:
+  postgres_data:
+
+

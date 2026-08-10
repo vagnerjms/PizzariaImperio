@@ -1,0 +1,11 @@
+node_modules
+.git
+.gemini
+.lovable
+npm-debug.log
+bun.lock
+build
+dist
+.env
+.agents
+*.md
