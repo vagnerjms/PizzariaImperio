@@ -26,20 +26,6 @@ services:
     env_file:
       - .env
 
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    container_name: pizzaria_n8n
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_PORT=5678
-      - GENERIC_TIMEZONE=America/Sao_Paulo
-      - N8N_SECURE_COOKIE=false
-    volumes:
-      - n8n_data:/home/node/.n8n
-    depends_on:
-      - db
-
   evolution_api:
     image: evoapicloud/evolution-api:latest
     container_name: pizzaria_evolution
@@ -75,7 +61,6 @@ services:
 
 volumes:
   mongo_data:
-  n8n_data:
   evolution_instances:
   postgres_data:
 
