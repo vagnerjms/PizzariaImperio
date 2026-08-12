@@ -1,0 +1,272 @@
+[
+  {
+    "name": "My workflow",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "webhook-pizzaria",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -1840,
+          16
+        ],
+        "id": "a734cb72-ac09-4232-b5c8-94e1702b2341",
+        "name": "Webhook",
+        "webhookId": "26a5e790-8c3d-4b4c-9599-69619248bde1"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://evolution_api:8080/message/sendText/Disparo",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "apikey",
+                "value": "pizzaria_evolution_secret_key_2026"
+              }
+            ]
+          },
+          "sendBody": true,
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "number",
+                "value": "=55{{ $json.body.order.customer_phone.replace(/\\D/g, '') }}"
+              },
+              {
+                "name": "=text",
+                "value": "=Olá, {{ $json.body.order.customer_name }}! 🍕\n\nRecebemos o seu pedido com sucesso!\n\n📋 *Resumo do Pedido:*\n- Código: #{{ $json.body.order.id.slice(0, 8) }}\n- Valor Total: R$ {{ $json.body.order.total }},00\n- Forma de Pagamento: {{ $json.body.order.payment_method }}\n\n{{ $json.body.order.payment_method === 'Pix' || $json.body.order.payment_method === 'Cartão de crédito' ? 'Aguardamos a confirmação do pagamento no sistema para iniciar o preparo. 👍' : 'Seu pedido foi enviado para a confirmação da pizzaria. 👍' }}\n\nObrigado pela preferência! ❤️"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -1056,
+          -192
+        ],
+        "id": "29e7d916-cadf-4656-afc1-203a41926836",
+        "name": "HTTP Request"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.body.event }}",
+                      "rightValue": "order.created",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "dbe400e5-4548-48e3-b99d-028c702f654b"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Novo Pedido"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "d7dc4275-f718-4e20-afc7-bc7d951c96ba",
+                      "leftValue": "={{ $json.body.event }}",
+                      "rightValue": "order.paid",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Pago"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "540dbfbe-7172-4463-b83e-eff4808ea0ab",
+                      "leftValue": "={{ $json.body.event }}",
+                      "rightValue": "order.status_updated",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Status Alterado"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          -1536,
+          0
+        ],
+        "id": "6d591999-0a7a-460f-8fde-97f33783e53b",
+        "name": "Switch"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://evolution_api:8080/message/sendText/Disparo",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "apikey",
+                "value": "pizzaria_evolution_secret_key_2026"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"number\": \"55{{ $json.body.order.customer_phone.replace(/\\\\D/g, '') }}\",\n  \"text\": \"Parabéns, {{ $json.body.order.customer_name }}! 🎉\\n\\nSeu pagamento de *R$ {{ $json.body.order.total }},00* foi confirmado automaticamente pelo Mercado Pago!\\n\\nSeu pedido foi encaminhado para a nossa cozinha e já está sendo preparado! 🍕🔥\",\n  \"delay\": 1200\n}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -1056,
+          16
+        ],
+        "id": "d802b112-6ef3-4c1d-b327-1371c2fd5837",
+        "name": "HTTP Request1"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://evolution_api:8080/message/sendText/Disparo",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "apikey",
+                "value": "pizzaria_evolution_secret_key_2026"
+              }
+            ]
+          },
+          "sendBody": true,
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "number",
+                "value": "= 55{{ $json.body.order.customer_phone.replace(/\\D/g, '') }}"
+              },
+              {
+                "name": "text",
+                "value": "=Olá, {{ $json.body.order.customer_name }}! 🍕\n\n{{ $json.body.order.status === 'preparando' ? 'Seu pedido foi aceito pela pizzaria e o preparo já começou! 🔥' : ($json.body.order.status === 'saiu' ? 'Notícia boa! Seu pedido saiu para entrega e o motoboy já está a caminho! 🛵💨' : 'Seu pedido teve o status atualizado para: ' + $json.body.order.status) }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -1056,
+          208
+        ],
+        "id": "156cf9db-52fd-4dca-8f5d-a4fa95cac6ea",
+        "name": "HTTP Request2"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Switch": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request1",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "availableInMCP": false
+    },
+    "staticData": null
+  }
+]
