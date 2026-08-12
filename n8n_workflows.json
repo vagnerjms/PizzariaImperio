@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://evolution_api:8080/message/sendText/Disparo",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -153,7 +153,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://evolution_api:8080/message/sendText/Disparo",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -184,7 +184,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://evolution_api:8080/message/sendText/Disparo",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
