@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireAuth } from "./auth-middleware";
 
 const getEvolutionConfig = () => {
   const url = process.env.EVOLUTION_API_URL || "http://179.197.231.106:8085";
@@ -10,14 +10,12 @@ const getEvolutionConfig = () => {
 
 // 1. Obter Status da Conexão do WhatsApp
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .handler(async ({ context }) => {
     // Verificar se o usuário é administrador
-    const { data: isAdmin } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    if (!isAdmin) throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito.");
+    }
 
     const { url, apiKey } = getEvolutionConfig();
 
@@ -74,13 +72,11 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 
 // 2. Gerar/Obter QR Code para Conexão
 export const getWhatsAppQRCode = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .handler(async ({ context }) => {
-    const { data: isAdmin } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    if (!isAdmin) throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito.");
+    }
 
     const { url, apiKey } = getEvolutionConfig();
 
@@ -112,13 +108,11 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
 
 // 3. Desconectar WhatsApp (Logout)
 export const disconnectWhatsApp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .handler(async ({ context }) => {
-    const { data: isAdmin } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    if (!isAdmin) throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito.");
+    }
 
     const { url, apiKey } = getEvolutionConfig();
 
