@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
+import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
 import {
   Flame,
   Truck,
@@ -643,15 +644,18 @@ function CartDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{
-    id: string;
-    total: number;
-    payment_status: string;
-    payment_details: any;
-  } | null>(null);
+  const [success, setSuccess] = useState<any>(null);
   const submitOrder = useServerFn(createOrder);
   const checkStatus = useServerFn(getOrderStatus);
+  const fetchDeliveryConfig = useServerFn(getPublicDeliveryConfig);
+  const [deliveryConfig, setDeliveryConfig] = useState<{ default_fee: number; neighborhoods: any[] } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchDeliveryConfig()
+      .then((cfg) => setDeliveryConfig(cfg))
+      .catch((err) => console.error("Erro ao obter taxas de entrega:", err));
+  }, []);
 
   useEffect(() => {
     if (lines.length === 0 && step === "checkout" && !success) setStep("cart");
@@ -714,7 +718,7 @@ function CartDrawer({
         return;
       }
 
-      const fee = getDeliveryFeeForNeighborhood(data.bairro);
+      const fee = getDeliveryFeeForNeighborhood(data.bairro, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
 
       setForm((prev) => ({
         ...prev,
@@ -730,7 +734,7 @@ function CartDrawer({
         if (!res.ok) throw new Error("Erro na busca de CEP");
         const data = await res.json();
 
-        const fee = getDeliveryFeeForNeighborhood(data.neighborhood);
+        const fee = getDeliveryFeeForNeighborhood(data.neighborhood, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
 
         setForm((prev) => ({
           ...prev,
