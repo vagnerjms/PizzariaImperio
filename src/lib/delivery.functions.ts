@@ -52,3 +52,16 @@ export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
     await saveDeliverySettings(data as any);
     return { success: true };
   });
+
+// 5. Carregar e aplicar todos os bairros oficiais de Bragança Paulista
+export const resetToBragancaNeighborhoods = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .handler(async ({ context }) => {
+    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
+      throw new Error("Acesso restrito.");
+    }
+    const { getBragancaNeighborhoodsList, saveDeliverySettings } = await import("./delivery-config.server");
+    const list = getBragancaNeighborhoodsList(5.00);
+    await saveDeliverySettings({ default_fee: 7.00, neighborhoods: list });
+    return { default_fee: 7.00, neighborhoods: list };
+  });

@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 import { getAdminSettings, updateAdminSettings } from "@/lib/settings";
-import { getAdminDeliverySettings, updateAdminDeliverySettings } from "@/lib/delivery.functions";
+import { getAdminDeliverySettings, updateAdminDeliverySettings, resetToBragancaNeighborhoods } from "@/lib/delivery.functions";
 
 type OrderRow = Awaited<ReturnType<typeof listOrders>>[number];
 
@@ -138,6 +138,7 @@ function AdminPage() {
 
   const fetchDeliverySettings = useServerFn(getAdminDeliverySettings);
   const saveDeliverySettingsFn = useServerFn(updateAdminDeliverySettings);
+  const resetBragancaFn = useServerFn(resetToBragancaNeighborhoods);
 
   const [deliveryFeeSettings, setDeliveryFeeSettings] = useState<{
     default_fee: number;
@@ -167,6 +168,26 @@ function AdminPage() {
       });
     } catch (e) {
       setDeliveryErrorMsg(e instanceof Error ? e.message : "Erro ao carregar taxas de entrega.");
+    } finally {
+      setDeliveryLoading(false);
+    }
+  };
+
+  const handleLoadBraganca = async () => {
+    if (!confirm("Deseja carregar a lista com todos os bairros oficiais de Bragança Paulista?")) return;
+    setDeliveryLoading(true);
+    setDeliverySuccessMsg(null);
+    setDeliveryErrorMsg(null);
+    try {
+      const data = await resetBragancaFn();
+      setDeliveryFeeSettings({
+        default_fee: data.default_fee,
+        neighborhoods: data.neighborhoods || [],
+      });
+      setDeliverySuccessMsg("Todos os bairros de Bragança Paulista foram carregados!");
+      setTimeout(() => setDeliverySuccessMsg(null), 5000);
+    } catch (e) {
+      setDeliveryErrorMsg(e instanceof Error ? e.message : "Erro ao carregar bairros.");
     } finally {
       setDeliveryLoading(false);
     }
@@ -859,15 +880,25 @@ function AdminPage() {
                     <p className="text-xs text-muted-foreground">Configure os valores cobrados automaticamente no Checkout via CEP</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveDeliverySettings}
-                  disabled={deliverySaving || deliveryLoading}
-                  className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {deliverySaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {deliverySaving ? "Salvando..." : "Salvar Alterações"}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleLoadBraganca}
+                    disabled={deliverySaving || deliveryLoading}
+                    className="rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-50"
+                  >
+                    Carregar Bairros de Bragança Paulista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveDeliverySettings}
+                    disabled={deliverySaving || deliveryLoading}
+                    className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {deliverySaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {deliverySaving ? "Salvando..." : "Salvar Alterações"}
+                  </button>
+                </div>
               </header>
 
               {deliveryLoading ? (

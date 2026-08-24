@@ -11,24 +11,117 @@ export interface DeliverySettings {
   neighborhoods: NeighborhoodFee[];
 }
 
-export const INITIAL_NEIGHBORHOODS: NeighborhoodFee[] = [
-  { id: "1", name: "Centro", fee: 5.00 },
-  { id: "2", name: "Vila Mariana", fee: 6.00 },
-  { id: "3", name: "Pinheiros", fee: 7.00 },
-  { id: "4", name: "Jardins", fee: 8.00 },
-  { id: "5", name: "Itaim Bibi", fee: 8.00 },
-  { id: "6", name: "Moema", fee: 7.00 },
-  { id: "7", name: "Brooklin", fee: 8.00 },
-  { id: "8", name: "Morumbi", fee: 10.00 },
-  { id: "9", name: "Lapa", fee: 9.00 },
-  { id: "10", name: "Santana", fee: 8.00 },
-  { id: "11", name: "Saúde", fee: 6.00 },
-  { id: "12", name: "Ipiranga", fee: 6.00 },
-  { id: "13", name: "Butantã", fee: 9.00 },
-  { id: "14", name: "Perdizes", fee: 7.00 },
+export const BRAGANCA_PAULISTA_NEIGHBORHOODS: string[] = [
+  "Centro",
+  "Lavapés",
+  "Jardim América",
+  "Jardim Europa",
+  "Jardim do Lago",
+  "Jardim Águas Claras",
+  "Cidade Planejada I",
+  "Cidade Planejada II",
+  "Henedina Cortez",
+  "Matadouro",
+  "Taboão",
+  "Tanque do Moinho",
+  "Penha",
+  "Cruzeiro",
+  "Santa Luzia",
+  "Vila Municipal",
+  "Vila Bianchi",
+  "Vila Gato",
+  "Vila Motta",
+  "Vila Santa Libânia",
+  "Vila Davi",
+  "Vila Aparecida",
+  "Altos de Bragança",
+  "Euroville I",
+  "Euroville II",
+  "Residencial Euroville",
+  "Residencial Campos do Conde",
+  "Condomínio Santa Helena",
+  "Residencial Colinas de São Francisco",
+  "Condomínio Portal da Serra",
+  "Jardim Primavera",
+  "Jardim São Lourenço",
+  "Jardim Santa Helena",
+  "Jardim São José",
+  "Jardim das Laranjeiras",
+  "Jardim Comendador Cardoso",
+  "Jardim da Fraternidade",
+  "Jardim Novo Mundo",
+  "Jardim Iguatemi",
+  "Jardim Júlio de Mesquita",
+  "Jardim Vista Alegre",
+  "Jardim Morumbi",
+  "Jardim Recreio",
+  "Jardim Santa Rita de Cássia",
+  "Jardim Sevilha",
+  "Jardim Toró",
+  "Parque das Faculdades",
+  "Parque dos Estados",
+  "Parque Brasil",
+  "Planalto das Pimenteiras",
+  "Cidade Universitária",
+  "Quinta dos Vinhedos",
+  "Recanto da Montanha",
+  "Portal São Marcelo",
+  "Conjunto Habitacional Saada Nader Abi Chedid",
+  "Conjunto Habitacional Padre Aldo Bolini",
+  "Conjunto Habitacional Nicola Cortez",
+  "Conjunto Habitacional Bragança F",
+  "Vila Nova Bragança",
+  "Vila Olinda",
+  "Vila Ramos",
+  "Vila Salmorani",
+  "Vila Santa Luzia",
+  "Vila Virgínia",
+  "Vila Belém",
+  "Vila Garcia",
+  "Água Comprida",
+  "Arara dos Pereiras",
+  "Araras dos Mori",
+  "Atibaianos",
+  "Bairro do Agudo",
+  "Bairro do Menin",
+  "Bairro do Uberaba",
+  "Bairro Sete Barras",
+  "Biriça do Campinho",
+  "Boa Vista",
+  "Boa Vista dos Silva",
+  "Bom Retiro",
+  "Bom Retiro dos Mourão",
+  "Bosques da Pedra",
+  "Campinho",
+  "Campo Novo",
+  "Chácara Alvorada",
+  "Chácaras Fernão Dias",
+  "Chácaras Luzia Vicente",
+  "Chácaras São Bento",
+  "Chácaras Silvano",
+  "Condomínio Quinta da Baroneza",
+  "Estância Santa Amélia",
+  "Guaripocaba",
+  "Morro Grande",
+  "Ponte Alta",
+  "Rio Abaixo",
+  "Santa Bárbara",
+  "Serrinha",
+  "Toró",
+  "Usina",
+  "Vargem",
+  "Vista Alegre"
 ];
 
 export const INITIAL_DEFAULT_FEE = 7.00;
+
+export function getBragancaNeighborhoodsList(defaultFee = 5.00): NeighborhoodFee[] {
+  return BRAGANCA_PAULISTA_NEIGHBORHOODS.map((name, index) => ({
+    id: `bp-${index + 1}`,
+    name,
+    fee: defaultFee,
+  }));
+}
 
 export function cleanString(str: string): string {
   return str
@@ -56,22 +149,24 @@ export async function getDeliverySettings(): Promise<DeliverySettings> {
       };
     }
 
-    // Se não existir, salva o padrão inicial
+    const defaultList = getBragancaNeighborhoodsList(5.00);
+
+    // Se não existir, salva a lista oficial de Bragança Paulista
     await col.updateOne(
       { _id: "global" },
-      { $set: { default_fee: INITIAL_DEFAULT_FEE, neighborhoods: INITIAL_NEIGHBORHOODS, updated_at: new Date() } },
+      { $set: { default_fee: INITIAL_DEFAULT_FEE, neighborhoods: defaultList, updated_at: new Date() } },
       { upsert: true }
     );
 
     return {
       default_fee: INITIAL_DEFAULT_FEE,
-      neighborhoods: INITIAL_NEIGHBORHOODS,
+      neighborhoods: defaultList,
     };
   } catch (error) {
     console.error("Failed to load delivery settings from MongoDB:", error);
     return {
       default_fee: INITIAL_DEFAULT_FEE,
-      neighborhoods: INITIAL_NEIGHBORHOODS,
+      neighborhoods: getBragancaNeighborhoodsList(5.00),
     };
   }
 }
