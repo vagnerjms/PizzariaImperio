@@ -33,6 +33,38 @@ export async function initializeDatabase() {
       console.log("[DB Init] Admin user already exists.");
     }
 
+    const supervisorEmail = "supervisor@pizzaria.com";
+    const supervisorPassword = "supervisor123";
+    const supervisorExists = await usersCol.findOne({ email: supervisorEmail });
+    if (!supervisorExists) {
+      console.log(`[DB Init] Supervisor user not found. Creating default supervisor: ${supervisorEmail}`);
+      const hashedPassword = hashPassword(supervisorPassword);
+      await usersCol.insertOne({
+        email: supervisorEmail,
+        password_hash: hashedPassword,
+        roles: ["supervisor"],
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+      console.log("[DB Init] Default supervisor user created successfully.");
+    }
+
+    const atendenteEmail = "atendente@pizzaria.com";
+    const atendentePassword = "atendente123";
+    const atendenteExists = await usersCol.findOne({ email: atendenteEmail });
+    if (!atendenteExists) {
+      console.log(`[DB Init] Atendente user not found. Creating default atendente: ${atendenteEmail}`);
+      const hashedPassword = hashPassword(atendentePassword);
+      await usersCol.insertOne({
+        email: atendenteEmail,
+        password_hash: hashedPassword,
+        roles: ["atendente"],
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+      console.log("[DB Init] Default atendente user created successfully.");
+    }
+
     console.log("[DB Init] Database initialization complete.");
   } catch (error) {
     console.error("[DB Init] Database initialization failed:", error);

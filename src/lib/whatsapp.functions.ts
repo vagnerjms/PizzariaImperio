@@ -12,8 +12,7 @@ const getEvolutionConfig = () => {
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    // Verificar se o usuário é administrador
-    if (!context.roles?.includes("admin")) {
+    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 
@@ -74,7 +73,7 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 export const getWhatsAppQRCode = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
+    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 
@@ -110,7 +109,7 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
 export const disconnectWhatsApp = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
+    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 

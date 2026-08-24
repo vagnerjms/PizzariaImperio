@@ -288,7 +288,7 @@ export const createOrder = createServerFn({ method: "POST" })
 export const listOrders = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
+    if (!context.roles?.some(r => ["admin", "supervisor", "atendente"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 
@@ -334,7 +334,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((raw: unknown) => updateStatusSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
+    if (!context.roles?.some(r => ["admin", "supervisor", "atendente"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 

@@ -15,7 +15,12 @@ import {
   Loader2,
   CheckCircle,
   QrCode,
-  AlertTriangle
+  AlertTriangle,
+  Terminal,
+  TrendingUp,
+  Coins,
+  BarChart3,
+  ShieldAlert,
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 
@@ -93,6 +98,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminPage() {
+  const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
   const navigate = useNavigate();
   const fetchOrders = useServerFn(listOrders);
   const updateStatus = useServerFn(updateOrderStatus);
@@ -102,7 +108,7 @@ function AdminPage() {
   const [filter, setFilter] = useState<"ativos" | "todos" | OrderRow["status"]>("ativos");
   const [error, setError] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<"pedidos" | "whatsapp">("pedidos");
+  const [viewMode, setViewMode] = useState<"pedidos" | "whatsapp" | "indicadores" | "configuracoes">("pedidos");
   const [whatsappStatus, setWhatsappStatus] = useState<"open" | "close" | "checking" | "error">("checking");
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
@@ -246,35 +252,66 @@ function AdminPage() {
             <div className="flex items-center gap-3">
               <Flame className="h-5 w-5 text-gold" />
               <div>
-                <h1 className="font-serif text-lg leading-tight">Painel Administrativo</h1>
-                <p className="text-xs text-muted-foreground">Pizzaria Império</p>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-serif text-lg leading-tight">Painel Administrativo</h1>
+                  <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold leading-none">
+                    {user?.roles?.includes("admin") ? "Admin" : user?.roles?.includes("supervisor") ? "Supervisor" : "Atendente"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">{user?.email}</p>
               </div>
             </div>
             
-            <nav className="flex items-center gap-1 bg-secondary/40 p-1 rounded-full border border-border">
-              <button
-                type="button"
-                onClick={() => setViewMode("pedidos")}
-                className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
-                  viewMode === "pedidos"
-                    ? "bg-gold text-gold-foreground shadow"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Pedidos
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("whatsapp")}
-                className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
-                  viewMode === "whatsapp"
-                    ? "bg-gold text-gold-foreground shadow"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                WhatsApp
-              </button>
-            </nav>
+            {user?.roles?.some(r => ["admin", "supervisor"].includes(r)) && (
+              <nav className="flex items-center gap-1 bg-secondary/40 p-1 rounded-full border border-border">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("pedidos")}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
+                    viewMode === "pedidos"
+                      ? "bg-gold text-gold-foreground shadow"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Pedidos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("whatsapp")}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
+                    viewMode === "whatsapp"
+                      ? "bg-gold text-gold-foreground shadow"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("indicadores")}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
+                    viewMode === "indicadores"
+                      ? "bg-gold text-gold-foreground shadow"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Indicadores
+                </button>
+                {user?.roles?.includes("admin") && (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("configuracoes")}
+                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition ${
+                      viewMode === "configuracoes"
+                        ? "bg-gold text-gold-foreground shadow"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Configurações
+                  </button>
+                )}
+              </nav>
+            )}
           </div>
           
           <div className="flex items-center gap-2">
@@ -330,7 +367,7 @@ function AdminPage() {
           </div>
         )}
 
-        {viewMode === "pedidos" ? (
+        {viewMode === "pedidos" && (
           loading ? (
             <p className="text-sm text-muted-foreground">Carregando pedidos…</p>
           ) : filtered.length === 0 ? (
@@ -347,7 +384,9 @@ function AdminPage() {
               ))}
             </div>
           )
-        ) : (
+        )}
+
+        {viewMode === "whatsapp" && (
           <div className="mx-auto max-w-lg">
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <header className="flex items-center gap-4 border-b border-border/60 pb-4 mb-6">
@@ -509,6 +548,186 @@ function AdminPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {viewMode === "indicadores" && (() => {
+          const revenue = orders.filter(o => o.status !== "cancelado").reduce((sum, o) => sum + o.total, 0);
+          const activeCount = orders.filter(o => o.status !== "entregue" && o.status !== "cancelado").length;
+          const completedCount = orders.filter(o => o.status === "entregue").length;
+          const canceledCount = orders.filter(o => o.status === "cancelado").length;
+          const ticketMedio = (completedCount + activeCount) > 0 ? revenue / (completedCount + activeCount) : 0;
+
+          const pizzaSales: Record<string, number> = {};
+          orders.forEach(o => {
+            if (o.status !== "cancelado") {
+              o.order_items?.forEach(i => {
+                pizzaSales[i.pizza_name] = (pizzaSales[i.pizza_name] || 0) + i.quantity;
+              });
+            }
+          });
+          const sortedSales = Object.entries(pizzaSales).sort((a, b) => b[1] - a[1]);
+
+          const paymentCounts: Record<string, number> = {};
+          orders.forEach(o => {
+            if (o.status !== "cancelado") {
+              paymentCounts[o.payment_method] = (paymentCounts[o.payment_method] || 0) + 1;
+            }
+          });
+
+          return (
+            <div className="space-y-8">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Faturamento (Vendas Ativas)</span>
+                    <Coins className="h-5 w-5 text-gold" />
+                  </div>
+                  <div className="mt-2 font-serif text-2xl text-gold font-bold">{formatBRL(revenue)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Excluindo cancelados</div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ticket Médio</span>
+                    <TrendingUp className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div className="mt-2 font-serif text-2xl text-foreground font-bold">{formatBRL(ticketMedio)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Média por pedido</div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pedidos Concluídos</span>
+                    <CheckCircle className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div className="mt-2 font-serif text-2xl text-foreground font-bold">{completedCount}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{activeCount} em andamento</div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pedidos Cancelados</span>
+                    <XCircle className="h-5 w-5 text-red-400" />
+                  </div>
+                  <div className="mt-2 font-serif text-2xl text-foreground font-bold">{canceledCount}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Taxa: {orders.length > 0 ? ((canceledCount / orders.length) * 100).toFixed(0) : 0}%</div>
+                </div>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                  <h3 className="font-serif text-base font-semibold mb-4 flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-gold" /> Ranking de Vendas (Pizzas)
+                  </h3>
+                  {sortedSales.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhuma pizza vendida ainda.</p>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {sortedSales.slice(0, 5).map(([name, qty], idx) => (
+                        <div key={name} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">
+                              {idx + 1}
+                            </span>
+                            <span>{name}</span>
+                          </div>
+                          <span className="font-semibold text-gold">{qty} un.</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                  <h3 className="font-serif text-base font-semibold mb-4 flex items-center gap-2">
+                    <Coins className="h-5 w-5 text-gold" /> Formas de Pagamento
+                  </h3>
+                  {Object.keys(paymentCounts).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum pagamento registrado.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {Object.entries(paymentCounts).map(([method, count]) => {
+                        const activeTotal = orders.filter(o => o.status !== "cancelado").length;
+                        const pct = activeTotal > 0 ? (count / activeTotal) * 100 : 0;
+                        return (
+                          <div key={method} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span>{method}</span>
+                              <span className="font-semibold text-muted-foreground">{count} ({pct.toFixed(0)}%)</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-secondary">
+                              <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {viewMode === "configuracoes" && (
+          <div className="mx-auto max-w-2xl space-y-6">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <header className="flex items-center gap-4 border-b border-border/60 pb-4 mb-6">
+                <div className="rounded-xl bg-gold/10 p-2.5 text-gold">
+                  <ShieldAlert className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="font-serif text-lg leading-tight">Configurações do Sistema</h2>
+                  <p className="text-xs text-muted-foreground">Painel exclusivo para Administradores</p>
+                </div>
+              </header>
+
+              <div className="space-y-6">
+                <div className="rounded-xl border border-border bg-secondary/25 p-5 space-y-4">
+                  <h3 className="font-serif text-sm font-bold text-foreground flex items-center gap-2">
+                    <Terminal className="h-4 w-4 text-gold" /> Variáveis de Ambiente & APIs
+                  </h3>
+
+                  <div className="space-y-3.5 text-xs">
+                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
+                      <span className="text-muted-foreground font-semibold">Evolution API URL (WhatsApp)</span>
+                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
+                        http://179.197.231.106:8085
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
+                      <span className="text-muted-foreground font-semibold">n8n Webhook Endpoint URL</span>
+                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
+                        http://179.197.231.106:5678/webhook/webhook-pizzaria
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
+                      <span className="text-muted-foreground font-semibold">Mercado Pago Webhook Endpoint</span>
+                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
+                        /api/webhook
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground font-semibold">Instância do WhatsApp</span>
+                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium">
+                        Disparo
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-amber-500/5 border-amber-500/20 p-5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-500 mb-2">Atenção desenvolvedor</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Todas as comunicações com a Evolution API e com o gateway do Mercado Pago estão sendo processadas de forma segura diretamente no servidor da aplicação na VPS. Não compartilhe as chaves de API secretas localizadas no arquivo <code className="bg-secondary/60 px-1 py-0.5 rounded font-semibold text-foreground">.env</code> com terceiros.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
