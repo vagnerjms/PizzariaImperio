@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
+import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
 import {
   Flame,
   Truck,
@@ -18,6 +19,7 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import heroForno from "@/assets/hero-forno.jpg";
 import pizzaiolo from "@/assets/pizzaiolo.jpg";
@@ -626,11 +628,18 @@ function CartDrawer({
   const [form, setForm] = useState({
     name: "",
     phone: "",
-    address: "",
+    cep: "",
+    rua: "",
+    bairro: "",
+    numero: "",
+    complemento: "",
+    cidadeUf: "São Paulo - SP",
+    deliveryFee: null as number | null,
     payment: "" as "" | "Pix" | "Dinheiro" | "Cartão de crédito" | "Cartão de débito",
     troco: "",
     notes: "",
   });
+  const [cepLoading, setCepLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -684,19 +693,97 @@ function CartDrawer({
   const sanitize = (s: string, max: number) =>
     s.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
 
+  const handleCEPLookup = async (cepValue: string) => {
+    const cleanCEP = cepValue.replace(/\D/g, "");
+    if (cleanCEP.length !== 8) return;
+
+    setCepLoading(true);
+    setErrors((prev) => {
+      const copy = { ...prev };
+      delete copy.cep;
+      return copy;
+    });
+
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+      if (!res.ok) throw new Error("Erro na busca de CEP");
+      const data = await res.json();
+      
+      if (data.erro) {
+        setErrors((prev) => ({ ...prev, cep: "CEP não encontrado." }));
+        return;
+      }
+
+      const fee = getDeliveryFeeForNeighborhood(data.bairro);
+
+      setForm((prev) => ({
+        ...prev,
+        rua: data.logradouro || "",
+        bairro: data.bairro || "",
+        cidadeUf: `${data.localidade} - ${data.uf}`,
+        deliveryFee: fee,
+      }));
+    } catch (err) {
+      console.error("ViaCEP falhou, tentando BrasilAPI...", err);
+      try {
+        const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCEP}`);
+        if (!res.ok) throw new Error("Erro na busca de CEP");
+        const data = await res.json();
+
+        const fee = getDeliveryFeeForNeighborhood(data.neighborhood);
+
+        setForm((prev) => ({
+          ...prev,
+          rua: data.street || "",
+          bairro: data.neighborhood || "",
+          cidadeUf: `${data.city} - ${data.state}`,
+          deliveryFee: fee,
+        }));
+      } catch (err2) {
+        setErrors((prev) => ({ ...prev, cep: "Erro ao buscar o CEP." }));
+      }
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const handleCEPChange = (val: string) => {
+    const numeric = val.replace(/\D/g, "");
+    let formatted = numeric;
+    if (numeric.length > 5) {
+      formatted = `${numeric.slice(0, 5)}-${numeric.slice(5, 8)}`;
+    }
+    
+    setForm((f) => ({ ...f, cep: formatted.slice(0, 9) }));
+    if (errors.cep) setErrors((e) => ({ ...e, cep: "" }));
+
+    if (numeric.length === 8) {
+      handleCEPLookup(numeric);
+    }
+  };
+
   const validate = () => {
     const e: Record<string, string> = {};
     const name = sanitize(form.name, 80);
     const phone = sanitize(form.phone, 20);
-    const address = sanitize(form.address, 200);
+    const cep = form.cep.replace(/\D/g, "");
+    
     if (name.length < 2) e.name = "Informe seu nome completo.";
     if (phone.replace(/\D/g, "").length < 10) e.phone = "Telefone inválido (com DDD).";
-    if (address.length < 8) e.address = "Endereço muito curto.";
+    if (cep.length !== 8) e.cep = "CEP inválido.";
+    if (!form.rua.trim()) e.rua = "Informe a rua.";
+    if (!form.numero.trim()) e.numero = "Informe o número.";
+    if (!form.bairro.trim()) e.bairro = "Informe o bairro.";
     if (!form.payment) e.payment = "Selecione a forma de pagamento.";
+    
     if (form.payment === "Dinheiro" && form.troco) {
       const v = Number(form.troco.replace(",", "."));
-      if (!Number.isFinite(v) || v < total) e.troco = "Valor deve ser maior que o total.";
+      const finalTotal = total + (form.deliveryFee || 0);
+      if (!Number.isFinite(v) || v < finalTotal) {
+        e.troco = `Valor deve ser maior que o total (R$ ${finalTotal.toFixed(2).replace(".", ",")}).`;
+      }
     }
+    
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -706,11 +793,13 @@ function CartDrawer({
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const fullAddress = `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""}`;
+      
       const res = await submitOrder({
         data: {
           customer_name: sanitize(form.name, 80),
           customer_phone: sanitize(form.phone, 20),
-          customer_address: sanitize(form.address, 200),
+          customer_address: sanitize(fullAddress, 400),
           payment_method: form.payment as "Pix" | "Dinheiro" | "Cartão de crédito" | "Cartão de débito",
           troco:
             form.payment === "Dinheiro" && form.troco
@@ -723,6 +812,7 @@ function CartDrawer({
             quantity: l.qty,
             unit_price: l.pizza.price,
           })),
+          delivery_fee: form.deliveryFee || 0,
         },
       });
       setSuccess(res);
@@ -906,7 +996,7 @@ function CartDrawer({
                 onClick={() => {
                   setSuccess(null);
                   setStep("cart");
-                  setForm({ name: "", phone: "", address: "", payment: "", troco: "", notes: "" });
+                  setForm({ name: "", phone: "", cep: "", rua: "", bairro: "", numero: "", complemento: "", cidadeUf: "São Paulo - SP", deliveryFee: null, payment: "", troco: "", notes: "" });
                   onClose();
                 }}
                 className="mt-6 w-full rounded-full bg-gold px-6 py-2.5 text-sm font-semibold text-gold-foreground transition hover:brightness-110"
@@ -1015,14 +1105,71 @@ function CartDrawer({
                 maxLength={20}
                 inputMode="tel"
               />
+              <div className="relative">
+                <Field
+                  label="CEP"
+                  value={form.cep}
+                  onChange={handleCEPChange}
+                  placeholder="00000-000"
+                  error={errors.cep}
+                  maxLength={9}
+                />
+                {cepLoading && (
+                  <div className="absolute right-3 top-9 text-gold animate-spin">
+                    <Loader2 className="h-4 w-4" />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <Field
+                    label="Rua / Logradouro"
+                    value={form.rua}
+                    onChange={setField("rua")}
+                    placeholder="Ex.: Rua das Flores"
+                    error={errors.rua}
+                    maxLength={100}
+                  />
+                </div>
+                <div>
+                  <Field
+                    label="Número"
+                    value={form.numero}
+                    onChange={setField("numero")}
+                    placeholder="123"
+                    error={errors.numero}
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Field
+                  label="Bairro"
+                  value={form.bairro}
+                  onChange={setField("bairro")}
+                  placeholder="Ex.: Centro"
+                  error={errors.bairro}
+                  maxLength={50}
+                />
+                <Field
+                  label="Cidade / Estado"
+                  value={form.cidadeUf}
+                  onChange={setField("cidadeUf")}
+                  placeholder="Ex.: São Paulo - SP"
+                  error={errors.cidadeUf}
+                  maxLength={50}
+                />
+              </div>
+
               <Field
-                label="Endereço de entrega"
-                value={form.address}
-                onChange={setField("address")}
-                placeholder="Rua, nº, bairro, complemento"
-                error={errors.address}
-                maxLength={200}
-                multiline
+                label="Complemento / Referência (opcional)"
+                value={form.complemento}
+                onChange={setField("complemento")}
+                placeholder="Ex.: Apto 42, Bloco B"
+                error={errors.complemento}
+                maxLength={100}
               />
 
               <div>
@@ -1085,13 +1232,40 @@ function CartDrawer({
               <span>Subtotal</span>
               <span>{formatBRL(total)}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between">
+            
+            {step === "checkout" && (
+              <div className="mt-1 flex items-center justify-between text-sm text-muted-foreground">
+                <span>Taxa de entrega</span>
+                <span>
+                  {form.deliveryFee === null
+                    ? "A calcular"
+                    : form.deliveryFee === 0
+                    ? "Grátis"
+                    : formatBRL(form.deliveryFee)}
+                </span>
+              </div>
+            )}
+
+            <div className="mt-2 border-t border-border/40 pt-2 flex items-center justify-between">
               <span className="font-serif text-lg">Total</span>
-              <span className="font-serif text-2xl text-gold">{formatBRL(total)}</span>
+              <span className="font-serif text-2xl text-gold">
+                {formatBRL(total + (step === "checkout" && form.deliveryFee ? form.deliveryFee : 0))}
+              </span>
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Taxa de entrega combinada por telefone após a confirmação do pedido.
-            </p>
+
+            {step === "cart" ? (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Taxa de entrega calculada no próximo passo (pelo CEP).
+              </p>
+            ) : form.deliveryFee === null ? (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Informe o seu CEP acima para calcular a taxa de entrega.
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-emerald-500 font-medium">
+                Taxa de entrega calculada para o bairro: <strong>{form.bairro || "informado"}</strong>
+              </p>
+            )}
 
             {submitError && (
               <p className="mt-3 text-sm text-destructive">{submitError}</p>

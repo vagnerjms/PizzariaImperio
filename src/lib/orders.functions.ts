@@ -19,6 +19,7 @@ const createOrderSchema = z.object({
   troco: z.number().min(0).max(10000).nullable().optional(),
   notes: z.string().max(500).optional().nullable(),
   items: z.array(itemSchema).min(1).max(50),
+  delivery_fee: z.number().min(0).max(500).optional().nullable(),
 });
 
 function generateStaticPix(key: string, name: string, city: string, amount: number, txid = "PIZZARIA"): string {
@@ -69,7 +70,8 @@ export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const ordersCol = await getOrdersCollection();
     const orderId = crypto.randomUUID();
-    const total = data.items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
+    const subtotal = data.items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
+    const total = subtotal + (data.delivery_fee || 0);
 
     const isOnlinePix = data.payment_method === "Pix";
     const isOnlineCard = data.payment_method === "Cartão de crédito";
@@ -89,6 +91,7 @@ export const createOrder = createServerFn({ method: "POST" })
       troco: data.troco ?? null,
       notes: data.notes ?? null,
       total,
+      delivery_fee: data.delivery_fee || 0,
       status: "novo" as const,
       payment_status: paymentStatus,
       payment_gateway: null as string | null,
@@ -303,8 +306,8 @@ export const listOrders = createServerFn({ method: "GET" })
       customer_address: o.customer_address,
       payment_method: o.payment_method,
       troco: o.troco,
-      notes: o.notes,
       total: o.total,
+      delivery_fee: o.delivery_fee,
       status: o.status,
       created_at: o.created_at.toISOString(),
       updated_at: o.updated_at.toISOString(),

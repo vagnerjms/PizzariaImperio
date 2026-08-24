@@ -592,7 +592,13 @@ function OrderCard({
             <span className="font-semibold text-foreground">Obs.:</span> {order.notes}
           </div>
         )}
-        <div className="flex justify-between pt-1 text-sm">
+        {order.delivery_fee !== undefined && order.delivery_fee !== null && (
+          <div className="flex justify-between text-muted-foreground pb-0.5">
+            <span>Taxa de entrega</span>
+            <span>{order.delivery_fee === 0 ? "Grátis" : formatBRL(order.delivery_fee)}</span>
+          </div>
+        )}
+        <div className="flex justify-between pt-1 border-t border-border/40 text-sm">
           <span>Total</span>
           <span className="font-serif text-lg text-gold">{formatBRL(order.total)}</span>
         </div>
