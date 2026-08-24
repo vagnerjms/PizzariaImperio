@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   UserPlus,
   Edit3,
+  Copy,
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 import { getAdminSettings, updateAdminSettings } from "@/lib/settings";
@@ -269,6 +270,7 @@ function AdminPage() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSuccessMsg, setSettingsSuccessMsg] = useState<string | null>(null);
   const [settingsErrorMsg, setSettingsErrorMsg] = useState<string | null>(null);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   const fetchDeliverySettings = useServerFn(getAdminDeliverySettings);
   const saveDeliverySettingsFn = useServerFn(updateAdminDeliverySettings);
@@ -1541,14 +1543,41 @@ function AdminPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mercado Pago Webhook Endpoint (Apenas Leitura)</label>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Mercado Pago Webhook Endpoint (URL para o Gateway)
+                        </label>
+                        {typeof window !== "undefined" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/webhook`);
+                              setCopiedWebhook(true);
+                              setTimeout(() => setCopiedWebhook(false), 3000);
+                            }}
+                            className="text-xs text-gold hover:underline flex items-center gap-1 font-semibold"
+                          >
+                            {copiedWebhook ? (
+                              <>
+                                <CheckCircle className="h-3.5 w-3.5 text-green-500" /> Copiado!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3.5 w-3.5" /> Copiar URL Completa
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
-                        disabled
-                        value="/api/webhook"
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/10 px-3.5 py-2.5 text-sm text-muted-foreground focus:outline-none cursor-not-allowed opacity-70"
+                        readOnly
+                        value={typeof window !== "undefined" ? `${window.location.origin}/api/webhook` : "/api/webhook"}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-sm text-foreground font-mono focus:outline-none select-all"
                       />
-                      <p className="mt-1 text-[11px] text-muted-foreground">Configure esta URL finalizada em seu painel de Webhooks do Mercado Pago para receber notificações de pagamento.</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Cole esta URL completa no seu painel de <strong>Webhooks / Notificações IPN</strong> do Mercado Pago Developers para receber avisos automáticos de Pix e Cartão.
+                      </p>
                     </div>
                   </div>
 
