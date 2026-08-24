@@ -2,6 +2,7 @@ services:
   db:
     image: mongo:6.0
     container_name: pizzaria_db
+    restart: always
     ports:
       - "27018:27017"
     environment:
@@ -9,11 +10,14 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=adminpassword
     volumes:
       - mongo_data:/data/db
+    mem_limit: 1024m
+    mem_reservation: 512m
 
   web:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: always
     ports:
       - "3002:8080"
     depends_on:
@@ -25,10 +29,13 @@ services:
       - NODE_TLS_REJECT_UNAUTHORIZED=0
     env_file:
       - .env
+    mem_limit: 1024m
+    mem_reservation: 512m
 
   evolution_api:
     image: evoapicloud/evolution-api:latest
     container_name: pizzaria_evolution
+    restart: always
     ports:
       - "8085:8080"
     environment:
@@ -46,10 +53,13 @@ services:
     depends_on:
       - db
       - postgres
+    mem_limit: 1536m
+    mem_reservation: 768m
 
   postgres:
     image: postgres:15-alpine
     container_name: pizzaria_postgres
+    restart: always
     ports:
       - "5433:5432"
     environment:
@@ -58,10 +68,10 @@ services:
       - POSTGRES_DB=evolution
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    mem_limit: 512m
+    mem_reservation: 256m
 
 volumes:
   mongo_data:
   evolution_instances:
   postgres_data:
-
-

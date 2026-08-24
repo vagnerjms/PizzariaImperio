@@ -6,12 +6,22 @@ export async function initializeDatabase() {
     console.log("[DB Init] Initializing MongoDB database...");
     const db = await getDb();
 
-    // 1. Create indexes
+    // 1. Create high-performance compound indexes for peak delivery traffic
     const usersCol = db.collection("users");
     await usersCol.createIndex({ email: 1 }, { unique: true });
     
     const ordersCol = db.collection("orders");
     await ordersCol.createIndex({ created_at: -1 });
+    await ordersCol.createIndex({ status: 1, created_at: -1 });
+    await ordersCol.createIndex({ payment_status: 1 });
+    await ordersCol.createIndex({ gateway_payment_id: 1 });
+    await ordersCol.createIndex({ customer_phone: 1 });
+
+    const deliveryCol = db.collection("delivery_settings");
+    await deliveryCol.createIndex({ _id: 1 });
+
+    const settingsCol = db.collection("settings");
+    await settingsCol.createIndex({ _id: 1 });
 
     // 2. Ensure initial admin user exists
     const adminEmail = process.env.ADMIN_EMAIL || "admin@pizzaria.com";

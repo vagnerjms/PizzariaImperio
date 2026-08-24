@@ -5,23 +5,21 @@ export const Route = createFileRoute("/api/webhook")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          // Mercado Pago webhook can send notification details in query or body
+          // Mercado Pago webhook notification extraction
           const url = new URL(request.url);
           const topic = url.searchParams.get("topic") || url.searchParams.get("type");
           const resourceId = url.searchParams.get("id");
 
           let paymentId = resourceId;
 
-          // If it's sent in the JSON body (standard newer webhook format)
           try {
             const body = await request.clone().json();
-            console.log("Mercado Pago Webhook received body:", body);
+            console.log("Mercado Pago Webhook payload:", body);
             if (body.type === "payment" && body.data?.id) {
               paymentId = String(body.data.id);
             }
           } catch (e) {
             // Body was not JSON or empty, fallback to query parameters
-            console.log("Webhook body empty or not JSON");
           }
 
           // If the topic is 'payment' or not specified but we have a paymentId
@@ -35,7 +33,7 @@ export const Route = createFileRoute("/api/webhook")({
               return new Response("Webhook configuration error", { status: 500 });
             }
 
-            console.log(`Fetching payment ${paymentId} details from Mercado Pago API...`);
+            console.log(`Verifying payment ${paymentId} with Mercado Pago API...`);
             
             const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
               headers: {
@@ -44,7 +42,7 @@ export const Route = createFileRoute("/api/webhook")({
             });
 
             if (!response.ok) {
-              console.error(`Failed to fetch payment ${paymentId} from Mercado Pago:`, await response.text());
+              console.error(`Failed to verify payment ${paymentId} with Mercado Pago:`, await response.text());
               return new Response("Failed to fetch payment details", { status: 400 });
             }
 
@@ -52,7 +50,7 @@ export const Route = createFileRoute("/api/webhook")({
             const orderId = paymentData.external_reference;
             const status = paymentData.status;
 
-            console.log(`Payment ${paymentId} has status ${status} for order ${orderId}`);
+            console.log(`Payment ${paymentId} verified with status '${status}' for order ${orderId}`);
 
             if (orderId) {
               const { getOrdersCollection } = await import("@/lib/db");
@@ -68,12 +66,17 @@ export const Route = createFileRoute("/api/webhook")({
                 mappedStatus = "refunded";
               }
 
+              // Check existing order state to ensure strict idempotency on notification events
+              const existingOrder = await ordersCol.findOne({ _id: orderId });
+              const wasAlreadyPaid = existingOrder?.payment_status === "paid";
+
               // Update the order in MongoDB
               const result = await ordersCol.updateOne(
                 { _id: orderId },
                 {
                   $set: {
                     payment_status: mappedStatus,
+                    gateway_payment_id: String(paymentId),
                     updated_at: new Date(),
                   },
                 }
@@ -84,11 +87,11 @@ export const Route = createFileRoute("/api/webhook")({
                 return new Response("Order not found", { status: 404 });
               }
 
-              console.log(`Successfully updated order ${orderId} payment_status to ${mappedStatus}`);
+              console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);
 
-              // Try to notify n8n of the payment success
+              // Notify n8n ONLY upon fresh transition to paid (prevents duplicate spam on retries)
               const n8nWebhookUrl = settings.n8n_webhook_url;
-              if (n8nWebhookUrl && mappedStatus === "paid") {
+              if (n8nWebhookUrl && mappedStatus === "paid" && !wasAlreadyPaid) {
                 const orderDoc = await ordersCol.findOne({ _id: orderId });
                 if (orderDoc) {
                   fetch(n8nWebhookUrl, {

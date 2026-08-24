@@ -709,7 +709,9 @@ function CartDrawer({
     });
 
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`, {
+        signal: AbortSignal.timeout(2500),
+      });
       if (!res.ok) throw new Error("Erro na busca de CEP");
       const data = await res.json();
       
@@ -728,9 +730,11 @@ function CartDrawer({
         deliveryFee: fee,
       }));
     } catch (err) {
-      console.error("ViaCEP falhou, tentando BrasilAPI...", err);
+      console.error("ViaCEP falhou ou expirou timeout, tentando BrasilAPI...", err);
       try {
-        const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCEP}`);
+        const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCEP}`, {
+          signal: AbortSignal.timeout(2500),
+        });
         if (!res.ok) throw new Error("Erro na busca de CEP");
         const data = await res.json();
 
