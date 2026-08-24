@@ -3,6 +3,7 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import { requireAuth } from "./auth-middleware";
 import { getOrdersCollection } from "./db";
+import { getSystemSettings } from "./settings";
 
 const itemSchema = z.object({
   pizza_id: z.string().min(1).max(60),
@@ -110,9 +111,10 @@ export const createOrder = createServerFn({ method: "POST" })
     await ordersCol.insertOne(newOrder);
 
     if (isOnlinePayment) {
-      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      const settings = await getSystemSettings();
+      const accessToken = settings.mercado_pago_access_token;
       if (!accessToken) {
-        console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment variables.");
+        console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment/database settings.");
         throw new Error("Erro na configuração de pagamentos online. Entre em contato com a pizzaria.");
       }
 
@@ -253,7 +255,8 @@ export const createOrder = createServerFn({ method: "POST" })
     }
 
     // Try to notify n8n of the new order
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    const settings = await getSystemSettings();
+    const n8nWebhookUrl = settings.n8n_webhook_url;
     if (n8nWebhookUrl) {
       fetch(n8nWebhookUrl, {
         method: "POST",

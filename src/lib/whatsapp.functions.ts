@@ -1,12 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { requireAuth } from "./auth-middleware";
-
-const getEvolutionConfig = () => {
-  const url = process.env.EVOLUTION_API_URL || "http://179.197.231.106:8085";
-  const apiKey = process.env.EVOLUTION_API_KEY || "pizzaria_evolution_secret_key_2026";
-  return { url, apiKey };
-};
+import { getSystemSettings } from "./settings";
 
 // 1. Obter Status da Conexão do WhatsApp
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
@@ -16,10 +10,13 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
       throw new Error("Acesso restrito.");
     }
 
-    const { url, apiKey } = getEvolutionConfig();
+    const settings = await getSystemSettings();
+    const url = settings.evolution_api_url;
+    const apiKey = settings.evolution_api_key;
+    const instanceName = settings.whatsapp_instance_name;
 
     try {
-      const response = await fetch(`${url}/instance/connectionState/Disparo`, {
+      const response = await fetch(`${url}/instance/connectionState/${instanceName}`, {
         method: "GET",
         headers: {
           "apikey": apiKey,
@@ -27,8 +24,7 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
       });
 
       if (response.status === 404) {
-        // Se a instância "Disparo" não existe, cria ela automaticamente
-        console.log("Instância 'Disparo' não encontrada. Criando automaticamente...");
+        console.log(`Instância '${instanceName}' não encontrada. Criando automaticamente...`);
         const createRes = await fetch(`${url}/instance/create`, {
           method: "POST",
           headers: {
@@ -36,18 +32,18 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            instanceName: "Disparo",
+            instanceName: instanceName,
             token: apiKey,
             qrcode: true,
           }),
         });
 
         if (!createRes.ok) {
-          console.error("Falha ao criar instância 'Disparo' na Evolution API:", await createRes.text());
+          console.error(`Falha ao criar instância '${instanceName}' na Evolution API:`, await createRes.text());
           return { status: "close", message: "Instância não criada" };
         }
 
-        console.log("Instância 'Disparo' criada com sucesso!");
+        console.log(`Instância '${instanceName}' criada com sucesso!`);
         return { status: "close", message: "Instância criada. Aguardando conexão." };
       }
 
@@ -56,7 +52,6 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
       }
 
       const data = await response.json();
-      // O status costuma vir em data.instance.state ("open" = conectado, "close" = desconectado)
       const state = data.instance?.state || "close";
       
       return { 
@@ -77,10 +72,13 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
       throw new Error("Acesso restrito.");
     }
 
-    const { url, apiKey } = getEvolutionConfig();
+    const settings = await getSystemSettings();
+    const url = settings.evolution_api_url;
+    const apiKey = settings.evolution_api_key;
+    const instanceName = settings.whatsapp_instance_name;
 
     try {
-      const response = await fetch(`${url}/instance/connect/Disparo`, {
+      const response = await fetch(`${url}/instance/connect/${instanceName}`, {
         method: "GET",
         headers: {
           "apikey": apiKey,
@@ -89,12 +87,11 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error("Erro ao conectar instância 'Disparo':", errText);
+        console.error(`Erro ao conectar instância '${instanceName}':`, errText);
         throw new Error("Não foi possível gerar o QR Code.");
       }
 
       const data = await response.json();
-      // A Evolution API retorna o QR Code em data.base64 (data:image/png;base64,...)
       return { 
         base64: data.base64 || null, 
         code: data.code || null 
@@ -113,10 +110,13 @@ export const disconnectWhatsApp = createServerFn({ method: "POST" })
       throw new Error("Acesso restrito.");
     }
 
-    const { url, apiKey } = getEvolutionConfig();
+    const settings = await getSystemSettings();
+    const url = settings.evolution_api_url;
+    const apiKey = settings.evolution_api_key;
+    const instanceName = settings.whatsapp_instance_name;
 
     try {
-      const response = await fetch(`${url}/instance/logout/Disparo`, {
+      const response = await fetch(`${url}/instance/logout/${instanceName}`, {
         method: "DELETE",
         headers: {
           "apikey": apiKey,
@@ -125,7 +125,7 @@ export const disconnectWhatsApp = createServerFn({ method: "POST" })
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error("Erro ao deslogar instância 'Disparo':", errText);
+        console.error(`Erro ao deslogar instância '${instanceName}':`, errText);
         throw new Error("Não foi possível desconectar.");
       }
 

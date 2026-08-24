@@ -23,6 +23,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
+import { getAdminSettings, updateAdminSettings } from "@/lib/settings";
 
 type OrderRow = Awaited<ReturnType<typeof listOrders>>[number];
 
@@ -113,6 +114,65 @@ function AdminPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
+
+  const fetchSettings = useServerFn(getAdminSettings);
+  const saveSettings = useServerFn(updateAdminSettings);
+
+  const [settingsForm, setSettingsForm] = useState({
+    evolution_api_url: "",
+    evolution_api_key: "",
+    n8n_webhook_url: "",
+    mercado_pago_access_token: "",
+    mercado_pago_public_key: "",
+    whatsapp_instance_name: "",
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSuccessMsg, setSettingsSuccessMsg] = useState<string | null>(null);
+  const [settingsErrorMsg, setSettingsErrorMsg] = useState<string | null>(null);
+
+  const loadSettings = async () => {
+    if (!user?.roles?.includes("admin")) return;
+    setSettingsLoading(true);
+    setSettingsErrorMsg(null);
+    try {
+      const data = await fetchSettings();
+      setSettingsForm({
+        evolution_api_url: data.evolution_api_url || "",
+        evolution_api_key: data.evolution_api_key || "",
+        n8n_webhook_url: data.n8n_webhook_url || "",
+        mercado_pago_access_token: data.mercado_pago_access_token || "",
+        mercado_pago_public_key: data.mercado_pago_public_key || "",
+        whatsapp_instance_name: data.whatsapp_instance_name || "",
+      });
+    } catch (e) {
+      setSettingsErrorMsg(e instanceof Error ? e.message : "Erro ao carregar configurações.");
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsSaving(true);
+    setSettingsSuccessMsg(null);
+    setSettingsErrorMsg(null);
+    try {
+      await saveSettings({ data: settingsForm });
+      setSettingsSuccessMsg("Configurações salvas com sucesso!");
+      setTimeout(() => setSettingsSuccessMsg(null), 4000);
+    } catch (err) {
+      setSettingsErrorMsg(err instanceof Error ? err.message : "Erro ao salvar configurações.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === "configuracoes") {
+      loadSettings();
+    }
+  }, [viewMode]);
 
   const fetchWhatsappStatus = useServerFn(getWhatsAppStatus);
   const fetchWhatsappQRCode = useServerFn(getWhatsAppQRCode);
@@ -680,54 +740,136 @@ function AdminPage() {
                 </div>
                 <div>
                   <h2 className="font-serif text-lg leading-tight">Configurações do Sistema</h2>
-                  <p className="text-xs text-muted-foreground">Painel exclusivo para Administradores</p>
+                  <p className="text-xs text-muted-foreground">Painel de gerenciamento de APIs (Salvo no banco de dados MongoDB)</p>
                 </div>
               </header>
 
-              <div className="space-y-6">
-                <div className="rounded-xl border border-border bg-secondary/25 p-5 space-y-4">
-                  <h3 className="font-serif text-sm font-bold text-foreground flex items-center gap-2">
-                    <Terminal className="h-4 w-4 text-gold" /> Variáveis de Ambiente & APIs
-                  </h3>
+              {settingsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin text-gold mb-3" />
+                  <p className="text-sm">Carregando configurações...</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveSettings} className="space-y-6">
+                  {settingsErrorMsg && (
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive">
+                      {settingsErrorMsg}
+                    </div>
+                  )}
+                  {settingsSuccessMsg && (
+                    <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-500 font-semibold">
+                      {settingsSuccessMsg}
+                    </div>
+                  )}
 
-                  <div className="space-y-3.5 text-xs">
-                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
-                      <span className="text-muted-foreground font-semibold">Evolution API URL (WhatsApp)</span>
-                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
-                        http://179.197.231.106:8085
-                      </span>
+                  <div className="space-y-4">
+                    <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                      <MessageSquare className="h-4 w-4" /> Evolution API (WhatsApp)
+                    </h3>
+                    
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Evolution API URL</label>
+                        <input
+                          type="text"
+                          required
+                          value={settingsForm.evolution_api_url}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, evolution_api_url: e.target.value }))}
+                          className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Instância do WhatsApp</label>
+                        <input
+                          type="text"
+                          required
+                          value={settingsForm.whatsapp_instance_name}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, whatsapp_instance_name: e.target.value }))}
+                          className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        />
+                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
-                      <span className="text-muted-foreground font-semibold">n8n Webhook Endpoint URL</span>
-                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
-                        http://179.197.231.106:5678/webhook/webhook-pizzaria
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col gap-1 border-b border-border/40 pb-2">
-                      <span className="text-muted-foreground font-semibold">Mercado Pago Webhook Endpoint</span>
-                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium select-all">
-                        /api/webhook
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <span className="text-muted-foreground font-semibold">Instância do WhatsApp</span>
-                      <span className="font-mono bg-secondary/80 px-2.5 py-1.5 rounded text-foreground font-medium">
-                        Disparo
-                      </span>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Evolution API Key</label>
+                      <input
+                        type="password"
+                        required
+                        value={settingsForm.evolution_api_key}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, evolution_api_key: e.target.value }))}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
                     </div>
                   </div>
-                </div>
 
-                <div className="rounded-xl border border-border bg-amber-500/5 border-amber-500/20 p-5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-500 mb-2">Atenção desenvolvedor</h4>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Todas as comunicações com a Evolution API e com o gateway do Mercado Pago estão sendo processadas de forma segura diretamente no servidor da aplicação na VPS. Não compartilhe as chaves de API secretas localizadas no arquivo <code className="bg-secondary/60 px-1 py-0.5 rounded font-semibold text-foreground">.env</code> com terceiros.
-                  </p>
-                </div>
-              </div>
+                  <div className="space-y-4">
+                    <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                      <Coins className="h-4 w-4" /> Mercado Pago (Gateway de Pagamento)
+                    </h3>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Access Token Privado</label>
+                      <input
+                        type="password"
+                        required
+                        value={settingsForm.mercado_pago_access_token}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, mercado_pago_access_token: e.target.value }))}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Public Key (Chave Pública)</label>
+                      <input
+                        type="text"
+                        required
+                        value={settingsForm.mercado_pago_public_key}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, mercado_pago_public_key: e.target.value }))}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                      <Terminal className="h-4 w-4" /> Automação & Webhooks
+                    </h3>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">n8n Webhook URL</label>
+                      <input
+                        type="text"
+                        required
+                        value={settingsForm.n8n_webhook_url}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, n8n_webhook_url: e.target.value }))}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mercado Pago Webhook Endpoint (Apenas Leitura)</label>
+                      <input
+                        type="text"
+                        disabled
+                        value="/api/webhook"
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/10 px-3.5 py-2.5 text-sm text-muted-foreground focus:outline-none cursor-not-allowed opacity-70"
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">Configure esta URL finalizada em seu painel de Webhooks do Mercado Pago para receber notificações de pagamento.</p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-border flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={settingsSaving}
+                      className="rounded-full bg-gold px-6 py-2.5 text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {settingsSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {settingsSaving ? "Salvando..." : "Salvar Configurações"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

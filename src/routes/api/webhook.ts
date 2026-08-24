@@ -26,7 +26,9 @@ export const Route = createFileRoute("/api/webhook")({
 
           // If the topic is 'payment' or not specified but we have a paymentId
           if (paymentId && (!topic || topic === "payment")) {
-            const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+            const { getSystemSettings } = await import("@/lib/settings");
+            const settings = await getSystemSettings();
+            const accessToken = settings.mercado_pago_access_token;
 
             if (!accessToken) {
               console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in webhook execution.");
@@ -85,7 +87,7 @@ export const Route = createFileRoute("/api/webhook")({
               console.log(`Successfully updated order ${orderId} payment_status to ${mappedStatus}`);
 
               // Try to notify n8n of the payment success
-              const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+              const n8nWebhookUrl = settings.n8n_webhook_url;
               if (n8nWebhookUrl && mappedStatus === "paid") {
                 const orderDoc = await ordersCol.findOne({ _id: orderId });
                 if (orderDoc) {
