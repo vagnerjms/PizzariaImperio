@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireAuth } from "./auth-middleware";
-import { getSystemSettings } from "./settings";
 
 // 1. Obter Status da Conexão do WhatsApp
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
@@ -10,6 +9,7 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
       throw new Error("Acesso restrito.");
     }
 
+    const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;
     const apiKey = settings.evolution_api_key;
@@ -72,6 +72,7 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
       throw new Error("Acesso restrito.");
     }
 
+    const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;
     const apiKey = settings.evolution_api_key;
@@ -110,6 +111,7 @@ export const disconnectWhatsApp = createServerFn({ method: "POST" })
       throw new Error("Acesso restrito.");
     }
 
+    const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;
     const apiKey = settings.evolution_api_key;

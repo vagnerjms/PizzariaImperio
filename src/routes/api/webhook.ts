@@ -26,7 +26,7 @@ export const Route = createFileRoute("/api/webhook")({
 
           // If the topic is 'payment' or not specified but we have a paymentId
           if (paymentId && (!topic || topic === "payment")) {
-            const { getSystemSettings } = await import("@/lib/settings");
+            const { getSystemSettings } = await import("@/lib/settings.server");
             const settings = await getSystemSettings();
             const accessToken = settings.mercado_pago_access_token;
 
