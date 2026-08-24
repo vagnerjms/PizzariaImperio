@@ -70,8 +70,9 @@ export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const ordersCol = await getOrdersCollection();
     const orderId = crypto.randomUUID();
-    const subtotal = data.items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
-    const total = subtotal + (data.delivery_fee || 0);
+    const subtotal = data.items.reduce((acc, i) => acc + (Math.max(0, i.unit_price) * Math.max(1, i.quantity)), 0);
+    const verifiedDeliveryFee = Math.max(0, data.delivery_fee || 0);
+    const total = Number((subtotal + verifiedDeliveryFee).toFixed(2));
 
     const isOnlinePix = data.payment_method === "Pix";
     const isOnlineCard = data.payment_method === "Cartão de crédito";
@@ -360,7 +361,9 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     }
 
     // Try to notify n8n of the status change
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    const { getSystemSettings } = await import("./settings.server");
+    const settings = await getSystemSettings();
+    const n8nWebhookUrl = settings.n8n_webhook_url;
     if (n8nWebhookUrl) {
       fetch(n8nWebhookUrl, {
         method: "POST",
@@ -372,6 +375,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
             customer_name: orderBefore?.customer_name,
             customer_phone: orderBefore?.customer_phone,
             status: data.status,
+            previous_status: orderBefore?.status,
             total: orderBefore?.total,
           }
         }),
