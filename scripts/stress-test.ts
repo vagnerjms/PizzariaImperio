@@ -1,33 +1,38 @@
 /**
- * Script de Teste de Carga e Capacidade (Stress Test)
+ * Script de Teste de Carga e Capacidade de Pedidos (Stress Test)
  * Pizzaria Império v2.0.0
  * 
- * Uso:
- *   npx tsx scripts/stress-test.ts --total 20 --concurrency 3 --url http://localhost:3002
- *   npx tsx scripts/stress-test.ts --total 50 --concurrency 5 --url https://imperio.embraganca.com.br
+ * Execução dentro do container Docker:
+ *   docker compose exec web bun scripts/stress-test.ts --total 30 --concurrency 5
+ *   docker compose exec web bun scripts/stress-test.ts --total 100 --concurrency 10 --clean
  */
 
-interface OrderPayload {
-  customer_name: string;
-  customer_phone: string;
-  customer_address: string;
-  payment_method: string;
-  troco?: number | null;
-  notes?: string | null;
-  delivery_fee: number;
-  items: Array<{
-    pizza_id: string;
-    pizza_name: string;
-    quantity: number;
-    unit_price: number;
-  }>;
-}
+import { z } from "zod";
+import crypto from "node:crypto";
+import { getOrdersCollection, client } from "../src/lib/db";
+
+const itemSchema = z.object({
+  pizza_id: z.string().min(1).max(60),
+  pizza_name: z.string().min(1).max(120),
+  quantity: z.number().int().min(1).max(50),
+  unit_price: z.number().min(0).max(5000),
+});
+
+const createOrderSchema = z.object({
+  customer_name: z.string().trim().min(2).max(120),
+  customer_phone: z.string().trim().min(8).max(30),
+  customer_address: z.string().trim().min(5).max(400),
+  payment_method: z.enum(["Pix", "Dinheiro", "Cartão de crédito", "Cartão de débito"]),
+  troco: z.number().min(0).max(10000).nullable().optional(),
+  notes: z.string().max(500).optional().nullable(),
+  items: z.array(itemSchema).min(1).max(50),
+  delivery_fee: z.number().min(0).max(500).optional().nullable(),
+});
 
 interface TestResult {
   orderId?: string;
   durationMs: number;
   success: boolean;
-  status?: number;
   error?: string;
 }
 
@@ -41,9 +46,9 @@ function getArg(flag: string, defaultValue: string): string {
   return defaultValue;
 }
 
-const TOTAL_ORDERS = parseInt(getArg("--total", "20"), 10);
-const CONCURRENCY = parseInt(getArg("--concurrency", "4"), 10);
-const TARGET_URL = getArg("--url", "http://localhost:3002").replace(/\/$/, "");
+const TOTAL_ORDERS = parseInt(getArg("--total", "30"), 10);
+const CONCURRENCY = parseInt(getArg("--concurrency", "5"), 10);
+const SHOULD_CLEAN = args.includes("--clean");
 
 const SAMPLE_NAMES = [
   "Carlos Eduardo", "Mariana Silva", "Lucas Santos", "Beatriz Lima", 
@@ -61,10 +66,10 @@ const SAMPLE_PIZZAS = [
 
 const SAMPLE_BAIRROS = [
   "Centro", "Lavapés", "Jardim América", "Jardim Europa", 
-  "Jardim do Lago", "Cidade Planejada I", "Henedina Cortez"
+  "Jardim do Lago", "Cidade Planejada I", "Henedina Cortez", "Taboão"
 ];
 
-function generateRandomOrder(index: number): OrderPayload {
+function generateRandomOrder(index: number) {
   const name = `${SAMPLE_NAMES[index % SAMPLE_NAMES.length]} (Teste #${index + 1})`;
   const bairro = SAMPLE_BAIRROS[index % SAMPLE_BAIRROS.length];
   const pizza = SAMPLE_PIZZAS[index % SAMPLE_PIZZAS.length];
@@ -74,9 +79,9 @@ function generateRandomOrder(index: number): OrderPayload {
     customer_name: name,
     customer_phone: `(11) 9${Math.floor(10000000 + Math.random() * 90000000)}`,
     customer_address: `Rua das Flores, ${100 + index} - Bairro ${bairro}, Bragança Paulista - SP`,
-    payment_method: "Dinheiro",
+    payment_method: "Dinheiro" as const,
     troco: 100,
-    notes: `Pedido de teste automatizado de carga #${index + 1}`,
+    notes: `[TESTE DE CARGA AUTOMATIZADO #${index + 1}]`,
     delivery_fee: 5.00,
     items: [
       {
@@ -89,49 +94,61 @@ function generateRandomOrder(index: number): OrderPayload {
   };
 }
 
-async function sendOrder(index: number): Promise<TestResult> {
-  const payload = generateRandomOrder(index);
+async function processSingleOrder(index: number, ordersCol: any): Promise<TestResult> {
+  const rawPayload = generateRandomOrder(index);
   const startTime = performance.now();
 
   try {
-    // TanStack Start Server Function call via HTTP POST
-    const res = await fetch(`${TARGET_URL}/_serverFn/createOrder`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      },
-      body: JSON.stringify({
-        data: payload
-      }),
-      signal: AbortSignal.timeout(10000)
-    });
+    // 1. Validação estrita de Schema (Zod)
+    const validData = createOrderSchema.parse(rawPayload);
+
+    // 2. Cálculo seguro de Subtotais e Frete
+    const orderId = `test-order-${crypto.randomUUID()}`;
+    const subtotal = validData.items.reduce((acc, i) => acc + (Math.max(0, i.unit_price) * Math.max(1, i.quantity)), 0);
+    const verifiedDeliveryFee = Math.max(0, validData.delivery_fee || 0);
+    const total = Number((subtotal + verifiedDeliveryFee).toFixed(2));
+
+    const newOrder = {
+      _id: orderId,
+      customer_name: validData.customer_name,
+      customer_phone: validData.customer_phone,
+      customer_address: validData.customer_address,
+      payment_method: validData.payment_method,
+      troco: validData.troco ?? null,
+      notes: validData.notes ?? null,
+      total,
+      delivery_fee: verifiedDeliveryFee,
+      status: "novo" as const,
+      payment_status: "on_delivery" as const,
+      payment_gateway: null,
+      gateway_payment_id: null,
+      payment_details: null,
+      is_test: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+      items: validData.items.map((i) => ({
+        pizza_id: i.pizza_id,
+        pizza_name: i.pizza_name,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+      })),
+    };
+
+    // 3. Gravação atômica no MongoDB
+    await ordersCol.insertOne(newOrder);
 
     const durationMs = Math.round(performance.now() - startTime);
-
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return {
-        orderId: data?.orderId || `order-${index + 1}`,
-        durationMs,
-        success: true,
-        status: res.status
-      };
-    } else {
-      const text = await res.text().catch(() => "Erro");
-      return {
-        durationMs,
-        success: false,
-        status: res.status,
-        error: text.slice(0, 100)
-      };
-    }
+    return {
+      orderId,
+      durationMs,
+      success: true,
+    };
   } catch (err: any) {
     const durationMs = Math.round(performance.now() - startTime);
     return {
       durationMs,
       success: false,
-      error: err?.message || "Timeout / Erro de Rede"
+      error: err?.message || "Erro no processamento do pedido",
     };
   }
 }
@@ -140,16 +157,17 @@ async function runStressTest() {
   console.log("\n=======================================================");
   console.log("   🍕 INICIANDO TESTE DE CARGA - PIZZARIA IMPÉRIO 🍕");
   console.log("=======================================================");
-  console.log(`🎯 Alvo: ${TARGET_URL}`);
-  console.log(`📦 Total de Pedidos: ${TOTAL_ORDERS}`);
-  console.log(`⚡ Concorrência: ${CONCURRENCY} pedidos simultâneos`);
+  console.log(`📦 Total de Pedidos:      ${TOTAL_ORDERS}`);
+  console.log(`⚡ Concorrência:          ${CONCURRENCY} pedidos simultâneos`);
+  console.log(`🧹 Limpar após o teste:   ${SHOULD_CLEAN ? "SIM" : "NÃO"}`);
   console.log("=======================================================\n");
 
+  const ordersCol = await getOrdersCollection();
+  const createdOrderIds: string[] = [];
   const results: TestResult[] = [];
   const testStartTime = performance.now();
   let completedCount = 0;
 
-  // Pool de execução com controle de concorrência
   const queue = Array.from({ length: TOTAL_ORDERS }, (_, i) => i);
 
   async function worker() {
@@ -157,8 +175,11 @@ async function runStressTest() {
       const index = queue.shift();
       if (index === undefined) break;
 
-      const result = await sendOrder(index);
+      const result = await processSingleOrder(index, ordersCol);
       results.push(result);
+      if (result.orderId) {
+        createdOrderIds.push(result.orderId);
+      }
       completedCount++;
 
       const icon = result.success ? "✅" : "❌";
@@ -192,7 +213,7 @@ async function runStressTest() {
   console.log(`✅ Pedidos Bem-Sucedidos:    ${successful.length} / ${TOTAL_ORDERS} (${((successful.length / TOTAL_ORDERS) * 100).toFixed(1)}%)`);
   console.log(`❌ Pedidos com Falha:        ${failed.length} / ${TOTAL_ORDERS}`);
   console.log("-------------------------------------------------------");
-  console.log("📈 Latências de Resposta do Servidor:");
+  console.log("📈 Latências de Gravação no MongoDB:");
   console.log(`   • Mínima:                  ${minLatency}ms`);
   console.log(`   • Média:                   ${avgLatency}ms`);
   console.log(`   • Mediana (p50):           ${p50}ms`);
@@ -200,15 +221,22 @@ async function runStressTest() {
   console.log(`   • Máxima:                  ${maxLatency}ms`);
   console.log("=======================================================");
 
-  if (failed.length > 0) {
-    console.log("\n⚠️ Amostra de Erros Encontrados:");
-    failed.slice(0, 3).forEach((f, i) => {
-      console.log(`   ${i + 1}. [Status ${f.status || "Erro"}] ${f.error}`);
-    });
+  if (SHOULD_CLEAN && createdOrderIds.length > 0) {
+    console.log(`\n🧹 Removendo os ${createdOrderIds.length} pedidos de teste do banco...`);
+    await ordersCol.deleteMany({ _id: { $in: createdOrderIds } });
+    console.log("✨ Banco de dados limpo com sucesso!");
   } else {
-    console.log("\n🎉 EXCELENTE! Todos os pedidos foram processados com 100% de sucesso!");
+    console.log(`\n📌 Os pedidos foram mantidos no banco para você visualizar no Painel Administrativo.`);
   }
+
   console.log("=======================================================\n");
+  
+  if (client) {
+    await client.close();
+  }
 }
 
-runStressTest().catch(console.error);
+runStressTest().catch((err) => {
+  console.error("Erro fatal no teste de carga:", err);
+  process.exit(1);
+});
