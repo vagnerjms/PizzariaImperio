@@ -365,6 +365,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     const settings = await getSystemSettings();
     const n8nWebhookUrl = settings.n8n_webhook_url;
     if (n8nWebhookUrl) {
+      console.log(`[Order Status Updated] Dispatching webhook to n8n: ${n8nWebhookUrl} (Order: ${data.id}, Status: ${data.status})`);
       fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -374,12 +375,21 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
             id: data.id,
             customer_name: orderBefore?.customer_name,
             customer_phone: orderBefore?.customer_phone,
+            customer_address: orderBefore?.customer_address,
             status: data.status,
             previous_status: orderBefore?.status,
             total: orderBefore?.total,
           }
         }),
-      }).catch((err) => console.error("Failed to notify n8n webhook on status update:", err));
+      })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error(`[n8n Status Update Error] n8n returned HTTP ${res.status}:`, await res.text());
+        } else {
+          console.log(`[n8n Status Update Success] Event order.status_updated delivered successfully.`);
+        }
+      })
+      .catch((err) => console.error("Failed to notify n8n webhook on status update:", err));
     }
 
     return { ok: true };
