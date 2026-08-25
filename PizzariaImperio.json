@@ -1,0 +1,259 @@
+{
+  "name": "PizzariaImperio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-pizzaria",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1424,
+        272
+      ],
+      "id": "cfe76871-0036-4698-b52a-f82b958d3fb9",
+      "name": "Webhook",
+      "webhookId": "26a5e790-8c3d-4b4c-9599-69619248bde1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "order.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dbe400e5-4548-48e3-b99d-028c702f654b"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Novo Pedido"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "d7dc4275-f718-4e20-afc7-bc7d951c96ba",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "order.paid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Pago"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "540dbfbe-7172-4463-b83e-eff4808ea0ab",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "order.status_updated",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Status Alterado"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -1120,
+        256
+      ],
+      "id": "bd64b9bc-2aab-4bf9-b90e-ef12c4159af9",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "pizzaria_evolution_secret_key_2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"55{{ ($json.body.order.customer_phone || '').replace(/\\\\D/g, '').replace(/^55/, '') }}\",\n  \"text\": \"Olá, {{ $json.body.order.customer_name }}! 🍕\\n\\nRecebemos o seu pedido com sucesso na *Pizzaria Império*!\\n\\n📋 *Resumo do Pedido:*\\n- Código: #{{ $json.body.order.id.slice(0, 8) }}\\n- Valor Total: R$ {{ Number($json.body.order.total || 0).toFixed(2).replace('.', ',') }}\\n- Pagamento: {{ $json.body.order.payment_method }}\\n\\n{{ $json.body.order.payment_method === 'Pix' || $json.body.order.payment_method === 'Cartão de crédito' ? '⏳ Aguardamos a confirmação do pagamento no sistema para iniciar o preparo no forno. 👍' : '👨‍🍳 Seu pedido foi enviado para a cozinha e já vamos iniciar o preparo. 👍' }}\\n\\nMuito obrigado pela preferência! ❤️\",\n  \"delay\": 2800,\n  \"linkPreview\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -640,
+        64
+      ],
+      "id": "f530582e-37a5-46ff-985f-fb5339030366",
+      "name": "Msg Pedido Criado"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "pizzaria_evolution_secret_key_2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"55{{ ($json.body.order.customer_phone || '').replace(/\\\\D/g, '').replace(/^55/, '') }}\",\n  \"text\": \"Parabéns, {{ $json.body.order.customer_name }}! 🎉\\n\\nSeu pagamento de *R$ {{ Number($json.body.order.total || 0).toFixed(2).replace('.', ',') }}* foi confirmado com sucesso!\\n\\n👨‍🍳 Seu pedido *#{{ $json.body.order.id.slice(0, 8) }}* foi encaminhado para a nossa cozinha e já está no forno! 🍕🔥\\n\\nAvisaremos você assim que sair para entrega! 🛵\",\n  \"delay\": 3200,\n  \"linkPreview\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -640,
+        272
+      ],
+      "id": "9173a22f-6b58-47ad-95bc-7da0fe42bede",
+      "name": "Msg Pagamento Aprovado"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://179.197.231.106:8085/message/sendText/Disparo",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "pizzaria_evolution_secret_key_2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"55{{ ($json.body.order.customer_phone || '').replace(/\\\\D/g, '').replace(/^55/, '') }}\",\n  \"text\": \"{{ $json.body.order.status === 'preparando' ? ('Olá, ' + $json.body.order.customer_name + '! 🍕\\n\\nSeu pedido *#' + $json.body.order.id.slice(0, 8) + '* foi aceito pela cozinha e o preparo já começou! 🔥') : ($json.body.order.status === 'saiu' ? ('Notícia boa, ' + $json.body.order.customer_name + '! 🛵💨\\n\\nSeu pedido *#' + $json.body.order.id.slice(0, 8) + '* acabou de sair para entrega e o motoboy já está a caminho do seu endereço!\\n\\nTenha uma excelente refeição! ❤️') : ($json.body.order.status === 'entregue' ? ('Pedido entregue! 🎉🍕\\n\\nEsperamos que sua pizza esteja deliciosa! Muito obrigado pela preferência e bom apetite! ⭐') : ($json.body.order.status === 'cancelado' ? ('Aviso sobre o seu pedido: ⚠️\\n\\nOlá, ' + $json.body.order.customer_name + '. O seu pedido *#' + $json.body.order.id.slice(0, 8) + '* foi cancelado.\\n\\nSe tiver qualquer dúvida, responda a esta mensagem para falar com a gente.') : ('Status do seu pedido atualizado para: ' + $json.body.order.status)))) }}\",\n  \"delay\": 2500,\n  \"linkPreview\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -640,
+        464
+      ],
+      "id": "ba0c7d64-264f-4a3f-83dd-e7721a72afa9",
+      "name": "Msg Status Alterado"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Msg Pedido Criado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Msg Pagamento Aprovado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Msg Status Alterado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e4bf1eb3-0d77-4315-a197-6157ab8c2fa4",
+  "meta": {
+    "instanceId": "f8b112aa77236cd432daead1bafde80413f2ddd4885196f912f220d6a6e9d957"
+  },
+  "nodeGroups": [],
+  "id": "q4mKf4fvjK99MpmX",
+  "tags": []
+}
