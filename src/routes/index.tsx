@@ -311,6 +311,7 @@ function Home() {
       <CartDrawer
         open={cartOpen}
         onClose={() => setCartOpen(false)}
+        onOpen={() => setCartOpen(true)}
         cart={cart}
         onInc={addToCart}
         onDec={decFromCart}
@@ -592,6 +593,7 @@ function PizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void }) {
 function CartDrawer({
   open,
   onClose,
+  onOpen,
   cart,
   onInc,
   onDec,
@@ -600,6 +602,7 @@ function CartDrawer({
 }: {
   open: boolean;
   onClose: () => void;
+  onOpen: () => void;
   cart: Record<string, number>;
   onInc: (id: string) => void;
   onDec: (id: string) => void;
@@ -650,6 +653,27 @@ function CartDrawer({
   const fetchDeliveryConfig = useServerFn(getPublicDeliveryConfig);
   const [deliveryConfig, setDeliveryConfig] = useState<{ default_fee: number; neighborhoods: any[] } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const savedOrder = localStorage.getItem("active_order");
+    if (savedOrder) {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        setSuccess(parsed);
+        onOpen();
+      } catch (e) {
+        localStorage.removeItem("active_order");
+      }
+    }
+  }, [onOpen]);
+
+  useEffect(() => {
+    if (success) {
+      localStorage.setItem("active_order", JSON.stringify(success));
+    } else {
+      localStorage.removeItem("active_order");
+    }
+  }, [success]);
 
   useEffect(() => {
     fetchDeliveryConfig()
