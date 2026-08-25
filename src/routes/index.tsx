@@ -261,6 +261,13 @@ function Home() {
 
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
+  const total = useMemo(() => {
+    return Object.entries(cart).reduce((acc, [id, qty]) => {
+      const p = MENU_BY_ID[id];
+      return acc + (p?.price || 0) * qty;
+    }, 0);
+  }, [cart]);
+
   const addToCart = (id: string) => {
     setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
     setJustAdded(true);
@@ -298,14 +305,33 @@ function Home() {
       <Footer />
 
       {cartCount > 0 && !cartOpen && (
-        <button
-          type="button"
-          onClick={() => setCartOpen(true)}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-bold text-gold-foreground shadow-gold-glow transition hover:brightness-110"
-        >
-          <ShoppingBag className="h-4 w-4" />
-          Ver carrinho · {cartCount}
-        </button>
+        <>
+          {/* Desktop Floating Button */}
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="hidden md:inline-flex fixed bottom-6 right-6 z-40 items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-bold text-gold-foreground shadow-gold-glow transition hover:brightness-110"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Ver carrinho · {cartCount}
+          </button>
+          
+          {/* Mobile Sticky Bottom Bar */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-secondary/95 backdrop-blur-md border-t border-border/40 p-4 pb-safe flex items-center justify-between shadow-2xl">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total do carrinho</span>
+              <span className="text-gold font-serif font-bold text-lg">{formatBRL(total)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-2.5 text-sm font-bold text-gold-foreground transition hover:brightness-110 active:scale-95"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              Ver Carrinho ({cartCount})
+            </button>
+          </div>
+        </>
       )}
 
       <CartDrawer
@@ -914,28 +940,41 @@ function CartDrawer({
                       </div>
                     )}
 
-                    <div className="space-y-2">
+                     <div className="space-y-3 pt-2">
                       <label className="block text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Pix Copia e Cola
                       </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
+                      <div className="relative">
+                        <textarea
                           readOnly
                           value={success.payment_details.qr_code || ""}
-                          className="flex-1 rounded-xl border border-border bg-secondary/40 px-3 py-2 text-xs font-mono text-muted-foreground focus:outline-none"
+                          rows={2}
+                          className="w-full rounded-xl border border-border/85 bg-secondary/30 p-3 text-[11px] font-mono text-muted-foreground focus:outline-none resize-none break-all"
+                          onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleCopyPix(success.payment_details.qr_code)}
-                          className="flex items-center justify-center rounded-xl bg-gold px-3.5 py-2 text-xs font-bold text-gold-foreground transition hover:brightness-110"
-                        >
-                          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        </button>
                       </div>
-                      <p className="text-[11px] text-muted-foreground text-left">
-                        {copied ? "Código copiado para a área de transferência!" : "Clique no botão ao lado para copiar o código Pix."}
-                      </p>
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPix(success.payment_details.qr_code)}
+                        className={`w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all duration-300 shadow-md ${
+                          copied 
+                            ? "bg-emerald-500 text-white shadow-emerald-500/10 scale-[0.98]" 
+                            : "bg-gold text-gold-foreground hover:brightness-110 active:scale-95"
+                        }`}
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-4 w-4 animate-bounce" />
+                            Copiado!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4" />
+                            Copiar Chave Pix
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     <div className="rounded-xl bg-secondary/40 p-3 border border-border/50">
