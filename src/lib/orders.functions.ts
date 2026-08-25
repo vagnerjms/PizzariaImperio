@@ -155,6 +155,7 @@ export const createOrder = createServerFn({ method: "POST" })
                 transaction_amount: Number(total.toFixed(2)),
                 description: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,
                 payment_method_id: "pix",
+                external_reference: orderId,
                 payer: {
                   email: "cliente@pizzariaimperio011.com",
                   first_name: data.customer_name.split(" ")[0] || "Cliente",
