@@ -4,6 +4,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
 import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
+import { getPublicPromotions } from "@/lib/promotions.functions";
+import { evaluateCartPromotions } from "@/lib/promotions-engine";
+import { Promotion, AppliedPromotionResult } from "@/lib/promotions.types";
 import {
   Flame,
   Truck,
@@ -21,6 +24,9 @@ import {
   Check,
   ExternalLink,
   Loader2,
+  Sparkles,
+  Tag,
+  Gift,
 } from "lucide-react";
 import heroForno from "@/assets/hero-forno.jpg";
 import pizzaiolo from "@/assets/pizzaiolo.jpg";
@@ -254,6 +260,15 @@ function Home() {
   const [cartOpen, setCartOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
 
+  const fetchPromotions = useServerFn(getPublicPromotions);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+
+  useEffect(() => {
+    fetchPromotions()
+      .then(setPromotions)
+      .catch((err) => console.error("Erro ao carregar promoções públicas:", err));
+  }, []);
+
   const filtered = useMemo(
     () => (cat === "todas" ? MENU : MENU.filter((p) => p.category === cat)),
     [cat],
@@ -261,12 +276,19 @@ function Home() {
 
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
-  const total = useMemo(() => {
+  const subtotal = useMemo(() => {
     return Object.entries(cart).reduce((acc, [id, qty]) => {
       const p = MENU_BY_ID[id];
       return acc + (p?.price || 0) * qty;
     }, 0);
   }, [cart]);
+
+  const appliedPromotion = useMemo(() => {
+    return evaluateCartPromotions(cart, MENU_BY_ID as any, promotions);
+  }, [cart, promotions]);
+
+  const discount = appliedPromotion?.discountAmount || 0;
+  const total = Math.max(0, subtotal - discount);
 
   const addToCart = (id: string) => {
     setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
@@ -296,7 +318,7 @@ function Home() {
     <div className="min-h-screen bg-background text-foreground">
       <Header cartCount={cartCount} pulse={justAdded} onOpenCart={handleOpenCart} />
       <Hero />
-      <Promocoes />
+      <Promocoes promotions={promotions} onAdd={addToCart} />
       <Menu
         items={filtered}
         category={cat}
@@ -323,7 +345,14 @@ function Home() {
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-secondary/95 backdrop-blur-md border-t border-border/40 p-4 pb-safe flex items-center justify-between shadow-2xl">
             <div className="flex flex-col">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total do carrinho</span>
-              <span className="text-gold font-serif font-bold text-lg">{formatBRL(total)}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gold font-serif font-bold text-lg">{formatBRL(total)}</span>
+                {discount > 0 && (
+                  <span className="text-[10px] text-green-400 font-bold bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">
+                    -{formatBRL(discount)}
+                  </span>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -342,6 +371,7 @@ function Home() {
         onClose={handleCloseCart}
         onOpen={handleOpenCart}
         cart={cart}
+        appliedPromotion={appliedPromotion}
         onInc={addToCart}
         onDec={decFromCart}
         onRemove={removeFromCart}
@@ -478,10 +508,16 @@ function Stat({ icon, title, sub }: { icon: React.ReactNode; title: string; sub:
   );
 }
 
-function Promocoes() {
+function Promocoes({
+  promotions,
+  onAdd,
+}: {
+  promotions: Promotion[];
+  onAdd: (id: string) => void;
+}) {
   return (
     <section id="promocoes" className="border-t border-border/50 bg-secondary/20 py-24">
-      <div className="mx-auto max-w-4xl px-6 text-center">
+      <div className="mx-auto max-w-6xl px-6 text-center">
         <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-[0.3em] text-gold">
           <Star className="h-3 w-3 fill-gold" /> OFERTAS RELÂMPAGO{" "}
           <Star className="h-3 w-3 fill-gold" />
@@ -493,15 +529,64 @@ function Promocoes() {
           Aqui aparecem as promoções relâmpago da casa. Fique de olho — novidades quentinhas saem direto do forno!
         </p>
 
-        <div className="mt-12 rounded-3xl border border-dashed border-gold/40 bg-background/60 px-6 py-16">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gold/10 text-gold">
-            <Flame className="h-6 w-6" />
+        {promotions.length === 0 ? (
+          <div className="mt-12 mx-auto max-w-4xl rounded-3xl border border-dashed border-gold/40 bg-background/60 px-6 py-16">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gold/10 text-gold">
+              <Flame className="h-6 w-6" />
+            </div>
+            <p className="mt-6 font-serif text-2xl">Nenhuma promoção ativa no momento</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Volte em breve! As promoções relâmpago são anunciadas por aqui assim que entram no ar.
+            </p>
           </div>
-          <p className="mt-6 font-serif text-2xl">Nenhuma promoção ativa no momento</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Volte em breve! As promoções relâmpago são anunciadas por aqui assim que entram no ar.
-          </p>
-        </div>
+        ) : (
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 text-left">
+            {promotions.map((promo) => (
+              <article
+                key={promo._id}
+                className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-gold/30 bg-card p-6 shadow-sm transition duration-300 hover:border-gold hover:shadow-gold-glow"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/20 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-gold">
+                      <Sparkles className="h-3.5 w-3.5 fill-gold" />
+                      {promo.badge_text || "OFERTA RELÂMPAGO"}
+                    </span>
+                  </div>
+
+                  <h3 className="mt-4 font-serif text-2xl font-bold leading-tight text-foreground group-hover:text-gold transition">
+                    {promo.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                    {promo.description}
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-border/60">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                        Vantagem Exclusiva
+                      </span>
+                      <span className="font-serif text-lg font-bold text-gold">
+                        {promo.type === "PERCENTAGE_DISCOUNT" && `${promo.discount_value}% OFF`}
+                        {promo.type === "FIXED_DISCOUNT" && `R$ ${promo.discount_value?.toFixed(2).replace('.', ',')} OFF`}
+                        {promo.type === "BUY_X_GET_Y" && `Brinde: ${promo.reward_item_name || "Grátis"}`}
+                      </span>
+                    </div>
+
+                    <a
+                      href="#cardapio"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-gold px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95"
+                    >
+                      Aproveitar <Plus className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -626,6 +711,7 @@ function CartDrawer({
   onClose,
   onOpen,
   cart,
+  appliedPromotion,
   onInc,
   onDec,
   onRemove,
@@ -635,6 +721,7 @@ function CartDrawer({
   onClose: () => void;
   onOpen: () => void;
   cart: Record<string, number>;
+  appliedPromotion?: AppliedPromotionResult | null;
   onInc: (id: string) => void;
   onDec: (id: string) => void;
   onRemove: (id: string) => void;
@@ -657,7 +744,9 @@ function CartDrawer({
     })
     .filter((l): l is { pizza: Pizza; qty: number; subtotal: number } => l !== null);
 
-  const total = lines.reduce((acc, l) => acc + l.subtotal, 0);
+  const subtotal = lines.reduce((acc, l) => acc + l.subtotal, 0);
+  const discount = appliedPromotion?.discountAmount || 0;
+  const total = Math.max(0, subtotal - discount);
 
   const [step, setStep] = useState<"cart" | "checkout">("cart");
   const [form, setForm] = useState({
@@ -915,6 +1004,22 @@ function CartDrawer({
     try {
       const fullAddress = `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""}`;
       
+      const orderItems = lines.map((l) => ({
+        pizza_id: l.pizza.id,
+        pizza_name: l.pizza.name,
+        quantity: l.qty,
+        unit_price: l.pizza.price,
+      }));
+
+      if (appliedPromotion?.rewardItem) {
+        orderItems.push({
+          pizza_id: appliedPromotion.rewardItem.pizza_id,
+          pizza_name: `${appliedPromotion.rewardItem.pizza_name} (${appliedPromotion.rewardItem.is_gift ? "Brinde" : "Promoção"})`,
+          quantity: 1,
+          unit_price: appliedPromotion.rewardItem.unit_price,
+        });
+      }
+
       const res = await submitOrder({
         data: {
           customer_name: sanitize(form.name, 80),
@@ -926,13 +1031,11 @@ function CartDrawer({
               ? Number(form.troco.replace(",", "."))
               : null,
           notes: sanitize(form.notes, 300) || null,
-          items: lines.map((l) => ({
-            pizza_id: l.pizza.id,
-            pizza_name: l.pizza.name,
-            quantity: l.qty,
-            unit_price: l.pizza.price,
-          })),
+          items: orderItems,
           delivery_fee: form.deliveryFee || 0,
+          discount: appliedPromotion?.discountAmount || 0,
+          promotion_id: appliedPromotion?.promotion._id || null,
+          promotion_title: appliedPromotion?.promotion.title || null,
         },
       });
       setSuccess(res);
@@ -1164,62 +1267,107 @@ function CartDrawer({
               </button>
             </div>
           ) : step === "cart" ? (
-            <ul className="space-y-4">
-              {lines.map(({ pizza, qty, subtotal }) => (
-                <li
-                  key={pizza.id}
-                  className="flex gap-4 rounded-2xl border border-border bg-card p-3"
-                >
-                  <img
-                    src={pizza.image}
-                    alt={pizza.name}
-                    width={80}
-                    height={80}
-                    className="h-20 w-20 flex-none rounded-xl object-cover"
-                  />
-                  <div className="flex flex-1 flex-col">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-serif text-base leading-tight">{pizza.name}</div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {formatBRL(pizza.price)} cada
+            <div className="space-y-4">
+              {appliedPromotion && (
+                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-xs text-emerald-400 shadow-sm">
+                  <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px]">
+                    <Sparkles className="h-3.5 w-3.5 fill-emerald-400" />
+                    Promoção Ativa: {appliedPromotion.promotion.title}
+                  </div>
+                  <p className="mt-1 font-medium text-emerald-300">
+                    {appliedPromotion.reason}
+                  </p>
+                </div>
+              )}
+
+              <ul className="space-y-4">
+                {lines.map(({ pizza, qty, subtotal }) => (
+                  <li
+                    key={pizza.id}
+                    className="flex gap-4 rounded-2xl border border-border bg-card p-3"
+                  >
+                    <img
+                      src={pizza.image}
+                      alt={pizza.name}
+                      width={80}
+                      height={80}
+                      className="h-20 w-20 flex-none rounded-xl object-cover"
+                    />
+                    <div className="flex flex-1 flex-col">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-serif text-base leading-tight">{pizza.name}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {formatBRL(pizza.price)} cada
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onRemove(pizza.id)}
+                          aria-label={`Remover ${pizza.name}`}
+                          className="rounded-full p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-auto flex items-center justify-between pt-2">
+                        <div className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/60">
+                          <button
+                            type="button"
+                            onClick={() => onDec(pizza.id)}
+                            aria-label="Diminuir quantidade"
+                            className="rounded-full p-1.5 text-foreground transition hover:bg-gold/20"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="min-w-6 text-center text-sm font-semibold">{qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => onInc(pizza.id)}
+                            aria-label="Aumentar quantidade"
+                            className="rounded-full p-1.5 text-foreground transition hover:bg-gold/20"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="text-sm font-bold text-gold">{formatBRL(subtotal)}</div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+
+                {appliedPromotion?.rewardItem && (
+                  <li className="flex gap-4 rounded-2xl border border-gold/40 bg-gold/10 p-3 shadow-gold-glow">
+                    <div className="flex h-16 w-16 flex-none items-center justify-center rounded-xl bg-gold/20 text-gold">
+                      <Gift className="h-7 w-7" />
+                    </div>
+                    <div className="flex flex-1 flex-col justify-center">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 font-serif text-base font-bold text-foreground">
+                            {appliedPromotion.rewardItem.pizza_name}
+                            <span className="rounded-full bg-gold px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-gold-foreground">
+                              {appliedPromotion.rewardItem.is_gift ? "GRÁTIS" : "PROMO"}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            1x Brinde da promoção
+                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onRemove(pizza.id)}
-                        aria-label={`Remover ${pizza.name}`}
-                        className="rounded-full p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <div className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/60">
-                        <button
-                          type="button"
-                          onClick={() => onDec(pizza.id)}
-                          aria-label="Diminuir quantidade"
-                          className="rounded-full p-1.5 text-foreground transition hover:bg-gold/20"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="min-w-6 text-center text-sm font-semibold">{qty}</span>
-                        <button
-                          type="button"
-                          onClick={() => onInc(pizza.id)}
-                          aria-label="Aumentar quantidade"
-                          className="rounded-full p-1.5 text-foreground transition hover:bg-gold/20"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-xs line-through text-muted-foreground">
+                          {formatBRL(appliedPromotion.rewardItem.original_price)}
+                        </span>
+                        <span className="text-sm font-bold text-green-400">
+                          {appliedPromotion.rewardItem.unit_price === 0 ? "R$ 0,00" : formatBRL(appliedPromotion.rewardItem.unit_price)}
+                        </span>
                       </div>
-                      <div className="text-sm font-bold text-gold">{formatBRL(subtotal)}</div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                )}
+              </ul>
+            </div>
           ) : (
             <div className="space-y-4">
               <button
@@ -1372,8 +1520,15 @@ function CartDrawer({
           <div className="border-t border-border/60 bg-card/40 px-6 py-5">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
-              <span>{formatBRL(total)}</span>
+              <span>{formatBRL(subtotal)}</span>
             </div>
+
+            {appliedPromotion && appliedPromotion.discountAmount > 0 && (
+              <div className="mt-1 flex items-center justify-between text-sm font-semibold text-green-400">
+                <span>Desconto ({appliedPromotion.promotion.title})</span>
+                <span>-{formatBRL(appliedPromotion.discountAmount)}</span>
+              </div>
+            )}
             
             {step === "checkout" && (
               <div className="mt-1 flex items-center justify-between text-sm text-muted-foreground">

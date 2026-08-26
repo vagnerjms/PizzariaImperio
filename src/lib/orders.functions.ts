@@ -20,6 +20,9 @@ const createOrderSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
   items: z.array(itemSchema).min(1).max(50),
   delivery_fee: z.number().min(0).max(500).optional().nullable(),
+  discount: z.number().min(0).max(5000).optional().nullable(),
+  promotion_id: z.string().optional().nullable(),
+  promotion_title: z.string().optional().nullable(),
 });
 
 function generateStaticPix(key: string, name: string, city: string, amount: number, txid = "PIZZARIA"): string {
@@ -72,7 +75,8 @@ export const createOrder = createServerFn({ method: "POST" })
     const orderId = crypto.randomUUID();
     const subtotal = data.items.reduce((acc, i) => acc + (Math.max(0, i.unit_price) * Math.max(1, i.quantity)), 0);
     const verifiedDeliveryFee = Math.max(0, data.delivery_fee || 0);
-    const total = Number((subtotal + verifiedDeliveryFee).toFixed(2));
+    const discount = Math.max(0, data.discount || 0);
+    const total = Number(Math.max(0, subtotal - discount + verifiedDeliveryFee).toFixed(2));
 
     const isOnlinePix = data.payment_method === "Pix";
     const isOnlineCard = false;
@@ -91,8 +95,12 @@ export const createOrder = createServerFn({ method: "POST" })
       payment_method: data.payment_method,
       troco: data.troco ?? null,
       notes: data.notes ?? null,
+      subtotal,
+      discount,
+      promotion_id: data.promotion_id ?? null,
+      promotion_title: data.promotion_title ?? null,
       total,
-      delivery_fee: data.delivery_fee || 0,
+      delivery_fee: verifiedDeliveryFee,
       status: "novo" as const,
       payment_status: paymentStatus,
       payment_gateway: null as string | null,
@@ -325,13 +333,17 @@ export const listOrders = createServerFn({ method: "GET" })
       .limit(200)
       .toArray();
 
-    return orders.map((o) => ({
+    return orders.map((o: any) => ({
       id: o._id,
       customer_name: o.customer_name,
       customer_phone: o.customer_phone,
       customer_address: o.customer_address,
       payment_method: o.payment_method,
       troco: o.troco,
+      subtotal: o.subtotal || o.total,
+      discount: o.discount || 0,
+      promotion_id: o.promotion_id || null,
+      promotion_title: o.promotion_title || null,
       total: o.total,
       delivery_fee: o.delivery_fee,
       status: o.status,
