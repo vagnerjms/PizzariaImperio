@@ -37,6 +37,8 @@ import {
   Sparkles,
   Eye,
   Calendar,
+  Printer,
+  Usb,
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 import { getAdminSettings, updateAdminSettings } from "@/lib/settings";
@@ -51,6 +53,17 @@ import {
 } from "@/lib/promotions.functions";
 import { Promotion } from "@/lib/promotions.types";
 import { MENU_ITEMS, PROMO_CATEGORIES } from "@/lib/menu-list";
+import {
+  connectSerialPrinter,
+  disconnectSerialPrinter,
+  isPrinterConnected,
+  isWebSerialSupported,
+  getStoredPrinterSettings,
+  savePrinterSettings,
+  printOrderThermal,
+  printTestReceipt,
+  PrinterSettings,
+} from "@/lib/thermal-printer";
 
 type OrderRow = Awaited<ReturnType<typeof listOrders>>[number];
 
@@ -207,6 +220,51 @@ function AdminPage() {
 
   const [passwordModalUser, setPasswordModalUser] = useState<{ id: string; email: string } | null>(null);
   const [newPasswordValue, setNewPasswordValue] = useState("");
+
+  const [printerConnected, setPrinterConnected] = useState(false);
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(getStoredPrinterSettings);
+  const [printerMsg, setPrinterMsg] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  useEffect(() => {
+    setPrinterConnected(isPrinterConnected());
+  }, []);
+
+  const handleConnectPrinter = async () => {
+    const res = await connectSerialPrinter(printerSettings.baudRate);
+    setPrinterConnected(isPrinterConnected());
+    setPrinterMsg({ text: res.message, isError: !res.success });
+    setTimeout(() => setPrinterMsg(null), 5000);
+  };
+
+  const handleDisconnectPrinter = async () => {
+    await disconnectSerialPrinter();
+    setPrinterConnected(false);
+    setPrinterMsg({ text: "Impressora desconectada." });
+    setTimeout(() => setPrinterMsg(null), 4000);
+  };
+
+  const handleTestPrint = async () => {
+    const res = await printTestReceipt(printerSettings);
+    setPrinterMsg({ text: res.message });
+    setTimeout(() => setPrinterMsg(null), 5000);
+  };
+
+  const handleUpdatePrinterSetting = <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => {
+    const updated = savePrinterSettings({ [key]: value });
+    setPrinterSettings(updated);
+  };
+
+  const handlePrintOrder = async (order: OrderRow) => {
+    try {
+      const res = await printOrderThermal(order as any, printerSettings);
+      if (res.method === "serial") {
+        setPrinterMsg({ text: `Comanda #${order.id.slice(0, 8)} impressa via USB!` });
+        setTimeout(() => setPrinterMsg(null), 4000);
+      }
+    } catch (err) {
+      console.error("Erro ao imprimir:", err);
+    }
+  };
 
   const loadUsers = async () => {
     if (!user?.roles?.includes("admin")) return;
@@ -750,7 +808,16 @@ function AdminPage() {
   }, [orders]);
 
   const handleStatus = async (id: string, status: OrderRow["status"]) => {
+    const targetOrder = orders.find((o) => o.id === id);
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+
+    // Auto-print thermal receipt when accepting order ("preparando")
+    if (status === "preparando" && printerSettings.autoPrintOnAccept && targetOrder) {
+      printOrderThermal(targetOrder as any, printerSettings).catch((err) => {
+        console.error("Auto-print error:", err);
+      });
+    }
+
     try {
       await updateStatus({ data: { id, status } });
     } catch {
@@ -880,6 +947,20 @@ function AdminPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={printerConnected ? handleDisconnectPrinter : handleConnectPrinter}
+              title={printerConnected ? "Impressora USB Conectada (Clique para desconectar)" : "Clique para conectar impressora térmica USB (Bematech MP-4200)"}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+                printerConnected
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                  : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground hover:border-gold/50"
+              }`}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{printerConnected ? "Impressora USB" : "Conectar USB"}</span>
+            </button>
+
             {viewMode === "pedidos" && (
               <button
                 type="button"
@@ -926,6 +1007,17 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
+        {printerMsg && (
+          <div className={`mb-6 rounded-xl border px-4 py-3 text-xs font-semibold flex items-center justify-between ${
+            printerMsg.isError
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-green-500/30 bg-green-500/10 text-green-400"
+          }`}>
+            <span>{printerMsg.text}</span>
+            <button type="button" onClick={() => setPrinterMsg(null)} className="opacity-70 hover:opacity-100">✕</button>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
@@ -945,7 +1037,7 @@ function AdminPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map((o) => (
-                <OrderCard key={o.id} order={o} onStatus={handleStatus} />
+                <OrderCard key={o.id} order={o} onStatus={handleStatus} onPrint={handlePrintOrder} />
               ))}
             </div>
           )
@@ -2321,6 +2413,130 @@ function AdminPage() {
                 </form>
               )}
             </div>
+
+            {/* Impressora Térmica Local (Bematech MP-4200 / ESC-POS) */}
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4 mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-xl bg-gold/10 p-2.5 text-gold">
+                    <Printer className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h2 className="font-serif text-lg leading-tight">Impressora Térmica de Comandas</h2>
+                    <p className="text-xs text-muted-foreground">Impressão direta ESC/POS via USB (Bematech MP-4200 TH, Epson, Elgin, etc.)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${
+                    printerConnected
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                      : "bg-muted text-muted-foreground border-border"
+                  }`}>
+                    <span className={`h-2 w-2 rounded-full ${printerConnected ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"}`} />
+                    {printerConnected ? "USB Conectada" : "Desconectada"}
+                  </span>
+                </div>
+              </header>
+
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-3">
+                  {!printerConnected ? (
+                    <button
+                      type="button"
+                      onClick={handleConnectPrinter}
+                      className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95"
+                    >
+                      <Usb className="h-4 w-4" /> Conectar Impressora USB (Bematech MP-4200)
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleDisconnectPrinter}
+                      className="inline-flex items-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-destructive transition hover:bg-destructive/20 active:scale-95"
+                    >
+                      <LogOut className="h-4 w-4" /> Desconectar USB
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleTestPrint}
+                    className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground active:scale-95"
+                  >
+                    <Printer className="h-4 w-4" /> Imprimir Comanda de Teste
+                  </button>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/40">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Largura da Bobina</label>
+                    <select
+                      value={printerSettings.paperWidth}
+                      onChange={(e) => handleUpdatePrinterSetting("paperWidth", e.target.value as "80mm" | "58mm")}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
+                    >
+                      <option value="80mm">80mm / 48 colunas (Padrão MP-4200 TH / TM-T20)</option>
+                      <option value="58mm">58mm / 32 colunas (Mini térmica)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Baud Rate (Velocidade Serial)</label>
+                    <select
+                      value={printerSettings.baudRate}
+                      onChange={(e) => handleUpdatePrinterSetting("baudRate", Number(e.target.value))}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
+                    >
+                      <option value={9600}>9600 bps (Padrão Bematech / Elgin)</option>
+                      <option value={115200}>115200 bps (Alta velocidade)</option>
+                      <option value={19200}>19200 bps</option>
+                      <option value={38400}>38400 bps</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2 border-t border-border/40">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printerSettings.autoPrintOnAccept}
+                      onChange={(e) => handleUpdatePrinterSetting("autoPrintOnAccept", e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-gold focus:ring-gold"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-foreground block">Imprimir comanda automaticamente ao aceitar pedido</span>
+                      <span className="text-xs text-muted-foreground">Dispara a comanda para a cozinha assim que o atendente clicar em "Iniciar preparo"</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printerSettings.autoCut}
+                      onChange={(e) => handleUpdatePrinterSetting("autoCut", e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-gold focus:ring-gold"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-foreground block">Acionar guilhotina (corte automático de papel)</span>
+                      <span className="text-xs text-muted-foreground">Envia o comando de corte automático ao final da comanda</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printerSettings.beep}
+                      onChange={(e) => handleUpdatePrinterSetting("beep", e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-gold focus:ring-gold"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-foreground block">Emitir alerta sonoro (Beep)</span>
+                      <span className="text-xs text-muted-foreground">A impressora emite um bip sonoro para alertar a cozinha</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -2331,9 +2547,11 @@ function AdminPage() {
 function OrderCard({
   order,
   onStatus,
+  onPrint,
 }: {
   order: OrderRow;
   onStatus: (id: string, status: OrderRow["status"]) => void;
+  onPrint?: (order: OrderRow) => void;
 }) {
   const meta = STATUS_META[order.status];
   const created = new Date(order.created_at);
@@ -2421,8 +2639,18 @@ function OrderCard({
         </div>
       </div>
 
-      {(meta.next || order.status !== "cancelado") && (
+      {(meta.next || order.status !== "cancelado" || onPrint) && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {onPrint && (
+            <button
+              type="button"
+              onClick={() => onPrint(order)}
+              title="Imprimir comanda térmica (Bematech MP-4200)"
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-gold transition hover:bg-gold hover:text-gold-foreground active:scale-95"
+            >
+              <Printer className="h-3.5 w-3.5" /> Imprimir
+            </button>
+          )}
           {meta.next && meta.nextLabel && (
             <button
               type="button"
