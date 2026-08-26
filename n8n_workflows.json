@@ -37,7 +37,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"55{{ $json.body.order.customer_phone.replace(/\\\\D/g, '') }}\",\n  \"text\": \"Olá, {{ $json.body.order.customer_name }}! 🍕\\n\\nRecebemos o seu pedido com sucesso!\\n\\n📋 *Resumo do Pedido:*\\n- Código: #{{ $json.body.order.id.slice(0, 8) }}\\n- Valor Total: R$ {{ $json.body.order.total }},00\\n- Forma de Pagamento: {{ $json.body.order.payment_method }}\\n\\n{{ $json.body.order.payment_method === 'Pix' || $json.body.order.payment_method === 'Cartão de crédito' ? 'Aguardamos a confirmação do pagamento no sistema para iniciar o preparo. 👍' : 'Seu pedido foi enviado para a confirmação da pizzaria. 👍' }}\\n\\nObrigado pela preferência! ❤️\",\n  \"delay\": 3000\n}",
+        "jsonBody": "={\n  \"number\": \"55{{ $json.body.order.customer_phone.replace(/\\\\D/g, '') }}\",\n  \"text\": \"Olá, {{ $json.body.order.customer_name }}! 🍕\\n\\nRecebemos o seu pedido com sucesso!\\n\\n📋 *Resumo do Pedido:*\\n- Código: #{{ $json.body.order.id.slice(0, 8) }}\\n- Valor Total: R$ {{ $json.body.order.total }},00\\n- Forma de Pagamento: {{ $json.body.order.payment_method }}\\n\\n{{ $json.body.order.payment_method === 'Pix' ? 'Aguardamos a confirmação do pagamento no sistema para iniciar o preparo. 👍\\\\n\\\\nCaso não tenha conseguido realizar o pagamento ou copiado a chave Pix no site, clique no link abaixo para abrir seu pedido e realizar o pagamento:\\\\nhttps://imperio.embraganca.com.br/?order_id=' + $json.body.order.id : 'Seu pedido foi enviado para a confirmação da pizzaria. 👍' }}\\n\\nObrigado pela preferência! ❤️\",\n  \"delay\": 3000\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
