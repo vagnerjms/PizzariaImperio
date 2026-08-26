@@ -1,10 +1,21 @@
-﻿import { getDb } from "./db";
+import { getDb } from "./db";
 import { Promotion } from "./promotions.types";
 import crypto from "node:crypto";
 
 export async function getPromotionsCollection() {
   const db = await getDb();
   return db.collection<Promotion>("promotions");
+}
+
+function formatDate(d: any): string {
+  if (!d) return new Date().toISOString();
+  if (d instanceof Date) return d.toISOString();
+  if (typeof d === "string") return d;
+  try {
+    return new Date(d).toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
 }
 
 export async function listPublicPromotionsFromDb(): Promise<Promotion[]> {
@@ -27,8 +38,8 @@ export async function listPublicPromotionsFromDb(): Promise<Promotion[]> {
     }).map((p) => ({
       ...p,
       _id: String(p._id),
-      created_at: typeof p.created_at === "object" ? p.created_at.toISOString() : p.created_at,
-      updated_at: typeof p.updated_at === "object" ? p.updated_at.toISOString() : p.updated_at,
+      created_at: formatDate(p.created_at),
+      updated_at: formatDate(p.updated_at),
     }));
   } catch (err) {
     console.error("Error fetching public promotions:", err);
@@ -37,14 +48,19 @@ export async function listPublicPromotionsFromDb(): Promise<Promotion[]> {
 }
 
 export async function listAdminPromotionsFromDb(): Promise<Promotion[]> {
-  const col = await getPromotionsCollection();
-  const all = await col.find({}).sort({ created_at: -1 }).toArray();
-  return all.map((p) => ({
-    ...p,
-    _id: String(p._id),
-    created_at: typeof p.created_at === "object" ? p.created_at.toISOString() : p.created_at,
-    updated_at: typeof p.updated_at === "object" ? p.updated_at.toISOString() : p.updated_at,
-  }));
+  try {
+    const col = await getPromotionsCollection();
+    const all = await col.find({}).sort({ created_at: -1 }).toArray();
+    return all.map((p) => ({
+      ...p,
+      _id: String(p._id),
+      created_at: formatDate(p.created_at),
+      updated_at: formatDate(p.updated_at),
+    }));
+  } catch (err) {
+    console.error("Error fetching admin promotions:", err);
+    return [];
+  }
 }
 
 export async function createPromotionInDb(data: Omit<Promotion, "_id" | "created_at" | "updated_at">): Promise<Promotion> {
