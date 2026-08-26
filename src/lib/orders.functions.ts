@@ -151,6 +151,7 @@ export const createOrder = createServerFn({ method: "POST" })
                 "Authorization": `Bearer ${accessToken}`,
                 "X-Idempotency-Key": orderId,
               },
+              signal: AbortSignal.timeout(6000),
               body: JSON.stringify({
                 transaction_amount: Number(total.toFixed(2)),
                 description: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,

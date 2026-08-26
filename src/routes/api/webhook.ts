@@ -39,6 +39,7 @@ export const Route = createFileRoute("/api/webhook")({
               headers: {
                 "Authorization": `Bearer ${accessToken}`,
               },
+              signal: AbortSignal.timeout(5000),
             });
 
             if (!response.ok) {
