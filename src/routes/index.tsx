@@ -681,6 +681,27 @@ function CartDrawer({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    // 1. Check URL parameters first
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlOrderId = params.get("order_id") || params.get("order");
+      
+      if (urlOrderId) {
+        checkStatus({ data: urlOrderId })
+          .then((order) => {
+            if (order) {
+              setSuccess(order);
+              onOpen();
+              // Clear query params to clean up the browser URL
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          })
+          .catch((err) => console.error("Erro ao carregar pedido do URL:", err));
+        return;
+      }
+    }
+
+    // 2. Fallback to localStorage if no URL parameter is provided
     const savedOrder = localStorage.getItem("active_order");
     if (savedOrder) {
       try {
@@ -691,7 +712,7 @@ function CartDrawer({
         localStorage.removeItem("active_order");
       }
     }
-  }, [onOpen]);
+  }, [onOpen, checkStatus]);
 
   useEffect(() => {
     if (success) {
