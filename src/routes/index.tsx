@@ -400,6 +400,8 @@ function Hero() {
         alt="Forno a lenha"
         width={1920}
         height={1280}
+        decoding="async"
+        fetchPriority="high"
         className="absolute inset-0 -z-10 h-full w-full object-cover opacity-60"
       />
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background via-background/85 to-background/30" />
@@ -573,10 +575,10 @@ function PizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void }) {
         <img
           src={pizza.image}
           alt={pizza.name}
-          loading="eager"
+          loading="lazy"
           width={800}
           height={600}
-          decoding="sync"
+          decoding="async"
           onError={(event) => {
             event.currentTarget.style.display = "none";
           }}
