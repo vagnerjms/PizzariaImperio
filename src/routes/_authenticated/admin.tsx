@@ -1382,6 +1382,8 @@ function AdminPage() {
               )}
             </div>
           </div>
+        )}
+
         {viewMode === "promocoes" && (
           <div className="mx-auto max-w-6xl space-y-6">
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
