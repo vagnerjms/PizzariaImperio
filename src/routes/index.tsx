@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
@@ -289,9 +289,12 @@ function Home() {
     });
   const clearCart = () => setCart({});
 
+  const handleOpenCart = useCallback(() => setCartOpen(true), []);
+  const handleCloseCart = useCallback(() => setCartOpen(false), []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Header cartCount={cartCount} pulse={justAdded} onOpenCart={() => setCartOpen(true)} />
+      <Header cartCount={cartCount} pulse={justAdded} onOpenCart={handleOpenCart} />
       <Hero />
       <Promocoes />
       <Menu
@@ -309,7 +312,7 @@ function Home() {
           {/* Desktop Floating Button */}
           <button
             type="button"
-            onClick={() => setCartOpen(true)}
+            onClick={handleOpenCart}
             className="hidden md:inline-flex fixed bottom-6 right-6 z-40 items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-bold text-gold-foreground shadow-gold-glow transition hover:brightness-110"
           >
             <ShoppingBag className="h-4 w-4" />
@@ -324,7 +327,7 @@ function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setCartOpen(true)}
+              onClick={handleOpenCart}
               className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-2.5 text-sm font-bold text-gold-foreground transition hover:brightness-110 active:scale-95"
             >
               <ShoppingBag className="h-4 w-4" />
@@ -336,8 +339,8 @@ function Home() {
 
       <CartDrawer
         open={cartOpen}
-        onClose={() => setCartOpen(false)}
-        onOpen={() => setCartOpen(true)}
+        onClose={handleCloseCart}
+        onOpen={handleOpenCart}
         cart={cart}
         onInc={addToCart}
         onDec={decFromCart}
@@ -689,7 +692,12 @@ function CartDrawer({
     return false;
   });
 
+  const hasMountedRef = useRef(false);
+
   useEffect(() => {
+    if (hasMountedRef.current) return;
+    hasMountedRef.current = true;
+
     // 1. Check URL parameters first
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -702,7 +710,6 @@ function CartDrawer({
             if (order) {
               setSuccess(order);
               onOpen();
-              // Clear query params to clean up the browser URL
               window.history.replaceState({}, document.title, window.location.pathname);
             }
           })
@@ -713,17 +720,40 @@ function CartDrawer({
     }
 
     // 2. Fallback to localStorage if no URL parameter is provided
-    const savedOrder = localStorage.getItem("active_order");
-    if (savedOrder) {
-      try {
+    try {
+      const savedOrder = localStorage.getItem("active_order");
+      if (savedOrder) {
         const parsed = JSON.parse(savedOrder);
         setSuccess(parsed);
         onOpen();
-      } catch (e) {
-        localStorage.removeItem("active_order");
       }
+    } catch (e) {
+      localStorage.removeItem("active_order");
     }
-  }, [onOpen, checkStatus]);
+  }, [checkStatus, onOpen]);
+
+  const handleDismissOrder = () => {
+    try {
+      localStorage.removeItem("active_order");
+    } catch (e) {}
+    setSuccess(null);
+    setStep("cart");
+    setForm({
+      name: "",
+      phone: "",
+      cep: "",
+      rua: "",
+      bairro: "",
+      numero: "",
+      complemento: "",
+      cidadeUf: "São Paulo - SP",
+      deliveryFee: null,
+      payment: "",
+      troco: "",
+      notes: "",
+    });
+    onClose();
+  };
 
   useEffect(() => {
     if (success) {
@@ -954,7 +984,7 @@ function CartDrawer({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={success ? handleDismissOrder : onClose}
             aria-label="Fechar carrinho"
             className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
           >
@@ -1110,13 +1140,8 @@ function CartDrawer({
 
               <button
                 type="button"
-                onClick={() => {
-                  setSuccess(null);
-                  setStep("cart");
-                  setForm({ name: "", phone: "", cep: "", rua: "", bairro: "", numero: "", complemento: "", cidadeUf: "São Paulo - SP", deliveryFee: null, payment: "", troco: "", notes: "" });
-                  onClose();
-                }}
-                className="mt-6 w-full rounded-full bg-gold px-6 py-2.5 text-sm font-semibold text-gold-foreground transition hover:brightness-110"
+                onClick={handleDismissOrder}
+                className="mt-6 w-full rounded-full bg-gold px-6 py-2.5 text-sm font-semibold text-gold-foreground transition hover:brightness-110 active:scale-95"
               >
                 Fechar
               </button>
