@@ -46,6 +46,15 @@ import aguaImage from "@/assets/menu/agua.jpg";
 
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    try {
+      const { listPublicPromotionsFromDb } = await import("@/lib/promotions.server");
+      const promos = await listPublicPromotionsFromDb();
+      return { promotions: promos || [] };
+    } catch {
+      return { promotions: [] };
+    }
+  },
   head: () => ({
     meta: [
       { title: "Pizzaria Império — Forno a Lenha · São Paulo" },
@@ -255,17 +264,20 @@ const formatBRL = (v: number) =>
 
 
 function Home() {
+  const loaderData = Route.useLoaderData();
   const [cat, setCat] = useState<(typeof CATEGORIES)[number]["id"]>("todas");
   const [cart, setCart] = useState<Record<string, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
 
   const fetchPromotions = useServerFn(getPublicPromotions);
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
 
   useEffect(() => {
     fetchPromotions()
-      .then(setPromotions)
+      .then((data) => {
+        if (data && Array.isArray(data)) setPromotions(data);
+      })
       .catch((err) => console.error("Erro ao carregar promoções públicas:", err));
   }, []);
 

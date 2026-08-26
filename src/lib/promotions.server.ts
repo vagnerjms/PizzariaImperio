@@ -21,25 +21,30 @@ function formatDate(d: any): string {
 export async function listPublicPromotionsFromDb(): Promise<Promotion[]> {
   try {
     const col = await getPromotionsCollection();
-    const now = new Date();
     const all = await col.find({ active: true }).sort({ created_at: -1 }).toArray();
 
-    // Filter active valid date ranges in memory
-    return all.filter((p) => {
+    const now = new Date();
+    const todayYMD = new Intl.DateTimeFormat("fr-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+
+    const valid = all.filter((p) => {
       if (p.start_date) {
-        const start = p.start_date.includes("T")
-          ? new Date(p.start_date)
-          : new Date(`${p.start_date}T00:00:00-03:00`);
-        if (now < start) return false;
+        const startYMD = p.start_date.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(startYMD) && startYMD > todayYMD) {
+          return false;
+        }
       }
       if (p.end_date) {
-        const end = p.end_date.includes("T")
-          ? new Date(p.end_date)
-          : new Date(`${p.end_date}T23:59:59.999-03:00`);
-        if (now > end) return false;
+        const endYMD = p.end_date.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(endYMD) && endYMD < todayYMD) {
+          return false;
+        }
       }
       return true;
-    }).map((p) => ({
+    });
+
+    console.log(`[Public Promotions] Active in DB: ${all.length}, Valid today (${todayYMD}): ${valid.length}`);
+
+    return valid.map((p) => ({
       ...p,
       _id: String(p._id),
       created_at: formatDate(p.created_at),
