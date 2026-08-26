@@ -67,32 +67,50 @@ export const Route = createFileRoute("/api/webhook")({
                 mappedStatus = "refunded";
               }
 
-              // Check existing order state to ensure strict idempotency on notification events
-              const existingOrder = await ordersCol.findOne({ _id: orderId });
-              const wasAlreadyPaid = existingOrder?.payment_status === "paid";
+              // Atomic transition check to ensure strict idempotency on concurrent webhook events
+              let shouldNotifyPaid = false;
 
-              // Update the order in MongoDB
-              const result = await ordersCol.updateOne(
-                { _id: orderId },
-                {
-                  $set: {
-                    payment_status: mappedStatus,
-                    gateway_payment_id: String(paymentId),
-                    updated_at: new Date(),
-                  },
+              if (mappedStatus === "paid") {
+                const atomicResult = await ordersCol.updateOne(
+                  { _id: orderId, payment_status: { $ne: "paid" } },
+                  {
+                    $set: {
+                      payment_status: "paid",
+                      gateway_payment_id: String(paymentId),
+                      updated_at: new Date(),
+                    },
+                  }
+                );
+
+                if (atomicResult.matchedCount === 0) {
+                  // Either order does not exist or it was already paid previously
+                  const existingOrder = await ordersCol.findOne({ _id: orderId });
+                  if (!existingOrder) {
+                    console.error(`Failed to update order ${orderId}: Order not found in MongoDB`);
+                    return new Response("Order not found", { status: 404 });
+                  }
+                  console.log(`Order ${orderId} was already paid, skipping duplicate n8n notification.`);
+                } else {
+                  shouldNotifyPaid = true;
+                  console.log(`Order ${orderId} successfully transitioned to payment_status: paid`);
                 }
-              );
-
-              if (result.matchedCount === 0) {
-                console.error(`Failed to update order ${orderId}: Order not found in MongoDB`);
-                return new Response("Order not found", { status: 404 });
+              } else {
+                await ordersCol.updateOne(
+                  { _id: orderId },
+                  {
+                    $set: {
+                      payment_status: mappedStatus,
+                      gateway_payment_id: String(paymentId),
+                      updated_at: new Date(),
+                    },
+                  }
+                );
+                console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);
               }
 
-              console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);
-
-              // Notify n8n ONLY upon fresh transition to paid (prevents duplicate spam on retries)
+              // Notify n8n ONLY upon the exact atomic transition to paid
               const n8nWebhookUrl = settings.n8n_webhook_url;
-              if (n8nWebhookUrl && mappedStatus === "paid" && !wasAlreadyPaid) {
+              if (n8nWebhookUrl && shouldNotifyPaid) {
                 const orderDoc = await ordersCol.findOne({ _id: orderId });
                 if (orderDoc) {
                   fetch(n8nWebhookUrl, {

@@ -300,6 +300,25 @@ export const listOrders = createServerFn({ method: "GET" })
     }
 
     const ordersCol = await getOrdersCollection();
+
+    // Auto-cancel abandoned Pix orders older than 30 minutes (non-blocking)
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    ordersCol.updateMany(
+      {
+        payment_method: "Pix",
+        payment_status: "pending",
+        status: "novo",
+        created_at: { $lt: thirtyMinutesAgo },
+      },
+      {
+        $set: {
+          status: "cancelado",
+          payment_status: "failed",
+          updated_at: new Date(),
+        },
+      }
+    ).catch((err) => console.error("Error auto-canceling abandoned Pix orders:", err));
+
     const orders = await ordersCol
       .find({})
       .sort({ created_at: -1 })
