@@ -27,11 +27,15 @@ export async function listPublicPromotionsFromDb(): Promise<Promotion[]> {
     // Filter active valid date ranges in memory
     return all.filter((p) => {
       if (p.start_date) {
-        const start = new Date(p.start_date);
+        const start = p.start_date.includes("T")
+          ? new Date(p.start_date)
+          : new Date(`${p.start_date}T00:00:00-03:00`);
         if (now < start) return false;
       }
       if (p.end_date) {
-        const end = new Date(p.end_date);
+        const end = p.end_date.includes("T")
+          ? new Date(p.end_date)
+          : new Date(`${p.end_date}T23:59:59.999-03:00`);
         if (now > end) return false;
       }
       return true;

@@ -115,6 +115,21 @@ const PAYMENT_STATUS_META: Record<
 const formatBRL = (v: number | string) =>
   Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+function formatPromoDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return `${d}/${m}/${y}`;
+  }
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  } catch {
+    return dateStr;
+  }
+}
+
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
@@ -1509,8 +1524,8 @@ function AdminPage() {
                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1 border-t border-border/30">
                               <Calendar className="h-3 w-3 text-gold" />
                               <span>
-                                {promo.start_date ? `De ${new Date(promo.start_date).toLocaleDateString("pt-BR")}` : ""}
-                                {promo.end_date ? ` até ${new Date(promo.end_date).toLocaleDateString("pt-BR")}` : ""}
+                                {promo.start_date ? `De ${formatPromoDate(promo.start_date)}` : ""}
+                                {promo.end_date ? ` até ${formatPromoDate(promo.end_date)}` : ""}
                               </span>
                             </div>
                           )}
