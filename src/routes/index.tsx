@@ -679,6 +679,13 @@ function CartDrawer({
   const fetchDeliveryConfig = useServerFn(getPublicDeliveryConfig);
   const [deliveryConfig, setDeliveryConfig] = useState<{ default_fee: number; neighborhoods: any[] } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [loadingOrder, setLoadingOrder] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return !!(params.get("order_id") || params.get("order"));
+    }
+    return false;
+  });
 
   useEffect(() => {
     // 1. Check URL parameters first
@@ -687,6 +694,7 @@ function CartDrawer({
       const urlOrderId = params.get("order_id") || params.get("order");
       
       if (urlOrderId) {
+        setLoadingOrder(true);
         checkStatus({ data: urlOrderId })
           .then((order) => {
             if (order) {
@@ -696,7 +704,8 @@ function CartDrawer({
               window.history.replaceState({}, document.title, window.location.pathname);
             }
           })
-          .catch((err) => console.error("Erro ao carregar pedido do URL:", err));
+          .catch((err) => console.error("Erro ao carregar pedido do URL:", err))
+          .finally(() => setLoadingOrder(false));
         return;
       }
     }
@@ -907,6 +916,20 @@ function CartDrawer({
     setForm((f) => ({ ...f, [k]: v }));
     if (errors[k]) setErrors((e) => ({ ...e, [k]: "" }));
   };
+
+  if (loadingOrder) {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">
+        <div className="flex flex-col items-center gap-3 text-center px-4">
+          <Loader2 className="h-10 w-10 text-gold animate-spin" />
+          <h3 className="font-serif text-lg text-foreground mt-2">Carregando seu pedido...</h3>
+          <p className="text-xs text-muted-foreground max-w-[250px]">
+            Buscando informações atualizadas da sua compra.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
