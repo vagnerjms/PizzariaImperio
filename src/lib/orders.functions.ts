@@ -75,8 +75,8 @@ export const createOrder = createServerFn({ method: "POST" })
     const total = Number((subtotal + verifiedDeliveryFee).toFixed(2));
 
     const isOnlinePix = data.payment_method === "Pix";
-    const isOnlineCard = data.payment_method === "Cartão de crédito";
-    const isOnlinePayment = isOnlinePix || isOnlineCard;
+    const isOnlineCard = false;
+    const isOnlinePayment = isOnlinePix;
 
     let paymentDetails: any = null;
     let gatewayPaymentId: string | null = null;

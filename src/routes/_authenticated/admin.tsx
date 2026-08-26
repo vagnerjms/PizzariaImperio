@@ -524,16 +524,32 @@ function AdminPage() {
   }, []);
 
   const filtered = useMemo(() => {
+    const visible = orders.filter((o) => {
+      const isOnline = o.payment_method === "Pix";
+      if (isOnline) {
+        return o.payment_status === "paid";
+      }
+      return true;
+    });
+
     if (filter === "todos") return orders;
     if (filter === "ativos") {
-      return orders.filter((o) => o.status !== "entregue" && o.status !== "cancelado");
+      return visible.filter((o) => o.status !== "entregue" && o.status !== "cancelado");
     }
-    return orders.filter((o) => o.status === filter);
+    return visible.filter((o) => o.status === filter);
   }, [orders, filter]);
 
   const counts = useMemo(() => {
+    const visible = orders.filter((o) => {
+      const isOnline = o.payment_method === "Pix";
+      if (isOnline) {
+        return o.payment_status === "paid";
+      }
+      return true;
+    });
+
     const c: Record<string, number> = { ativos: 0, todos: orders.length };
-    for (const o of orders) {
+    for (const o of visible) {
       c[o.status] = (c[o.status] ?? 0) + 1;
       if (o.status !== "entregue" && o.status !== "cancelado") c.ativos++;
     }
