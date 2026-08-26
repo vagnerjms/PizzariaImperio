@@ -1,14 +1,6 @@
-﻿import { createServerFn } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
 import { requireAuth } from "./auth-middleware";
 import { z } from "zod";
-import {
-  listPublicPromotionsFromDb,
-  listAdminPromotionsFromDb,
-  createPromotionInDb,
-  updatePromotionInDb,
-  togglePromotionInDb,
-  deletePromotionInDb,
-} from "./promotions.server";
 
 const createPromoSchema = z.object({
   title: z.string().trim().min(2).max(120),
@@ -32,6 +24,7 @@ const createPromoSchema = z.object({
 // 1. Consulta pública para cardápio e vitrine
 export const getPublicPromotions = createServerFn({ method: "GET" })
   .handler(async () => {
+    const { listPublicPromotionsFromDb } = await import("./promotions.server");
     return listPublicPromotionsFromDb();
   });
 
@@ -42,6 +35,7 @@ export const getAdminPromotions = createServerFn({ method: "GET" })
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
+    const { listAdminPromotionsFromDb } = await import("./promotions.server");
     return listAdminPromotionsFromDb();
   });
 
@@ -53,6 +47,7 @@ export const createPromotionFn = createServerFn({ method: "POST" })
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
+    const { createPromotionInDb } = await import("./promotions.server");
     const created = await createPromotionInDb(data as any);
     return { success: true, promotion: created };
   });
@@ -70,6 +65,7 @@ export const updatePromotionFn = createServerFn({ method: "POST" })
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
+    const { updatePromotionInDb } = await import("./promotions.server");
     await updatePromotionInDb(data.id, data.data as any);
     return { success: true };
   });
@@ -87,6 +83,7 @@ export const togglePromotionFn = createServerFn({ method: "POST" })
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
+    const { togglePromotionInDb } = await import("./promotions.server");
     await togglePromotionInDb(data.id, data.active);
     return { success: true };
   });
@@ -99,6 +96,7 @@ export const deletePromotionFn = createServerFn({ method: "POST" })
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
+    const { deletePromotionInDb } = await import("./promotions.server");
     await deletePromotionInDb(data.id);
     return { success: true };
   });
