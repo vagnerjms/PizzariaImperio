@@ -1,4 +1,4 @@
-﻿export type PromotionType = "PERCENTAGE_DISCOUNT" | "FIXED_DISCOUNT" | "BUY_X_GET_Y";
+export type PromotionType = "PERCENTAGE_DISCOUNT" | "FIXED_DISCOUNT" | "BUY_X_GET_Y";
 
 export type TriggerType = "all" | "category" | "specific_items" | "min_total";
 
@@ -36,6 +36,7 @@ export interface Promotion {
 export interface AppliedPromotionResult {
   promotion: Promotion;
   discountAmount: number;
+  benefitValue?: number;
   rewardItem?: {
     pizza_id: string;
     pizza_name: string;

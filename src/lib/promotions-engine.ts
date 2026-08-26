@@ -1,4 +1,4 @@
-﻿import { Promotion, AppliedPromotionResult } from "./promotions.types";
+import { Promotion, AppliedPromotionResult } from "./promotions.types";
 
 export interface MenuItemRef {
   id: string;
@@ -85,6 +85,7 @@ export function evaluateCartPromotions(
       validResults.push({
         promotion: promo,
         discountAmount: discount,
+        benefitValue: discount,
         reason: `${pct}% de desconto aplicado no total do pedido`,
       });
     } else if (promo.type === "FIXED_DISCOUNT") {
@@ -92,6 +93,7 @@ export function evaluateCartPromotions(
       validResults.push({
         promotion: promo,
         discountAmount: fixedVal,
+        benefitValue: fixedVal,
         reason: `Desconto fixo de R$ ${fixedVal.toFixed(2).replace('.', ',')} aplicado`,
       });
     } else if (promo.type === "BUY_X_GET_Y" && promo.reward_item_id) {
@@ -103,7 +105,10 @@ export function evaluateCartPromotions(
 
         validResults.push({
           promotion: promo,
-          discountAmount: discountVal,
+          // In BUY_X_GET_Y, the item is added to the order at unit_price (R$ 0,00 for gifts).
+          // Therefore, discountAmount subtracted from cart subtotal must be 0 so we don't double-discount!
+          discountAmount: 0,
+          benefitValue: discountVal,
           rewardItem: {
             pizza_id: rewardItem.id,
             pizza_name: rewardItem.name,
@@ -122,7 +127,11 @@ export function evaluateCartPromotions(
 
   if (validResults.length === 0) return null;
 
-  // Pick promotion with the highest discount/value for customer benefit
-  validResults.sort((a, b) => b.discountAmount - a.discountAmount);
+  // Pick promotion with the highest benefit value for customer
+  validResults.sort((a, b) => {
+    const valA = a.benefitValue !== undefined ? a.benefitValue : a.discountAmount;
+    const valB = b.benefitValue !== undefined ? b.benefitValue : b.discountAmount;
+    return valB - valA;
+  });
   return validResults[0];
 }
