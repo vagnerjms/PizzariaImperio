@@ -5,27 +5,19 @@ if (!uri) {
   throw new Error("Missing MONGODB_URI environment variable.");
 }
 
-let client: MongoClient;
-let dbPromise: Promise<Db>;
+let client: MongoClient | null = null;
+let dbPromise: Promise<Db> | null = null;
 
-if (process.env.NODE_ENV === "development") {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
-  const globalWithMongo = global as typeof globalThis & {
-    _mongoClient?: MongoClient;
-    _mongoDbPromise?: Promise<Db>;
-  };
-
-  if (!globalWithMongo._mongoClient) {
-    globalWithMongo._mongoClient = new MongoClient(uri);
-    globalWithMongo._mongoDbPromise = globalWithMongo._mongoClient.connect().then(client => client.db());
+function getClient(): MongoClient {
+  if (!client) {
+    client = new MongoClient(uri, {
+      maxPoolSize: 25,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
   }
-  client = globalWithMongo._mongoClient;
-  dbPromise = globalWithMongo._mongoDbPromise;
-} else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(uri);
-  dbPromise = client.connect().then(client => client.db());
+  return client;
 }
 
 let indexesInitialized = false;
@@ -52,6 +44,17 @@ async function ensureIndexes(db: Db) {
 }
 
 export async function getDb(): Promise<Db> {
+  if (!dbPromise) {
+    const c = getClient();
+    dbPromise = c
+      .connect()
+      .then((cl) => cl.db())
+      .catch((err) => {
+        dbPromise = null;
+        throw err;
+      });
+  }
+
   const db = await dbPromise;
   if (!indexesInitialized) {
     ensureIndexes(db).catch(console.error);

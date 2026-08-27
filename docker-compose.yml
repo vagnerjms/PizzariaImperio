@@ -8,8 +8,8 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=adminpassword
     volumes:
       - mongo_data:/data/db
-    mem_limit: 1024m
-    mem_reservation: 512m
+    mem_limit: 768m
+    mem_reservation: 256m
     logging:
       driver: "json-file"
       options:
@@ -32,8 +32,14 @@ services:
       - NODE_TLS_REJECT_UNAUTHORIZED=0
     env_file:
       - .env
-    mem_limit: 1024m
-    mem_reservation: 512m
+    mem_limit: 1536m
+    mem_reservation: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     logging:
       driver: "json-file"
       options:
@@ -61,8 +67,8 @@ services:
     depends_on:
       - db
       - postgres
-    mem_limit: 1536m
-    mem_reservation: 768m
+    mem_limit: 1024m
+    mem_reservation: 512m
     logging:
       driver: "json-file"
       options:
@@ -79,8 +85,8 @@ services:
       - POSTGRES_DB=evolution
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    mem_limit: 512m
-    mem_reservation: 256m
+    mem_limit: 384m
+    mem_reservation: 128m
     logging:
       driver: "json-file"
       options:

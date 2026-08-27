@@ -17,7 +17,9 @@ export default defineConfig({
       host: "0.0.0.0",
       port: 8080,
       allowedHosts: true,
-      watch: process.env.DOCKER === "true" ? { usePolling: true } : undefined,
+      watch: {
+        ignored: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.output/**"],
+      },
     },
   },
 });
