@@ -1056,22 +1056,33 @@ function CartDrawer({
     );
   };
 
-  const handleStreetSearch = async (query: string) => {
-    setStreetQuery(query);
-    if (query.trim().length < 2) {
+  const searchTimeoutRef = useRef<any>(null);
+
+  const handleRuaInputChange = (val: string) => {
+    setForm((f) => ({ ...f, rua: val }));
+    if (errors.rua) setErrors((e) => ({ ...e, rua: "" }));
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (val.trim().length < 3) {
       setStreetSuggestions([]);
+      setStreetSearching(false);
       return;
     }
 
     setStreetSearching(true);
-    try {
-      const results = await fetchStreetSearch({ data: { query } });
-      setStreetSuggestions(results || []);
-    } catch (e) {
-      console.error("Erro na busca de rua:", e);
-    } finally {
-      setStreetSearching(false);
-    }
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await fetchStreetSearch({ data: { query: val.trim() } });
+        setStreetSuggestions(results || []);
+      } catch (e) {
+        console.error("Erro na busca de rua:", e);
+      } finally {
+        setStreetSearching(false);
+      }
+    }, 350);
   };
 
   const handleSelectSuggestion = (loc: LocationResult) => {
@@ -1088,9 +1099,7 @@ function CartDrawer({
     }));
 
     setStreetSuggestions([]);
-    setStreetQuery("");
-    setSearchStreetMode(false);
-    setLocationMsg(`📍 Endereço selecionado: ${loc.rua}, ${loc.bairro}`);
+    setLocationMsg(`📍 Endereço preenchido: ${loc.rua} (${loc.bairro})`);
     setTimeout(() => setLocationMsg(null), 5000);
   };
 
@@ -1535,7 +1544,7 @@ function CartDrawer({
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                <div className="flex items-center justify-between gap-2 pt-0.5">
                   <button
                     type="button"
                     onClick={handleGPSLocation}
@@ -1550,19 +1559,14 @@ function CartDrawer({
                     ) : (
                       <>
                         <Navigation className="h-3.5 w-3.5" />
-                        <span>Usar minha localização</span>
+                        <span>Usar minha localização (GPS)</span>
                       </>
                     )}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setSearchStreetMode(!searchStreetMode)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-gold transition"
-                  >
-                    <Search className="h-3.5 w-3.5" />
-                    <span>{searchStreetMode ? "Fechar busca" : "Não sei meu CEP"}</span>
-                  </button>
+                  <span className="text-[11px] text-muted-foreground">
+                    ou digite a rua abaixo
+                  </span>
                 </div>
 
                 {locationMsg && (
@@ -1571,59 +1575,52 @@ function CartDrawer({
                     <span>{locationMsg}</span>
                   </div>
                 )}
-
-                {searchStreetMode && (
-                  <div className="rounded-2xl border border-gold/30 bg-secondary/40 p-3 space-y-2 animate-in fade-in">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Buscar por Nome da Rua (OpenStreetMap)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={streetQuery}
-                        onChange={(e) => handleStreetSearch(e.target.value)}
-                        placeholder="Ex.: Av. dos Imigrantes, Rua do Lavapés..."
-                        className="w-full rounded-xl border border-border bg-background px-3 py-2 pr-9 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
-                      />
-                      {streetSearching ? (
-                        <div className="absolute right-3 top-2.5 text-gold animate-spin">
-                          <Loader2 className="h-4 w-4" />
-                        </div>
-                      ) : (
-                        <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-
-                    {streetSuggestions.length > 0 && (
-                      <ul className="divide-y divide-border/60 rounded-xl border border-border bg-card shadow-lg max-h-48 overflow-y-auto">
-                        {streetSuggestions.map((loc, i) => (
-                          <li key={i}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectSuggestion(loc)}
-                              className="w-full px-3 py-2.5 text-left text-xs transition hover:bg-gold/10 hover:text-gold flex flex-col gap-0.5"
-                            >
-                              <span className="font-semibold text-foreground">{loc.rua} {loc.numero ? `nº ${loc.numero}` : ""}</span>
-                              <span className="text-[11px] text-muted-foreground">Bairro: {loc.bairro || "Bragança Paulista"} • {loc.cidade} - {loc.uf}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <Field
-                    label="Rua / Logradouro"
-                    value={form.rua}
-                    onChange={setField("rua")}
-                    placeholder="Ex.: Rua das Flores"
-                    error={errors.rua}
-                    maxLength={100}
-                  />
+                <div className="col-span-2 relative">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Rua / Logradouro
+                  </label>
+                  <div className="relative mt-1.5">
+                    <input
+                      type="text"
+                      value={form.rua}
+                      onChange={(e) => handleRuaInputChange(e.target.value)}
+                      placeholder="Ex.: Av. dos Imigrantes, Rua Lavapés..."
+                      maxLength={100}
+                      className={`w-full rounded-xl border bg-secondary/40 px-3.5 py-2.5 pr-9 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50 ${
+                        errors.rua ? "border-destructive" : "border-border"
+                      }`}
+                    />
+                    {streetSearching ? (
+                      <div className="absolute right-3 top-2.5 text-gold animate-spin">
+                        <Loader2 className="h-4 w-4" />
+                      </div>
+                    ) : (
+                      <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
+                    )}
+                  </div>
+                  {errors.rua && <p className="mt-1 text-xs text-destructive">{errors.rua}</p>}
+
+                  {streetSuggestions.length > 0 && (
+                    <ul className="absolute left-0 top-full z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-gold/40 bg-card shadow-2xl divide-y divide-border/60">
+                      {streetSuggestions.map((loc, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSuggestion(loc)}
+                            className="flex w-full flex-col gap-0.5 px-3.5 py-2.5 text-left text-xs transition hover:bg-gold/15 hover:text-gold"
+                          >
+                            <span className="font-semibold text-foreground">{loc.rua}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              Bairro: <strong className="text-gold">{loc.bairro || "Bragança Paulista"}</strong> • CEP: {loc.cep}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div>
                   <Field
