@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
-import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
+import { getDeliveryFeeForNeighborhood, cleanString } from "@/lib/delivery-config";
 import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
 import { getPublicPromotions } from "@/lib/promotions.functions";
 import { evaluateCartPromotions } from "@/lib/promotions-engine";
@@ -786,6 +786,7 @@ function CartDrawer({
   const [streetQuery, setStreetQuery] = useState("");
   const [streetSearching, setStreetSearching] = useState(false);
   const [streetSuggestions, setStreetSuggestions] = useState<LocationResult[]>([]);
+  const [bairroSuggestions, setBairroSuggestions] = useState<Array<{ name: string; fee: number }>>([]);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -974,7 +975,25 @@ function CartDrawer({
           deliveryFee: fee,
         }));
       } catch (err2) {
-        setErrors((prev) => ({ ...prev, cep: "Erro ao buscar o CEP." }));
+        console.warn("BrasilAPI falhou, tentando AwesomeAPI...", err2);
+        try {
+          const res = await fetch(`https://cep.awesomeapi.com.br/json/${cleanCEP}`, {
+            signal: AbortSignal.timeout(2500),
+          });
+          if (!res.ok) throw new Error("Erro na busca de CEP");
+          const data = await res.json();
+          const fee = getDeliveryFeeForNeighborhood(data.district || data.neighborhood, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
+
+          setForm((prev) => ({
+            ...prev,
+            rua: data.address || "",
+            bairro: data.district || data.neighborhood || "",
+            cidadeUf: `${data.city} - ${data.state}`,
+            deliveryFee: fee,
+          }));
+        } catch (err3) {
+          setErrors((prev) => ({ ...prev, cep: "CEP não localizado nas bases públicas. Digite sua rua abaixo." }));
+        }
       }
     } finally {
       setCepLoading(false);
@@ -1101,6 +1120,29 @@ function CartDrawer({
     setStreetSuggestions([]);
     setLocationMsg(`📍 Endereço preenchido: ${loc.rua} (${loc.bairro})`);
     setTimeout(() => setLocationMsg(null), 5000);
+  };
+
+  const handleBairroInputChange = (val: string) => {
+    const fee = getDeliveryFeeForNeighborhood(val, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
+    setForm((f) => ({ ...f, bairro: val, deliveryFee: fee }));
+    if (errors.bairro) setErrors((e) => ({ ...e, bairro: "" }));
+
+    if (val.trim().length >= 2 && deliveryConfig?.neighborhoods) {
+      const cleanVal = cleanString(val);
+      const matches = deliveryConfig.neighborhoods.filter((n: any) =>
+        cleanString(n.name).includes(cleanVal)
+      );
+      setBairroSuggestions(matches.slice(0, 6));
+    } else {
+      setBairroSuggestions([]);
+    }
+  };
+
+  const handleSelectBairro = (n: { name: string; fee: number }) => {
+    setForm((f) => ({ ...f, bairro: n.name, deliveryFee: n.fee }));
+    setBairroSuggestions([]);
+    setLocationMsg(`📍 Bairro selecionado: ${n.name} (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`);
+    setTimeout(() => setLocationMsg(null), 4000);
   };
 
   const validate = () => {
@@ -1635,14 +1677,41 @@ function CartDrawer({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Field
-                  label="Bairro"
-                  value={form.bairro}
-                  onChange={setField("bairro")}
-                  placeholder="Ex.: Centro"
-                  error={errors.bairro}
-                  maxLength={50}
-                />
+                <div className="relative">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={form.bairro}
+                    onChange={(e) => handleBairroInputChange(e.target.value)}
+                    placeholder="Ex.: Lavapés, Centro..."
+                    maxLength={50}
+                    className={`mt-1.5 w-full rounded-xl border bg-secondary/40 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50 ${
+                      errors.bairro ? "border-destructive" : "border-border"
+                    }`}
+                  />
+                  {errors.bairro && <p className="mt-1 text-xs text-destructive">{errors.bairro}</p>}
+
+                  {bairroSuggestions.length > 0 && (
+                    <ul className="absolute left-0 top-full z-40 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-gold/40 bg-card shadow-2xl divide-y divide-border/60">
+                      {bairroSuggestions.map((n, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectBairro(n)}
+                            className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs transition hover:bg-gold/15 hover:text-gold"
+                          >
+                            <span className="font-semibold text-foreground">{n.name}</span>
+                            <span className="text-[11px] text-gold font-bold">
+                              Taxa: R$ {n.fee.toFixed(2).replace('.', ',')}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 <Field
                   label="Cidade / Estado"
                   value={form.cidadeUf}
