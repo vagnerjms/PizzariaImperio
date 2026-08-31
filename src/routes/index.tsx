@@ -32,7 +32,7 @@ import {
   Compass,
   CheckCircle2,
 } from "lucide-react";
-import { getAddressFromCoordinates, searchAddressByStreet, LocationResult } from "@/lib/location";
+import { reverseGeocodeGPS, searchStreetAddress, LocationResult } from "@/lib/location.functions";
 import heroForno from "@/assets/hero-forno.jpg";
 import pizzaiolo from "@/assets/pizzaiolo.jpg";
 import logo from "@/assets/logo.png";
@@ -794,6 +794,8 @@ function CartDrawer({
   const submitOrder = useServerFn(createOrder);
   const checkStatus = useServerFn(getOrderStatus);
   const fetchDeliveryConfig = useServerFn(getPublicDeliveryConfig);
+  const fetchGpsAddress = useServerFn(reverseGeocodeGPS);
+  const fetchStreetSearch = useServerFn(searchStreetAddress);
   const [deliveryConfig, setDeliveryConfig] = useState<{ default_fee: number; neighborhoods: any[] } | null>(null);
   const [copied, setCopied] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(() => {
@@ -1014,7 +1016,7 @@ function CartDrawer({
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          const loc = await getAddressFromCoordinates(latitude, longitude);
+          const loc = await fetchGpsAddress({ data: { lat: latitude, lon: longitude } });
           if (!loc) {
             setLocationMsg(null);
             setErrors((prev) => ({ ...prev, cep: "Não foi possível identificar o endereço pelo GPS. Digite o CEP ou o nome da rua." }));
@@ -1035,7 +1037,8 @@ function CartDrawer({
           setLocationMsg(`📍 Localizado: ${loc.rua ? loc.rua + ', ' : ''}${loc.bairro || loc.cidade}`);
           setTimeout(() => setLocationMsg(null), 5000);
         } catch (e) {
-          setErrors((prev) => ({ ...prev, cep: "Erro ao consultar OpenStreetMap." }));
+          console.error("GPS Reverse Error:", e);
+          setErrors((prev) => ({ ...prev, cep: "Erro ao consultar o serviço de GPS." }));
         } finally {
           setLocatingGPS(false);
         }
@@ -1055,15 +1058,15 @@ function CartDrawer({
 
   const handleStreetSearch = async (query: string) => {
     setStreetQuery(query);
-    if (query.trim().length < 3) {
+    if (query.trim().length < 2) {
       setStreetSuggestions([]);
       return;
     }
 
     setStreetSearching(true);
     try {
-      const results = await searchAddressByStreet(query, "Bragança Paulista");
-      setStreetSuggestions(results);
+      const results = await fetchStreetSearch({ data: { query } });
+      setStreetSuggestions(results || []);
     } catch (e) {
       console.error("Erro na busca de rua:", e);
     } finally {
