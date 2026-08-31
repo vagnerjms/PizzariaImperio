@@ -27,7 +27,12 @@ import {
   Sparkles,
   Tag,
   Gift,
+  Navigation,
+  Search,
+  Compass,
+  CheckCircle2,
 } from "lucide-react";
+import { getAddressFromCoordinates, searchAddressByStreet, LocationResult } from "@/lib/location";
 import heroForno from "@/assets/hero-forno.jpg";
 import pizzaiolo from "@/assets/pizzaiolo.jpg";
 import logo from "@/assets/logo.png";
@@ -776,6 +781,12 @@ function CartDrawer({
     notes: "",
   });
   const [cepLoading, setCepLoading] = useState(false);
+  const [locatingGPS, setLocatingGPS] = useState(false);
+  const [searchStreetMode, setSearchStreetMode] = useState(false);
+  const [streetQuery, setStreetQuery] = useState("");
+  const [streetSearching, setStreetSearching] = useState(false);
+  const [streetSuggestions, setStreetSuggestions] = useState<LocationResult[]>([]);
+  const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -983,6 +994,103 @@ function CartDrawer({
     }
   };
 
+  const handleGPSLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setErrors((prev) => ({ ...prev, cep: "Geolocalização não suportada no seu navegador." }));
+      return;
+    }
+
+    setLocatingGPS(true);
+    setLocationMsg("Obtendo sua localização via GPS...");
+    setErrors((prev) => {
+      const copy = { ...prev };
+      delete copy.cep;
+      delete copy.rua;
+      delete copy.bairro;
+      return copy;
+    });
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const loc = await getAddressFromCoordinates(latitude, longitude);
+          if (!loc) {
+            setLocationMsg(null);
+            setErrors((prev) => ({ ...prev, cep: "Não foi possível identificar o endereço pelo GPS. Digite o CEP ou o nome da rua." }));
+            return;
+          }
+
+          const fee = getDeliveryFeeForNeighborhood(loc.bairro, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
+
+          setForm((prev) => ({
+            ...prev,
+            rua: loc.rua || prev.rua,
+            numero: loc.numero || prev.numero,
+            bairro: loc.bairro || prev.bairro,
+            cidadeUf: `${loc.cidade} - ${loc.uf}`,
+            cep: loc.cep || prev.cep || "12900-000",
+            deliveryFee: fee,
+          }));
+          setLocationMsg(`📍 Localizado: ${loc.rua ? loc.rua + ', ' : ''}${loc.bairro || loc.cidade}`);
+          setTimeout(() => setLocationMsg(null), 5000);
+        } catch (e) {
+          setErrors((prev) => ({ ...prev, cep: "Erro ao consultar OpenStreetMap." }));
+        } finally {
+          setLocatingGPS(false);
+        }
+      },
+      (error) => {
+        setLocatingGPS(false);
+        setLocationMsg(null);
+        if (error.code === error.PERMISSION_DENIED) {
+          setErrors((prev) => ({ ...prev, cep: "Permissão de localização negada. Digite seu CEP ou o nome da rua." }));
+        } else {
+          setErrors((prev) => ({ ...prev, cep: "Não foi possível obter a posição do GPS." }));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
+  };
+
+  const handleStreetSearch = async (query: string) => {
+    setStreetQuery(query);
+    if (query.trim().length < 3) {
+      setStreetSuggestions([]);
+      return;
+    }
+
+    setStreetSearching(true);
+    try {
+      const results = await searchAddressByStreet(query, "Bragança Paulista");
+      setStreetSuggestions(results);
+    } catch (e) {
+      console.error("Erro na busca de rua:", e);
+    } finally {
+      setStreetSearching(false);
+    }
+  };
+
+  const handleSelectSuggestion = (loc: LocationResult) => {
+    const fee = getDeliveryFeeForNeighborhood(loc.bairro, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
+
+    setForm((prev) => ({
+      ...prev,
+      rua: loc.rua,
+      numero: loc.numero || prev.numero,
+      bairro: loc.bairro,
+      cidadeUf: `${loc.cidade} - ${loc.uf}`,
+      cep: loc.cep || prev.cep || "12900-000",
+      deliveryFee: fee,
+    }));
+
+    setStreetSuggestions([]);
+    setStreetQuery("");
+    setSearchStreetMode(false);
+    setLocationMsg(`📍 Endereço selecionado: ${loc.rua}, ${loc.bairro}`);
+    setTimeout(() => setLocationMsg(null), 5000);
+  };
+
   const validate = () => {
     const e: Record<string, string> = {};
     const name = sanitize(form.name, 80);
@@ -991,7 +1099,7 @@ function CartDrawer({
     
     if (name.length < 2) e.name = "Informe seu nome completo.";
     if (phone.replace(/\D/g, "").length < 10) e.phone = "Telefone inválido (com DDD).";
-    if (cep.length !== 8) e.cep = "CEP inválido.";
+    if (cep.length !== 8 && (!form.rua.trim() || !form.bairro.trim())) e.cep = "Informe seu CEP ou use o GPS/Busca por rua.";
     if (!form.rua.trim()) e.rua = "Informe a rua.";
     if (!form.numero.trim()) e.numero = "Informe o número.";
     if (!form.bairro.trim()) e.bairro = "Informe o bairro.";
@@ -1407,18 +1515,98 @@ function CartDrawer({
                 maxLength={20}
                 inputMode="tel"
               />
-              <div className="relative">
-                <Field
-                  label="CEP"
-                  value={form.cep}
-                  onChange={handleCEPChange}
-                  placeholder="00000-000"
-                  error={errors.cep}
-                  maxLength={9}
-                />
-                {cepLoading && (
-                  <div className="absolute right-3 top-9 text-gold animate-spin">
-                    <Loader2 className="h-4 w-4" />
+              <div className="space-y-2">
+                <div className="relative">
+                  <Field
+                    label="CEP"
+                    value={form.cep}
+                    onChange={handleCEPChange}
+                    placeholder="00000-000"
+                    error={errors.cep}
+                    maxLength={9}
+                  />
+                  {cepLoading && (
+                    <div className="absolute right-3 top-9 text-gold animate-spin">
+                      <Loader2 className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={handleGPSLocation}
+                    disabled={locatingGPS}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-semibold text-gold transition hover:bg-gold/20 active:scale-95 disabled:opacity-50"
+                  >
+                    {locatingGPS ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Detectando GPS...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="h-3.5 w-3.5" />
+                        <span>Usar minha localização</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSearchStreetMode(!searchStreetMode)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-gold transition"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    <span>{searchStreetMode ? "Fechar busca" : "Não sei meu CEP"}</span>
+                  </button>
+                </div>
+
+                {locationMsg && (
+                  <div className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs font-medium text-emerald-400 animate-in fade-in">
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                    <span>{locationMsg}</span>
+                  </div>
+                )}
+
+                {searchStreetMode && (
+                  <div className="rounded-2xl border border-gold/30 bg-secondary/40 p-3 space-y-2 animate-in fade-in">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Buscar por Nome da Rua (OpenStreetMap)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={streetQuery}
+                        onChange={(e) => handleStreetSearch(e.target.value)}
+                        placeholder="Ex.: Av. dos Imigrantes, Rua do Lavapés..."
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 pr-9 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
+                      />
+                      {streetSearching ? (
+                        <div className="absolute right-3 top-2.5 text-gold animate-spin">
+                          <Loader2 className="h-4 w-4" />
+                        </div>
+                      ) : (
+                        <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+
+                    {streetSuggestions.length > 0 && (
+                      <ul className="divide-y divide-border/60 rounded-xl border border-border bg-card shadow-lg max-h-48 overflow-y-auto">
+                        {streetSuggestions.map((loc, i) => (
+                          <li key={i}>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectSuggestion(loc)}
+                              className="w-full px-3 py-2.5 text-left text-xs transition hover:bg-gold/10 hover:text-gold flex flex-col gap-0.5"
+                            >
+                              <span className="font-semibold text-foreground">{loc.rua} {loc.numero ? `nº ${loc.numero}` : ""}</span>
+                              <span className="text-[11px] text-muted-foreground">Bairro: {loc.bairro || "Bragança Paulista"} • {loc.cidade} - {loc.uf}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>
