@@ -2400,6 +2400,8 @@ function AdminPage() {
                         Cole esta URL completa no seu painel de <strong>Webhooks / Notificações IPN</strong> do Mercado Pago Developers para receber avisos automáticos de Pix e Cartão.
                       </p>
                     </div>
+                  </div>
+
                   <div className="space-y-4">
                     <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
                       <MapPin className="h-4 w-4" /> Geocodificação & Endereços (Failover de Segurança)
