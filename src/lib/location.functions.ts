@@ -1,8 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getDb } from "./db";
 import { cleanString } from "./delivery-config";
-import { getSystemSettings } from "./settings.server";
 
 export interface LocationResult {
   rua: string;
@@ -102,6 +100,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
 
     // 3. FAILOVER FINAL: Google Maps Reverse Geocoding (Usado somente se os anteriores falharem)
     try {
+      const { getSystemSettings } = await import("./settings.server");
       const settings = await getSystemSettings();
       const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
       if (apiKey) {
@@ -292,6 +291,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // TIER 4: Catálogo de 90+ Bairros de Bragança Paulista no MongoDB
     // =========================================================================
     try {
+      const { getDb } = await import("./db");
       const db = await getDb();
       const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "default_config" as any });
       const neighborhoods: Array<{ name: string; fee: number }> = settingsDoc?.neighborhoods || [];
@@ -323,6 +323,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     if (results.length === 0) {
       try {
+        const { getSystemSettings } = await import("./settings.server");
         const settings = await getSystemSettings();
         const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
         if (apiKey) {
