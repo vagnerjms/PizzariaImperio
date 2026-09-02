@@ -7,8 +7,14 @@ export interface MenuItemRef {
   category: string;
 }
 
+export interface GenericCartLine {
+  item: MenuItemRef;
+  qty: number;
+  subtotal: number;
+}
+
 export function evaluateCartPromotions(
-  cart: Record<string, number>,
+  cartOrLines: Record<string, number> | GenericCartLine[],
   menuById: Record<string, MenuItemRef>,
   promotions: Promotion[]
 ): AppliedPromotionResult | null {
@@ -19,13 +25,18 @@ export function evaluateCartPromotions(
   if (activePromos.length === 0) return null;
 
   // Calculate cart line items
-  const cartLines = Object.entries(cart)
-    .map(([id, qty]) => {
-      const item = menuById[id];
-      if (!item || qty <= 0) return null;
-      return { item, qty, subtotal: item.price * qty };
-    })
-    .filter((l): l is { item: MenuItemRef; qty: number; subtotal: number } => l !== null);
+  let cartLines: GenericCartLine[] = [];
+  if (Array.isArray(cartOrLines)) {
+    cartLines = cartOrLines.filter((l) => l.qty > 0 && l.subtotal > 0);
+  } else {
+    cartLines = Object.entries(cartOrLines)
+      .map(([id, qty]) => {
+        const item = menuById[id];
+        if (!item || qty <= 0) return null;
+        return { item, qty, subtotal: item.price * qty };
+      })
+      .filter((l): l is GenericCartLine => l !== null);
+  }
 
   const cartSubtotal = cartLines.reduce((acc, l) => acc + l.subtotal, 0);
   const totalCartQty = cartLines.reduce((acc, l) => acc + l.qty, 0);
@@ -62,76 +73,53 @@ export function evaluateCartPromotions(
         triggerCount = catQty;
         triggerSubtotal = catSubtotal;
       }
-    } else if (promo.trigger_type === "specific_items" && promo.trigger_item_ids && promo.trigger_item_ids.length > 0) {
-      const ids = promo.trigger_item_ids;
-      const matchingLines = cartLines.filter((l) => ids.includes(l.item.id));
-      const itemsQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
-      const itemsSubtotal = matchingLines.reduce((sum, l) => sum + l.subtotal, 0);
-      const requiredQty = promo.trigger_min_qty || 1;
-
-      if (itemsQty >= requiredQty) {
-        isTriggered = true;
-        triggerCount = itemsQty;
-        triggerSubtotal = itemsSubtotal;
-      }
     }
 
     if (!isTriggered) continue;
 
-    // Calculate reward/discount based on promo type
-    if (promo.type === "PERCENTAGE_DISCOUNT") {
-      const pct = Math.min(100, Math.max(1, promo.discount_value || 10));
-      const discount = Number(((cartSubtotal * pct) / 100).toFixed(2));
-      validResults.push({
-        promotion: promo,
-        discountAmount: discount,
-        benefitValue: discount,
-        reason: `${pct}% de desconto aplicado no total do pedido`,
-      });
-    } else if (promo.type === "FIXED_DISCOUNT") {
-      const fixedVal = Math.min(cartSubtotal, Math.max(1, promo.discount_value || 10));
-      validResults.push({
-        promotion: promo,
-        discountAmount: fixedVal,
-        benefitValue: fixedVal,
-        reason: `Desconto fixo de R$ ${fixedVal.toFixed(2).replace('.', ',')} aplicado`,
-      });
-    } else if (promo.type === "BUY_X_GET_Y" && promo.reward_item_id) {
-      const rewardItem = menuById[promo.reward_item_id];
-      if (rewardItem) {
-        const discPercent = promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100;
-        const discountVal = Number(((rewardItem.price * discPercent) / 100).toFixed(2));
-        const finalUnitPrice = Math.max(0, rewardItem.price - discountVal);
+    let discountAmount = 0;
+    let rewardItem: AppliedPromotionResult["rewardItem"] = undefined;
+    let reason = "";
 
-        validResults.push({
-          promotion: promo,
-          // In BUY_X_GET_Y, the item is added to the order at unit_price (R$ 0,00 for gifts).
-          // Therefore, discountAmount subtracted from cart subtotal must be 0 so we don't double-discount!
-          discountAmount: 0,
-          benefitValue: discountVal,
-          rewardItem: {
-            pizza_id: rewardItem.id,
-            pizza_name: rewardItem.name,
-            unit_price: finalUnitPrice,
-            original_price: rewardItem.price,
-            quantity: 1,
-            is_gift: discPercent === 100,
-          },
-          reason: discPercent === 100 
-            ? `Você ganhou 1x ${rewardItem.name} de brinde!`
-            : `Você ganhou ${discPercent}% de desconto em 1x ${rewardItem.name}!`,
-        });
+    if (promo.type === "PERCENTAGE_DISCOUNT") {
+      const pct = (promo.discount_value || 0) / 100;
+      discountAmount = triggerSubtotal * pct;
+      reason = `${promo.discount_value}% de desconto aplicado!`;
+    } else if (promo.type === "FIXED_DISCOUNT") {
+      discountAmount = Math.min(cartSubtotal, promo.discount_value || 0);
+      reason = `Desconto de R$ ${(promo.discount_value || 0).toFixed(2).replace('.', ',')} aplicado!`;
+    } else if (promo.type === "BUY_X_GET_Y") {
+      const rewardPizza = menuById[promo.reward_item_id || ""];
+      if (rewardPizza) {
+        rewardItem = {
+          pizza_id: rewardPizza.id,
+          pizza_name: rewardPizza.name,
+          original_price: rewardPizza.price,
+          unit_price: 0,
+          is_gift: true,
+        };
+        reason = `Brinde adicionado: 1x ${rewardPizza.name}!`;
       }
+    }
+
+    if (discountAmount > 0 || rewardItem) {
+      validResults.push({
+        promotion: promo,
+        discountAmount: Number(discountAmount.toFixed(2)),
+        rewardItem,
+        reason,
+      });
     }
   }
 
   if (validResults.length === 0) return null;
 
-  // Pick promotion with the highest benefit value for customer
+  // Prioritize promotion that offers the greatest financial benefit to the customer
   validResults.sort((a, b) => {
-    const valA = a.benefitValue !== undefined ? a.benefitValue : a.discountAmount;
-    const valB = b.benefitValue !== undefined ? b.benefitValue : b.discountAmount;
+    const valA = a.discountAmount + (a.rewardItem?.original_price || 0);
+    const valB = b.discountAmount + (b.rewardItem?.original_price || 0);
     return valB - valA;
   });
+
   return validResults[0];
 }
