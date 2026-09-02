@@ -9,6 +9,7 @@ const updateSettingsSchema = z.object({
   mercado_pago_access_token: z.string().trim(),
   mercado_pago_public_key: z.string().trim(),
   whatsapp_instance_name: z.string().trim().min(1),
+  google_maps_api_key: z.string().trim().optional(),
 });
 
 export const getAdminSettings = createServerFn({ method: "GET" })

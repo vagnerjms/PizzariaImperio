@@ -516,6 +516,7 @@ function AdminPage() {
     mercado_pago_access_token: "",
     mercado_pago_public_key: "",
     whatsapp_instance_name: "",
+    google_maps_api_key: "",
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -656,6 +657,7 @@ function AdminPage() {
         mercado_pago_access_token: data.mercado_pago_access_token || "",
         mercado_pago_public_key: data.mercado_pago_public_key || "",
         whatsapp_instance_name: data.whatsapp_instance_name || "",
+        google_maps_api_key: data.google_maps_api_key || "",
       });
     } catch (e) {
       setSettingsErrorMsg(e instanceof Error ? e.message : "Erro ao carregar configurações.");
@@ -2396,6 +2398,26 @@ function AdminPage() {
                       />
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         Cole esta URL completa no seu painel de <strong>Webhooks / Notificações IPN</strong> do Mercado Pago Developers para receber avisos automáticos de Pix e Cartão.
+                      </p>
+                    </div>
+                  <div className="space-y-4">
+                    <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                      <MapPin className="h-4 w-4" /> Geocodificação & Endereços (Failover de Segurança)
+                    </h3>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Google Places / Maps API Key (Último Recurso)
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.google_maps_api_key}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, google_maps_api_key: e.target.value }))}
+                        placeholder="AIzaSy..."
+                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        🛡️ <strong>Economia & Segurança:</strong> Esta chave da Google Maps API <strong>só é consumida como último recurso</strong> caso nenhuma das 4 APIs gratuitas (ViaCEP, Photon OSM, Nominatim e Catálogo do MongoDB) localize o endereço do cliente.
                       </p>
                     </div>
                   </div>

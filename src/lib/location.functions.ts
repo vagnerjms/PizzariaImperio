@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getDb } from "./db";
 import { cleanString } from "./delivery-config";
+import { getSystemSettings } from "./settings.server";
 
 export interface LocationResult {
   rua: string;
@@ -19,7 +20,8 @@ const NOMINATIM_HEADERS = {
 };
 
 /**
- * 1. Geocodificação Reversa via GPS com Fallback (Nominatim + Photon OSM)
+ * 1. Geocodificação Reversa via GPS com Fallback Multicamadas
+ * (Nominatim OSM ➔ Photon Komoot ➔ Google Maps Failover como último recurso)
  */
 export const reverseGeocodeGPS = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
@@ -29,12 +31,12 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data }): Promise<LocationResult | null> => {
-    // 1. Tentativa Primária: Nominatim OpenStreetMap
+    // 1. Tentativa Primária Gratuita: Nominatim OpenStreetMap
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lon}&format=json&addressdetails=1`;
       const res = await fetch(url, {
         headers: NOMINATIM_HEADERS,
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(3500),
       });
 
       if (res.ok) {
@@ -66,10 +68,10 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       console.warn("[reverseGeocodeGPS Nominatim Warning]:", err);
     }
 
-    // 2. Fallback Secundário: Photon Komoot Reverse
+    // 2. Fallback Secundário Gratuito: Photon Komoot Reverse
     try {
       const photonUrl = `https://photon.komoot.io/reverse?lat=${data.lat}&lon=${data.lon}`;
-      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3500) });
+      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const json = await res.json();
         const feature = json?.features?.[0];
@@ -98,12 +100,72 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       console.warn("[reverseGeocodeGPS Photon Warning]:", err);
     }
 
+    // 3. FAILOVER FINAL: Google Maps Reverse Geocoding (Usado somente se os anteriores falharem)
+    try {
+      const settings = await getSystemSettings();
+      const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
+      if (apiKey) {
+        console.log("[reverseGeocodeGPS] Acionando Google Maps Geocoding Failover...");
+        const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${data.lat},${data.lon}&key=${apiKey}&language=pt-BR&region=br`;
+        const res = await fetch(googleUrl, { signal: AbortSignal.timeout(3500) });
+        if (res.ok) {
+          const dataGoogle = await res.json();
+          if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results) && dataGoogle.results.length > 0) {
+            const r = dataGoogle.results[0];
+            let rua = "";
+            let numero = "";
+            let bairro = "";
+            let cidade = "Bragança Paulista";
+            let uf = "SP";
+            let cep = "12900-000";
+
+            for (const comp of r.address_components || []) {
+              const types: string[] = comp.types || [];
+              if (types.includes("route")) {
+                rua = comp.long_name;
+              } else if (types.includes("street_number")) {
+                numero = comp.long_name;
+              } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
+                bairro = comp.long_name;
+              } else if (types.includes("administrative_area_level_2")) {
+                cidade = comp.long_name;
+              } else if (types.includes("administrative_area_level_1")) {
+                uf = comp.short_name || comp.long_name || "SP";
+              } else if (types.includes("postal_code")) {
+                const raw = (comp.long_name || "").replace(/\D/g, "");
+                if (raw.length === 8) {
+                  cep = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`;
+                }
+              }
+            }
+
+            return {
+              rua: rua || r.formatted_address.split(",")[0] || "",
+              numero,
+              bairro: bairro || "Centro",
+              cidade,
+              uf,
+              cep,
+              formattedAddress: r.formatted_address,
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[reverseGeocodeGPS Google Maps Failover Error]:", err);
+    }
+
     return null;
   });
 
 /**
- * 2. Motor de Busca de Ruas com Multi-Tier Fallback
- * (ViaCEP + Photon OSM + Nominatim + Catálogo de Bairros de Bragança no MongoDB)
+ * 2. Motor de Busca de Ruas com Multi-Tier Fallback e Failover Seguro
+ * Ordem de Execução:
+ *   TIER 1: ViaCEP Oficial (Correios Bragança Paulista)
+ *   TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search)
+ *   TIER 3: Nominatim OpenStreetMap (Busca Estruturada)
+ *   TIER 4: Catálogo de 90+ Bairros de Bragança no MongoDB
+ *   TIER 5 (FAILOVER): Google Places / Geocoding API (ACIONADO SOMENTE SE NENHUMA ANTERIOR ENCONTRAR RESULTADOS)
  */
 export const searchStreetAddress = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
@@ -129,7 +191,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     try {
       const viacepUrl = `https://viacep.com.br/ws/SP/Braganca%20Paulista/${encodeURIComponent(cleanQuery)}/json/`;
-      const res = await fetch(viacepUrl, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(viacepUrl, { signal: AbortSignal.timeout(2800) });
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list)) {
@@ -157,7 +219,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     try {
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(cleanQuery + " Bragança Paulista")}&lat=-22.952&lon=-46.542&limit=8`;
-      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(2800) });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json?.features)) {
@@ -194,7 +256,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
         const osmUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&format=json&addressdetails=1&limit=8&countrycodes=br`;
         const res = await fetch(osmUrl, {
           headers: NOMINATIM_HEADERS,
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(3000),
         });
 
         if (res.ok) {
@@ -228,7 +290,6 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
 
     // =========================================================================
     // TIER 4: Catálogo de 90+ Bairros de Bragança Paulista no MongoDB
-    // (Garante que qualquer busca por nome de bairro encontre a taxa correta)
     // =========================================================================
     try {
       const db = await getDb();
@@ -241,7 +302,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
         return nClean.includes(queryClean) || queryClean.includes(nClean);
       });
 
-      for (const n of matchedNeighborhoods.slice(0, 4)) {
+      for (const n of matchedNeighborhoods.slice(0, 3)) {
         addResult({
           rua: `Bairro ${n.name}`,
           numero: "",
@@ -249,11 +310,75 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
           cidade: "Bragança Paulista",
           uf: "SP",
           cep: "12900-000",
-          formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa de Entrega: R$ ${n.fee.toFixed(2).replace('.', ',')})`,
+          formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`,
         });
       }
     } catch (err) {
       console.warn("[MongoDB Neighborhood Catalog Search Warning]:", err);
+    }
+
+    // =========================================================================
+    // TIER 5 (FAILOVER SEGURO): Google Places / Geocoding API
+    // ⚠️ REGRA CRÍTICA: ACIONADA SOMENTE SE NENHUMA DAS 4 CAMADAS ANTERIORES ENCONTRAR RESULTADOS!
+    // =========================================================================
+    if (results.length === 0) {
+      try {
+        const settings = await getSystemSettings();
+        const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
+        if (apiKey) {
+          console.log(`[Google Maps Failover] Nenhuma API gratuita encontrou "${cleanQuery}". Acionando Google Geocoding API...`);
+          const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&key=${apiKey}&language=pt-BR&region=br`;
+          const res = await fetch(googleUrl, { signal: AbortSignal.timeout(3500) });
+          if (res.ok) {
+            const dataGoogle = await res.json();
+            if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results)) {
+              for (const r of dataGoogle.results.slice(0, 6)) {
+                let rua = "";
+                let numero = "";
+                let bairro = "";
+                let cidade = "Bragança Paulista";
+                let uf = "SP";
+                let cep = "12900-000";
+
+                for (const comp of r.address_components || []) {
+                  const types: string[] = comp.types || [];
+                  if (types.includes("route")) {
+                    rua = comp.long_name;
+                  } else if (types.includes("street_number")) {
+                    numero = comp.long_name;
+                  } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
+                    bairro = comp.long_name;
+                  } else if (types.includes("administrative_area_level_2")) {
+                    cidade = comp.long_name;
+                  } else if (types.includes("administrative_area_level_1")) {
+                    uf = comp.short_name || comp.long_name || "SP";
+                  } else if (types.includes("postal_code")) {
+                    const raw = (comp.long_name || "").replace(/\D/g, "");
+                    if (raw.length === 8) {
+                      cep = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`;
+                    }
+                  }
+                }
+
+                if (rua || bairro) {
+                  addResult({
+                    rua: rua || r.formatted_address.split(",")[0] || "",
+                    numero,
+                    bairro: bairro || "Centro",
+                    cidade,
+                    uf,
+                    cep,
+                    formattedAddress: r.formatted_address,
+                  });
+                }
+              }
+              console.log(`[Google Maps Failover] Retornou ${results.length} resultado(s) com sucesso.`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[Google Maps Geocoding Failover Error]:", err);
+      }
     }
 
     return results;

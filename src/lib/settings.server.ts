@@ -7,6 +7,7 @@ export interface SystemSettings {
   mercado_pago_access_token: string;
   mercado_pago_public_key: string;
   whatsapp_instance_name: string;
+  google_maps_api_key: string;
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {
@@ -22,6 +23,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       mercado_pago_access_token: settings?.mercado_pago_access_token || process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
       mercado_pago_public_key: settings?.mercado_pago_public_key || process.env.VITE_MERCADO_PAGO_PUBLIC_KEY || "",
       whatsapp_instance_name: settings?.whatsapp_instance_name || "Disparo",
+      google_maps_api_key: settings?.google_maps_api_key || process.env.GOOGLE_MAPS_API_KEY || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA",
     };
   } catch (error) {
     console.error("Failed to load settings from DB, using environment variables:", error);
@@ -32,6 +34,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       mercado_pago_access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
       mercado_pago_public_key: process.env.VITE_MERCADO_PAGO_PUBLIC_KEY || "",
       whatsapp_instance_name: "Disparo",
+      google_maps_api_key: process.env.GOOGLE_MAPS_API_KEY || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA",
     };
   }
 }
