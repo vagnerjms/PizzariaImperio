@@ -1,8 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import crypto from "node:crypto";
 import { requireAuth } from "./auth-middleware";
-import { getOrdersCollection } from "./db";
 
 const itemSchema = z.object({
   pizza_id: z.string().min(1).max(60),
@@ -71,9 +69,12 @@ function generateStaticPix(key: string, name: string, city: string, amount: numb
 export const createOrder = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => createOrderSchema.parse(raw))
   .handler(async ({ data }) => {
+    const { getOrdersCollection } = await import("./db");
+    const { randomUUID } = await import("node:crypto");
     const { SERVER_MENU_PRICES } = await import("./menu-prices");
+
     const ordersCol = await getOrdersCollection();
-    const orderId = crypto.randomUUID();
+    const orderId = randomUUID();
 
     // 🔒 Server-Side Price Recalculation & Anti-Tampering (OWASP A04:2021)
     const validatedItems = data.items.map((i) => {
@@ -212,55 +213,51 @@ export const createOrder = createServerFn({ method: "POST" })
         }
       } else if (isOnlineCard) {
         try {
-          const { getWebRequest } = await import("@tanstack/react-start/server");
-          const req = getWebRequest();
-          const host = req?.headers.get("host") || "localhost:3000";
-          const protocol = req?.headers.get("x-forwarded-proto") || "http";
-          const baseUrl = `${protocol}://${host}`;
-
-          const response = await fetch("https://api.mercadopago.com/v1/preferences", {
+          const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${accessToken}`,
             },
+            signal: AbortSignal.timeout(6000),
             body: JSON.stringify({
-              items: [
-                {
-                  id: orderId,
-                  title: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,
-                  quantity: 1,
-                  unit_price: Number(total.toFixed(2)),
-                  currency_id: "BRL"
-                }
-              ],
+              items: validatedItems.map((item) => ({
+                id: item.pizza_id,
+                title: item.pizza_name,
+                unit_price: Number(item.unit_price.toFixed(2)),
+                quantity: item.quantity,
+                currency_id: "BRL",
+              })),
+              shipments: verifiedDeliveryFee > 0 ? {
+                cost: Number(verifiedDeliveryFee.toFixed(2)),
+                mode: "not_specified",
+              } : undefined,
+              external_reference: orderId,
               back_urls: {
-                success: `${baseUrl}/?payment_result=success&order_id=${orderId}`,
-                failure: `${baseUrl}/?payment_result=failure&order_id=${orderId}`,
-                pending: `${baseUrl}/?payment_result=pending&order_id=${orderId}`,
+                success: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
+                pending: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
+                failure: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
               },
               auto_return: "approved",
-              external_reference: orderId,
+              statement_descriptor: "PIZZARIA IMPERIO",
             })
           });
 
           if (!response.ok) {
             const errBody = await response.text();
             console.error("Mercado Pago Preference creation failed:", errBody);
-            throw new Error("Erro ao criar preferência de checkout no Mercado Pago.");
+            throw new Error("Erro ao criar preferência de pagamento no Mercado Pago.");
           }
 
           const prefData = await response.json();
-          gatewayPaymentId = String(prefData.id);
           paymentDetails = {
-            type: "card",
+            type: "mercadopago_preference",
             preference_id: prefData.id,
             init_point: prefData.init_point,
-            sandbox_init_point: prefData.sandbox_init_point,
           };
         } catch (err) {
-          console.error("Card preference creation failed:", err);
-          throw new Error(err instanceof Error ? err.message : "Não foi possível iniciar o checkout de cartão. Tente novamente.");
+          console.error("Card processing failed:", err);
+          throw new Error(err instanceof Error ? err.message : "Não foi possível gerar o link de pagamento. Tente novamente.");
         }
       }
 
@@ -268,8 +265,7 @@ export const createOrder = createServerFn({ method: "POST" })
         { _id: orderId },
         {
           $set: {
-            payment_status: paymentStatus,
-            payment_gateway: "mercado_pago",
+            payment_gateway: "mercadopago",
             gateway_payment_id: gatewayPaymentId,
             payment_details: paymentDetails,
             updated_at: new Date(),
@@ -278,11 +274,13 @@ export const createOrder = createServerFn({ method: "POST" })
       );
     }
 
-    // Try to notify n8n of the new order
+    // Trigger n8n webhook asynchronously if configured
     const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const n8nWebhookUrl = settings.n8n_webhook_url;
+
     if (n8nWebhookUrl) {
+      console.log(`[Order Created] Dispatching webhook to n8n: ${n8nWebhookUrl} (Order: ${orderId})`);
       fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -294,20 +292,35 @@ export const createOrder = createServerFn({ method: "POST" })
             customer_phone: data.customer_phone,
             customer_address: data.customer_address,
             payment_method: data.payment_method,
-            troco: data.troco ?? null,
-            notes: data.notes ?? null,
+            troco: data.troco,
+            notes: data.notes,
+            subtotal,
+            discount,
+            delivery_fee: verifiedDeliveryFee,
             total,
+            items: validatedItems,
             payment_status: paymentStatus,
             payment_details: paymentDetails,
-            items: data.items,
           }
         }),
-      }).catch((err) => console.error("Failed to notify n8n webhook:", err));
+      })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error(`[n8n Webhook Error] n8n returned HTTP ${res.status}:`, await res.text());
+        } else {
+          console.log(`[n8n Webhook Success] Event order.created delivered successfully for order ${orderId}.`);
+        }
+      })
+      .catch((err) => console.error("Failed to notify n8n webhook on order creation:", err));
     }
 
     return {
       id: orderId,
+      subtotal,
+      discount,
+      delivery_fee: verifiedDeliveryFee,
       total,
+      payment_method: data.payment_method,
       payment_status: paymentStatus,
       payment_details: paymentDetails,
     };
@@ -320,6 +333,7 @@ export const listOrders = createServerFn({ method: "GET" })
       throw new Error("Acesso restrito.");
     }
 
+    const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
 
     // Auto-cancel abandoned Pix orders older than 30 minutes (non-blocking)
@@ -389,6 +403,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       throw new Error("Acesso restrito.");
     }
 
+    const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
     const orderBefore = await ordersCol.findOne({ _id: data.id });
 
@@ -447,6 +462,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
 export const getOrderStatus = createServerFn({ method: "GET" })
   .inputValidator((raw: unknown) => z.string().parse(raw))
   .handler(async ({ data: orderId }) => {
+    const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
     const order = await ordersCol.findOne({ _id: orderId });
     if (!order) return null;

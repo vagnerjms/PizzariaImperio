@@ -1,8 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getUsersCollection } from "./db";
-import { verifyPassword } from "./hash";
-import { signToken } from "./jwt";
 
 const loginSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
@@ -12,6 +9,10 @@ const loginSchema = z.object({
 export const loginFn = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => loginSchema.parse(raw))
   .handler(async ({ data }) => {
+    const { getUsersCollection } = await import("./db");
+    const { verifyPassword } = await import("./hash");
+    const { signToken } = await import("./jwt");
+
     const usersCol = await getUsersCollection();
     const user = await usersCol.findOne({ email: data.email });
     
