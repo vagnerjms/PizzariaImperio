@@ -172,6 +172,13 @@ export const deleteUser = createServerFn({ method: "POST" })
       throw new Error("Você não pode excluir a sua própria conta logada.");
     }
 
+    if (targetUser.roles?.includes("admin")) {
+      const adminCount = await usersCol.countDocuments({ roles: "admin" });
+      if (adminCount <= 1) {
+        throw new Error("Operação bloqueada: não é permitido excluir o único Administrador ativo do sistema.");
+      }
+    }
+
     await usersCol.deleteOne(query);
     return { success: true };
   });

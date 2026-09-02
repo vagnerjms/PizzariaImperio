@@ -71,9 +71,27 @@ function generateStaticPix(key: string, name: string, city: string, amount: numb
 export const createOrder = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => createOrderSchema.parse(raw))
   .handler(async ({ data }) => {
+    const { SERVER_MENU_PRICES } = await import("./menu-prices");
     const ordersCol = await getOrdersCollection();
     const orderId = crypto.randomUUID();
-    const subtotal = data.items.reduce((acc, i) => acc + (Math.max(0, i.unit_price) * Math.max(1, i.quantity)), 0);
+
+    // 🔒 Server-Side Price Recalculation & Anti-Tampering (OWASP A04:2021)
+    const validatedItems = data.items.map((i) => {
+      let finalUnitPrice = Math.max(0, i.unit_price);
+      const catalogItem = SERVER_MENU_PRICES[i.pizza_id];
+      if (catalogItem) {
+        // Enforce server official price if it's a known catalog ID
+        finalUnitPrice = Math.max(catalogItem.price, finalUnitPrice);
+      }
+      return {
+        pizza_id: i.pizza_id,
+        pizza_name: i.pizza_name,
+        quantity: Math.max(1, i.quantity),
+        unit_price: Number(finalUnitPrice.toFixed(2)),
+      };
+    });
+
+    const subtotal = validatedItems.reduce((acc, i) => acc + (i.unit_price * i.quantity), 0);
     const verifiedDeliveryFee = Math.max(0, data.delivery_fee || 0);
     const discount = Math.max(0, data.discount || 0);
     const total = Number(Math.max(0, subtotal - discount + verifiedDeliveryFee).toFixed(2));
@@ -108,12 +126,7 @@ export const createOrder = createServerFn({ method: "POST" })
       payment_details: null as any,
       created_at: new Date(),
       updated_at: new Date(),
-      items: data.items.map((i) => ({
-        pizza_id: i.pizza_id,
-        pizza_name: i.pizza_name,
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-      })),
+      items: validatedItems,
     };
 
     await ordersCol.insertOne(newOrder);

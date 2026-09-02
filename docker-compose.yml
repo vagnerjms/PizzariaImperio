@@ -29,7 +29,6 @@ services:
       - PORT=8080
       - HOST=0.0.0.0
       - DOCKER=true
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
     env_file:
       - .env
     mem_limit: 1536m
