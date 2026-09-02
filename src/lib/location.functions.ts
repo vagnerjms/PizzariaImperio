@@ -12,14 +12,40 @@ export interface LocationResult {
   formattedAddress: string;
 }
 
-const NOMINATIM_HEADERS = {
+const COMMON_HEADERS = {
   "Accept": "application/json",
+  "Referer": "https://imperio.embraganca.com.br/",
   "User-Agent": "PizzariaImperioApp/2.0 (contato@embraganca.com.br)",
 };
 
+const STOP_WORDS = new Set(["rua", "r", "av", "avenida", "alameda", "pca", "praca", "travessa", "estrada", "bairro", "de", "da", "do", "das", "dos", "e"]);
+
+function getSignificantWords(text: string): string[] {
+  return cleanString(text)
+    .split(" ")
+    .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+}
+
+function matchesSignificantQuery(streetName: string, queryWords: string[]): boolean {
+  if (queryWords.length === 0) return true;
+  const cleanStreet = cleanString(streetName);
+  
+  // Se o usuário digitou palavras raras (ex: "avani"), pelo menos a primeira palavra significativa deve bater
+  const firstSignificant = queryWords[0];
+  if (firstSignificant && firstSignificant.length >= 3) {
+    if (!cleanStreet.includes(firstSignificant)) {
+      return false;
+    }
+  }
+
+  // Pelo menos metade das palavras significativas digitadas devem estar presentes
+  const matchCount = queryWords.filter((w) => cleanStreet.includes(w)).length;
+  return matchCount >= Math.ceil(queryWords.length / 2);
+}
+
 /**
  * 1. Geocodificação Reversa via GPS com Fallback Multicamadas
- * (Nominatim OSM ➔ Photon Komoot ➔ Google Maps Failover como último recurso)
+ * (Nominatim OSM ➔ Photon Komoot ➔ Google Maps Reverse Geocoding)
  */
 export const reverseGeocodeGPS = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
@@ -33,7 +59,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lon}&format=json&addressdetails=1`;
       const res = await fetch(url, {
-        headers: NOMINATIM_HEADERS,
+        headers: COMMON_HEADERS,
         signal: AbortSignal.timeout(3500),
       });
 
@@ -69,7 +95,10 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
     // 2. Fallback Secundário Gratuito: Photon Komoot Reverse
     try {
       const photonUrl = `https://photon.komoot.io/reverse?lat=${data.lat}&lon=${data.lon}`;
-      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(photonUrl, {
+        headers: COMMON_HEADERS,
+        signal: AbortSignal.timeout(3000),
+      });
       if (res.ok) {
         const json = await res.json();
         const feature = json?.features?.[0];
@@ -98,7 +127,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       console.warn("[reverseGeocodeGPS Photon Warning]:", err);
     }
 
-    // 3. FAILOVER FINAL: Google Maps Reverse Geocoding (Usado somente se os anteriores falharem)
+    // 3. FAILOVER FINAL: Google Maps Reverse Geocoding
     try {
       const { getSystemSettings } = await import("./settings.server");
       const settings = await getSystemSettings();
@@ -106,7 +135,10 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       if (apiKey) {
         console.log("[reverseGeocodeGPS] Acionando Google Maps Geocoding Failover...");
         const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${data.lat},${data.lon}&key=${apiKey}&language=pt-BR&region=br`;
-        const res = await fetch(googleUrl, { signal: AbortSignal.timeout(3500) });
+        const res = await fetch(googleUrl, {
+          headers: COMMON_HEADERS,
+          signal: AbortSignal.timeout(3500),
+        });
         if (res.ok) {
           const dataGoogle = await res.json();
           if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results) && dataGoogle.results.length > 0) {
@@ -158,13 +190,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
   });
 
 /**
- * 2. Motor de Busca de Ruas com Multi-Tier Fallback e Failover Seguro
- * Ordem de Execução:
- *   TIER 1: ViaCEP Oficial (Correios Bragança Paulista)
- *   TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search)
- *   TIER 3: Nominatim OpenStreetMap (Busca Estruturada)
- *   TIER 4: Catálogo de 90+ Bairros de Bragança no MongoDB
- *   TIER 5 (FAILOVER): Google Places / Geocoding API (ACIONADO SOMENTE SE NENHUMA ANTERIOR ENCONTRAR RESULTADOS)
+ * 2. Motor de Busca de Ruas com Multi-Tier Fallback e Failover Inteligente
  */
 export const searchStreetAddress = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
@@ -174,6 +200,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<LocationResult[]> => {
     const cleanQuery = data.query.trim();
+    const queryWords = getSignificantWords(cleanQuery);
     const results: LocationResult[] = [];
     const seen = new Set<string>();
 
@@ -190,12 +217,15 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     try {
       const viacepUrl = `https://viacep.com.br/ws/SP/Braganca%20Paulista/${encodeURIComponent(cleanQuery)}/json/`;
-      const res = await fetch(viacepUrl, { signal: AbortSignal.timeout(2800) });
+      const res = await fetch(viacepUrl, {
+        headers: COMMON_HEADERS,
+        signal: AbortSignal.timeout(2800),
+      });
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list)) {
           for (const item of list.slice(0, 8)) {
-            if (item.logradouro) {
+            if (item.logradouro && matchesSignificantQuery(item.logradouro, queryWords)) {
               addResult({
                 rua: item.logradouro,
                 numero: "",
@@ -214,11 +244,14 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     }
 
     // =========================================================================
-    // TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search com tolerância a digitação)
+    // TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search Filtrada por Relevância)
     // =========================================================================
     try {
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(cleanQuery + " Bragança Paulista")}&lat=-22.952&lon=-46.542&limit=8`;
-      const res = await fetch(photonUrl, { signal: AbortSignal.timeout(2800) });
+      const res = await fetch(photonUrl, {
+        headers: COMMON_HEADERS,
+        signal: AbortSignal.timeout(2800),
+      });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json?.features)) {
@@ -227,7 +260,8 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
             const rua = props.street || props.name || "";
             const bairro = props.district || props.locality || props.suburb || "Bragança Paulista";
             const cidade = props.city || "Bragança Paulista";
-            if (rua && (cidade.toLowerCase().includes("bragan") || props.state?.includes("SP"))) {
+
+            if (rua && matchesSignificantQuery(rua, queryWords) && (cidade.toLowerCase().includes("bragan") || props.state?.includes("SP"))) {
               const rawCep = (props.postcode || "").replace(/\D/g, "");
               const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
               addResult({
@@ -254,7 +288,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       try {
         const osmUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&format=json&addressdetails=1&limit=8&countrycodes=br`;
         const res = await fetch(osmUrl, {
-          headers: NOMINATIM_HEADERS,
+          headers: COMMON_HEADERS,
           signal: AbortSignal.timeout(3000),
         });
 
@@ -268,7 +302,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
               const rawCep = (addr.postcode || "").replace(/\D/g, "");
               const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
 
-              if (rua) {
+              if (rua && matchesSignificantQuery(rua, queryWords)) {
                 addResult({
                   rua,
                   numero: addr.house_number || "",
@@ -290,36 +324,38 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     // TIER 4: Catálogo de 90+ Bairros de Bragança Paulista no MongoDB
     // =========================================================================
-    try {
-      const { getDb } = await import("./db");
-      const db = await getDb();
-      const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "default_config" as any });
-      const neighborhoods: Array<{ name: string; fee: number }> = settingsDoc?.neighborhoods || [];
+    if (results.length === 0) {
+      try {
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "default_config" as any });
+        const neighborhoods: Array<{ name: string; fee: number }> = settingsDoc?.neighborhoods || [];
 
-      const queryClean = cleanString(cleanQuery);
-      const matchedNeighborhoods = neighborhoods.filter((n) => {
-        const nClean = cleanString(n.name);
-        return nClean.includes(queryClean) || queryClean.includes(nClean);
-      });
-
-      for (const n of matchedNeighborhoods.slice(0, 3)) {
-        addResult({
-          rua: `Bairro ${n.name}`,
-          numero: "",
-          bairro: n.name,
-          cidade: "Bragança Paulista",
-          uf: "SP",
-          cep: "12900-000",
-          formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`,
+        const queryClean = cleanString(cleanQuery);
+        const matchedNeighborhoods = neighborhoods.filter((n) => {
+          const nClean = cleanString(n.name);
+          return nClean.includes(queryClean) || queryClean.includes(nClean);
         });
+
+        for (const n of matchedNeighborhoods.slice(0, 3)) {
+          addResult({
+            rua: `Bairro ${n.name}`,
+            numero: "",
+            bairro: n.name,
+            cidade: "Bragança Paulista",
+            uf: "SP",
+            cep: "12900-000",
+            formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`,
+          });
+        }
+      } catch (err) {
+        console.warn("[MongoDB Neighborhood Catalog Search Warning]:", err);
       }
-    } catch (err) {
-      console.warn("[MongoDB Neighborhood Catalog Search Warning]:", err);
     }
 
     // =========================================================================
     // TIER 5 (FAILOVER SEGURO): Google Places / Geocoding API
-    // ⚠️ REGRA CRÍTICA: ACIONADA SOMENTE SE NENHUMA DAS 4 CAMADAS ANTERIORES ENCONTRAR RESULTADOS!
+    // ⚠️ Executa se as camadas gratuitas não encontrarem resultados precisos
     // =========================================================================
     if (results.length === 0) {
       try {
@@ -327,9 +363,15 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
         const settings = await getSystemSettings();
         const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
         if (apiKey) {
-          console.log(`[Google Maps Failover] Nenhuma API gratuita encontrou "${cleanQuery}". Acionando Google Geocoding API...`);
+          console.log(`[Google Maps Failover] Acionando Google Places / Geocoding API para "${cleanQuery}"...`);
+          
+          // Estratégia A: Google Geocoding API
           const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&key=${apiKey}&language=pt-BR&region=br`;
-          const res = await fetch(googleUrl, { signal: AbortSignal.timeout(3500) });
+          const res = await fetch(googleUrl, {
+            headers: COMMON_HEADERS,
+            signal: AbortSignal.timeout(3500),
+          });
+
           if (res.ok) {
             const dataGoogle = await res.json();
             if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results)) {
@@ -373,7 +415,8 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
                   });
                 }
               }
-              console.log(`[Google Maps Failover] Retornou ${results.length} resultado(s) com sucesso.`);
+            } else if (dataGoogle.status !== "OK") {
+              console.warn("[Google Maps API Status Warning]:", dataGoogle.status, dataGoogle.error_message);
             }
           }
         }
