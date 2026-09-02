@@ -1101,7 +1101,7 @@ function CartDrawer({
       } finally {
         setStreetSearching(false);
       }
-    }, 350);
+    }, 550);
   };
 
   const handleSelectSuggestion = (loc: LocationResult) => {

@@ -20,6 +20,11 @@ const COMMON_HEADERS = {
 
 const STOP_WORDS = new Set(["rua", "r", "av", "avenida", "alameda", "pca", "praca", "travessa", "estrada", "bairro", "de", "da", "do", "das", "dos", "e"]);
 
+// Cache em memória RAM de ultra-alta velocidade (sub-milissegundo)
+const memoryCache = new Map<string, { data: LocationResult[]; timestamp: number }>();
+const gpsMemoryCache = new Map<string, { data: LocationResult | null; timestamp: number }>();
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
+
 function getSignificantWords(text: string): string[] {
   return cleanString(text)
     .split(" ")
@@ -30,7 +35,6 @@ function matchesSignificantQuery(streetName: string, queryWords: string[]): bool
   if (queryWords.length === 0) return true;
   const cleanStreet = cleanString(streetName);
   
-  // Se o usuário digitou palavras raras (ex: "avani"), pelo menos a primeira palavra significativa deve bater
   const firstSignificant = queryWords[0];
   if (firstSignificant && firstSignificant.length >= 3) {
     if (!cleanStreet.includes(firstSignificant)) {
@@ -38,14 +42,13 @@ function matchesSignificantQuery(streetName: string, queryWords: string[]): bool
     }
   }
 
-  // Pelo menos metade das palavras significativas digitadas devem estar presentes
   const matchCount = queryWords.filter((w) => cleanStreet.includes(w)).length;
   return matchCount >= Math.ceil(queryWords.length / 2);
 }
 
 /**
- * 1. Geocodificação Reversa via GPS com Fallback Multicamadas
- * (Nominatim OSM ➔ Photon Komoot ➔ Google Maps Reverse Geocoding)
+ * 1. Geocodificação Reversa via GPS com Fallback Multicamadas e Cache
+ * (Cache em Memória/MongoDB ➔ Nominatim OSM ➔ Photon Komoot ➔ Google Maps Reverse Geocoding)
  */
 export const reverseGeocodeGPS = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
@@ -55,7 +58,33 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data }): Promise<LocationResult | null> => {
-    // 1. Tentativa Primária Gratuita: Nominatim OpenStreetMap
+    // Chave de cache por aproximação de ~50 metros (3 casas decimais)
+    const latRounded = data.lat.toFixed(3);
+    const lonRounded = data.lon.toFixed(3);
+    const gpsCacheKey = `gps_${latRounded}_${lonRounded}`;
+
+    // 1. Checa Cache em Memória
+    const memCached = gpsMemoryCache.get(gpsCacheKey);
+    if (memCached && Date.now() - memCached.timestamp < CACHE_TTL_MS && memCached.data) {
+      return memCached.data;
+    }
+
+    // 2. Checa Cache no MongoDB
+    try {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      const cachedDoc = await db.collection("address_cache").findOne({ _id: gpsCacheKey as any });
+      if (cachedDoc && cachedDoc.data) {
+        gpsMemoryCache.set(gpsCacheKey, { data: cachedDoc.data, timestamp: Date.now() });
+        return cachedDoc.data;
+      }
+    } catch (e) {
+      console.warn("[GPS Cache Read Warning]:", e);
+    }
+
+    let result: LocationResult | null = null;
+
+    // 3. Tentativa Primária Gratuita: Nominatim OpenStreetMap
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lon}&format=json&addressdetails=1`;
       const res = await fetch(url, {
@@ -76,7 +105,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
           const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : (rawCep || "12900-000");
 
           if (rua || bairro) {
-            return {
+            result = {
               rua,
               numero,
               bairro,
@@ -92,114 +121,155 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       console.warn("[reverseGeocodeGPS Nominatim Warning]:", err);
     }
 
-    // 2. Fallback Secundário Gratuito: Photon Komoot Reverse
-    try {
-      const photonUrl = `https://photon.komoot.io/reverse?lat=${data.lat}&lon=${data.lon}`;
-      const res = await fetch(photonUrl, {
-        headers: COMMON_HEADERS,
-        signal: AbortSignal.timeout(3000),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const feature = json?.features?.[0];
-        if (feature && feature.properties) {
-          const props = feature.properties;
-          const rua = props.street || props.name || "";
-          const numero = props.housenumber || "";
-          const bairro = props.district || props.locality || props.suburb || "";
-          const cidade = props.city || "Bragança Paulista";
-          const uf = props.state || "SP";
-          const rawCep = (props.postcode || "").replace(/\D/g, "");
-          const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
-
-          return {
-            rua,
-            numero,
-            bairro,
-            cidade,
-            uf,
-            cep: formattedCep,
-            formattedAddress: `${rua}, ${bairro} - ${cidade}`,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn("[reverseGeocodeGPS Photon Warning]:", err);
-    }
-
-    // 3. FAILOVER FINAL: Google Maps Reverse Geocoding
-    try {
-      const { getSystemSettings } = await import("./settings.server");
-      const settings = await getSystemSettings();
-      const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
-      if (apiKey) {
-        console.log("[reverseGeocodeGPS] Acionando Google Maps Geocoding Failover...");
-        const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${data.lat},${data.lon}&key=${apiKey}&language=pt-BR&region=br`;
-        const res = await fetch(googleUrl, {
+    // 4. Fallback Secundário Gratuito: Photon Komoot Reverse
+    if (!result) {
+      try {
+        const photonUrl = `https://photon.komoot.io/reverse?lat=${data.lat}&lon=${data.lon}`;
+        const res = await fetch(photonUrl, {
           headers: COMMON_HEADERS,
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(3000),
         });
         if (res.ok) {
-          const dataGoogle = await res.json();
-          if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results) && dataGoogle.results.length > 0) {
-            const r = dataGoogle.results[0];
-            let rua = "";
-            let numero = "";
-            let bairro = "";
-            let cidade = "Bragança Paulista";
-            let uf = "SP";
-            let cep = "12900-000";
+          const json = await res.json();
+          const feature = json?.features?.[0];
+          if (feature && feature.properties) {
+            const props = feature.properties;
+            const rua = props.street || props.name || "";
+            const numero = props.housenumber || "";
+            const bairro = props.district || props.locality || props.suburb || "";
+            const cidade = props.city || "Bragança Paulista";
+            const uf = props.state || "SP";
+            const rawCep = (props.postcode || "").replace(/\D/g, "");
+            const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
 
-            for (const comp of r.address_components || []) {
-              const types: string[] = comp.types || [];
-              if (types.includes("route")) {
-                rua = comp.long_name;
-              } else if (types.includes("street_number")) {
-                numero = comp.long_name;
-              } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
-                bairro = comp.long_name;
-              } else if (types.includes("administrative_area_level_2")) {
-                cidade = comp.long_name;
-              } else if (types.includes("administrative_area_level_1")) {
-                uf = comp.short_name || comp.long_name || "SP";
-              } else if (types.includes("postal_code")) {
-                const raw = (comp.long_name || "").replace(/\D/g, "");
-                if (raw.length === 8) {
-                  cep = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`;
-                }
-              }
-            }
-
-            return {
-              rua: rua || r.formatted_address.split(",")[0] || "",
+            result = {
+              rua,
               numero,
-              bairro: bairro || "Centro",
+              bairro,
               cidade,
               uf,
-              cep,
-              formattedAddress: r.formatted_address,
+              cep: formattedCep,
+              formattedAddress: `${rua}, ${bairro} - ${cidade}`,
             };
           }
         }
+      } catch (err) {
+        console.warn("[reverseGeocodeGPS Photon Warning]:", err);
       }
-    } catch (err) {
-      console.error("[reverseGeocodeGPS Google Maps Failover Error]:", err);
     }
 
-    return null;
+    // 5. FAILOVER FINAL: Google Maps Reverse Geocoding
+    if (!result) {
+      try {
+        const { getSystemSettings } = await import("./settings.server");
+        const settings = await getSystemSettings();
+        const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
+        if (apiKey) {
+          console.log("[reverseGeocodeGPS] Acionando Google Maps Geocoding Failover...");
+          const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${data.lat},${data.lon}&key=${apiKey}&language=pt-BR&region=br`;
+          const res = await fetch(googleUrl, {
+            headers: COMMON_HEADERS,
+            signal: AbortSignal.timeout(3500),
+          });
+          if (res.ok) {
+            const dataGoogle = await res.json();
+            if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results) && dataGoogle.results.length > 0) {
+              const r = dataGoogle.results[0];
+              let rua = "";
+              let numero = "";
+              let bairro = "";
+              let cidade = "Bragança Paulista";
+              let uf = "SP";
+              let cep = "12900-000";
+
+              for (const comp of r.address_components || []) {
+                const types: string[] = comp.types || [];
+                if (types.includes("route")) {
+                  rua = comp.long_name;
+                } else if (types.includes("street_number")) {
+                  numero = comp.long_name;
+                } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
+                  bairro = comp.long_name;
+                } else if (types.includes("administrative_area_level_2")) {
+                  cidade = comp.long_name;
+                } else if (types.includes("administrative_area_level_1")) {
+                  uf = comp.short_name || comp.long_name || "SP";
+                } else if (types.includes("postal_code")) {
+                  const raw = (comp.long_name || "").replace(/\D/g, "");
+                  if (raw.length === 8) {
+                    cep = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`;
+                  }
+                }
+              }
+
+              result = {
+                rua: rua || r.formatted_address.split(",")[0] || "",
+                numero,
+                bairro: bairro || "Centro",
+                cidade,
+                uf,
+                cep,
+                formattedAddress: r.formatted_address,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[reverseGeocodeGPS Google Maps Failover Error]:", err);
+      }
+    }
+
+    // Grava no Cache em Memória e MongoDB se obteve resultado
+    if (result) {
+      gpsMemoryCache.set(gpsCacheKey, { data: result, timestamp: Date.now() });
+      try {
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        await db.collection("address_cache").updateOne(
+          { _id: gpsCacheKey as any },
+          { $set: { data: result, updated_at: new Date() } },
+          { upsert: true }
+        );
+      } catch (e) {
+        console.warn("[GPS Cache Save Warning]:", e);
+      }
+    }
+
+    return result;
   });
 
 /**
- * 2. Motor de Busca de Ruas com Multi-Tier Fallback e Failover Inteligente
+ * 2. Motor de Busca de Ruas com Cache Inteligente e Failover Protegido
  */
 export const searchStreetAddress = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) =>
     z.object({
-      query: z.string().trim().min(2),
+      query: z.string().trim().min(3),
     }).parse(raw)
   )
   .handler(async ({ data }): Promise<LocationResult[]> => {
     const cleanQuery = data.query.trim();
+    const cacheKey = `search_${cleanString(cleanQuery)}`;
+
+    // 1. Checa Cache em Memória RAM (instantâneo < 1ms)
+    const memCached = memoryCache.get(cacheKey);
+    if (memCached && Date.now() - memCached.timestamp < CACHE_TTL_MS && memCached.data.length > 0) {
+      return memCached.data;
+    }
+
+    // 2. Checa Cache Persistente no MongoDB (instantâneo < 2ms)
+    try {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      const cachedDoc = await db.collection("address_cache").findOne({ _id: cacheKey as any });
+      if (cachedDoc && Array.isArray(cachedDoc.results) && cachedDoc.results.length > 0) {
+        memoryCache.set(cacheKey, { data: cachedDoc.results, timestamp: Date.now() });
+        return cachedDoc.results;
+      }
+    } catch (e) {
+      console.warn("[Address Cache Read Warning]:", e);
+    }
+
     const queryWords = getSignificantWords(cleanQuery);
     const results: LocationResult[] = [];
     const seen = new Set<string>();
@@ -244,7 +314,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     }
 
     // =========================================================================
-    // TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search Filtrada por Relevância)
+    // TIER 2: Photon Komoot OpenStreetMap (Fuzzy Search com Relevância)
     // =========================================================================
     try {
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(cleanQuery + " Bragança Paulista")}&lat=-22.952&lon=-46.542&limit=8`;
@@ -355,17 +425,16 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
 
     // =========================================================================
     // TIER 5 (FAILOVER SEGURO): Google Places / Geocoding API
-    // ⚠️ Executa se as camadas gratuitas não encontrarem resultados precisos
+    // ⚠️ REGRA CRÍTICA: Executa SOMENTE se as camadas anteriores falharem E tamanho >= 4
     // =========================================================================
-    if (results.length === 0) {
+    if (results.length === 0 && cleanQuery.length >= 4) {
       try {
         const { getSystemSettings } = await import("./settings.server");
         const settings = await getSystemSettings();
         const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
         if (apiKey) {
-          console.log(`[Google Maps Failover] Acionando Google Places / Geocoding API para "${cleanQuery}"...`);
+          console.log(`[Google Maps Failover] Acionando Google Geocoding API para "${cleanQuery}"...`);
           
-          // Estratégia A: Google Geocoding API
           const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&key=${apiKey}&language=pt-BR&region=br`;
           const res = await fetch(googleUrl, {
             headers: COMMON_HEADERS,
@@ -422,6 +491,22 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
         }
       } catch (err) {
         console.error("[Google Maps Geocoding Failover Error]:", err);
+      }
+    }
+
+    // 💾 Salva os resultados no Cache em Memória e no MongoDB para economia futura
+    if (results.length > 0) {
+      memoryCache.set(cacheKey, { data: results, timestamp: Date.now() });
+      try {
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        await db.collection("address_cache").updateOne(
+          { _id: cacheKey as any },
+          { $set: { results, query: cleanQuery, updated_at: new Date() } },
+          { upsert: true }
+        );
+      } catch (e) {
+        console.warn("[Address Cache Save Warning]:", e);
       }
     }
 
