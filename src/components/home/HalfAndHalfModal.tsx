@@ -25,16 +25,18 @@ export function HalfAndHalfModal({
     );
   }, [allPizzas]);
 
-  const defaultFirstFlavor = initialFlavor1 || (eligiblePizzas.length > 0 ? eligiblePizzas[0] : null);
-
-  const [flavor1, setFlavor1] = useState<Pizza | null>(defaultFirstFlavor);
+  // Começa totalmente limpo sem nenhum sabor pré-definido (a menos que explicitamente passado)
+  const [flavor1, setFlavor1] = useState<Pizza | null>(initialFlavor1 || null);
   const [flavor2, setFlavor2] = useState<Pizza | null>(null);
-  const [activeSlot, setActiveSlot] = useState<1 | 2>(defaultFirstFlavor ? 2 : 1);
+  const [activeSlot, setActiveSlot] = useState<1 | 2>(initialFlavor1 ? 2 : 1);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCrust, setSelectedCrust] = useState<CrustOption>(CRUST_OPTIONS[0]);
   const [notes1, setNotes1] = useState("");
   const [notes2, setNotes2] = useState("");
   const [qty, setQty] = useState(1);
+
+  // Imagem de fallback caso ainda não tenha sabor selecionado
+  const defaultPlaceholderImg = eligiblePizzas[0]?.image || "/placeholder.svg";
 
   // Lista de sabores filtrada para a metade ativa
   const filteredFlavors = useMemo(() => {
@@ -58,9 +60,11 @@ export function HalfAndHalfModal({
       ? Math.max(flavor1.price, flavor2.price)
       : flavor1
       ? flavor1.price
+      : flavor2
+      ? flavor2.price
       : 0;
 
-  const unitPrice = basePizzaPrice + selectedCrust.price;
+  const unitPrice = basePizzaPrice + (basePizzaPrice > 0 ? selectedCrust.price : 0);
   const totalPrice = unitPrice * qty;
 
   const handleSelectFlavor = (p: Pizza) => {
@@ -116,24 +120,38 @@ export function HalfAndHalfModal({
       {/* Container Responsivo: Bottom Sheet no Mobile / Dialog no Desktop */}
       <div className="relative flex flex-col w-full max-w-lg max-h-[94vh] sm:max-h-[88vh] rounded-t-3xl sm:rounded-3xl border border-gold/40 bg-card shadow-2xl overflow-hidden text-foreground">
         
-        {/* Header Visual */}
+        {/* Header Visual Dividido */}
         <div className="relative flex-none h-32 sm:h-36 w-full overflow-hidden bg-secondary">
           <div className="flex h-full w-full">
             <div className="w-1/2 h-full overflow-hidden relative">
               <img
-                src={flavor1 ? flavor1.image : "/placeholder.svg"}
+                src={flavor1 ? flavor1.image : defaultPlaceholderImg}
                 alt={flavor1?.name || "Metade 1"}
-                className="w-full h-full object-cover brightness-75"
+                className={`w-full h-full object-cover transition-all duration-300 ${
+                  flavor1 ? "brightness-90" : "brightness-40 grayscale opacity-60"
+                }`}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+              {!flavor1 && (
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white/70 uppercase tracking-wider">
+                  Metade 1
+                </div>
+              )}
             </div>
-            <div className="w-1/2 h-full overflow-hidden relative border-l border-gold/30">
+            <div className="w-1/2 h-full overflow-hidden relative border-l border-gold/40">
               <img
-                src={flavor2 ? flavor2.image : flavor1 ? flavor1.image : "/placeholder.svg"}
+                src={flavor2 ? flavor2.image : defaultPlaceholderImg}
                 alt={flavor2?.name || "Metade 2"}
-                className="w-full h-full object-cover brightness-75"
+                className={`w-full h-full object-cover transition-all duration-300 ${
+                  flavor2 ? "brightness-90" : "brightness-40 grayscale opacity-60"
+                }`}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+              {!flavor2 && (
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white/70 uppercase tracking-wider">
+                  Metade 2
+                </div>
+              )}
             </div>
           </div>
 
@@ -151,7 +169,7 @@ export function HalfAndHalfModal({
           <div className="absolute bottom-2.5 left-4 right-4">
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-gold px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold-foreground flex items-center gap-1">
-                <Sparkles className="h-3 w-3" /> 2 Sabores (Meio a Meio)
+                <Sparkles className="h-3 w-3 fill-gold-foreground" /> 2 Sabores (Meio a Meio)
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground">
                 Regra do Maior Valor
@@ -161,8 +179,10 @@ export function HalfAndHalfModal({
               {flavor1 && flavor2
                 ? `${flavor1.name} / ${flavor2.name}`
                 : flavor1
-                ? `${flavor1.name} / Escolhendo 2ª metade...`
-                : "Monte sua Pizza 2 Sabores"}
+                ? `${flavor1.name} / (Escolha a 2ª metade)`
+                : flavor2
+                ? `(Escolha a 1ª metade) / ${flavor2.name}`
+                : "Monte sua Pizza com 2 Sabores"}
             </h2>
           </div>
         </div>
@@ -174,7 +194,7 @@ export function HalfAndHalfModal({
           <div
             className={`rounded-2xl border p-3.5 space-y-2.5 transition ${
               activeSlot === 1
-                ? "border-gold bg-gold/10 shadow-sm"
+                ? "border-gold bg-gold/10 shadow-sm ring-1 ring-gold/40"
                 : flavor1
                 ? "border-border bg-secondary/20"
                 : "border-dashed border-gold/50 bg-secondary/10"
@@ -206,7 +226,13 @@ export function HalfAndHalfModal({
                       : "border border-gold/40 text-gold hover:bg-gold/20"
                   }`}
                 >
-                  <RefreshCw className="h-3 w-3" /> Trocar
+                  {flavor1 ? (
+                    <>
+                      <RefreshCw className="h-3 w-3" /> Trocar
+                    </>
+                  ) : (
+                    "+ Escolher"
+                  )}
                 </button>
               </div>
             </div>
@@ -230,7 +256,7 @@ export function HalfAndHalfModal({
           <div
             className={`rounded-2xl border p-3.5 space-y-2.5 transition ${
               activeSlot === 2
-                ? "border-gold bg-gold/10 shadow-sm"
+                ? "border-gold bg-gold/10 shadow-sm ring-1 ring-gold/40"
                 : flavor2
                 ? "border-border bg-secondary/20"
                 : "border-dashed border-gold/50 bg-secondary/10"
@@ -253,6 +279,9 @@ export function HalfAndHalfModal({
                       ? `+${formatBRL(flavor2.price - flavor1.price)}`
                       : "Sem acréscimo"}
                   </span>
+                )}
+                {!flavor1 && flavor2 && (
+                  <span className="text-xs font-semibold text-muted-foreground">{formatBRL(flavor2.price)}</span>
                 )}
 
                 <button
@@ -298,7 +327,7 @@ export function HalfAndHalfModal({
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5" />
-                Selecione para: <span className="underline">Metade {activeSlot}</span>
+                Selecione para: <span className="underline font-black">Metade {activeSlot}</span>
               </span>
               <span className="text-[11px] text-muted-foreground">
                 {filteredFlavors.length} opções disponíveis
@@ -448,9 +477,9 @@ export function HalfAndHalfModal({
           >
             <span>
               {!flavor1
-                ? "Escolha a 1ª Metade"
+                ? "1. Escolha a 1ª Metade"
                 : !flavor2
-                ? "Escolha a 2ª Metade"
+                ? "2. Escolha a 2ª Metade"
                 : "Adicionar ao Pedido"}
             </span>
             <span className="font-serif font-bold text-sm sm:text-base">
