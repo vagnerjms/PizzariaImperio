@@ -468,8 +468,12 @@ export const getOrderStatus = createServerFn({ method: "GET" })
     if (!order) return null;
     return {
       id: order._id,
+      customer_name: order.customer_name,
       total: order.total,
+      payment_method: order.payment_method,
+      status: order.status,
       payment_status: order.payment_status,
       payment_details: order.payment_details,
+      created_at: order.created_at?.toISOString ? order.created_at.toISOString() : order.created_at,
     };
   });

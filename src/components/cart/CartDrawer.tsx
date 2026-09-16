@@ -133,6 +133,30 @@ export function CartDrawer({
     }
   }, [success]);
 
+  // Polling em tempo real para sincronizar o status do pedido (Pix/Cartão e etapas na cozinha)
+  useEffect(() => {
+    if (!success?.id) return;
+    if (
+      success.payment_status === "failed" ||
+      success.status === "entregue" ||
+      success.status === "cancelado"
+    ) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      checkStatus({ data: success.id })
+        .then((updated) => {
+          if (updated) {
+            setSuccess((prev: any) => ({ ...prev, ...updated }));
+          }
+        })
+        .catch((err) => console.error("Erro ao verificar status do pedido:", err));
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [success?.id, success?.payment_status, success?.status, checkStatus]);
+
   const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
   const discount = appliedPromotion?.discountAmount || 0;
   const deliveryFee = form.deliveryFee || 0;
