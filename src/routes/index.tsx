@@ -262,6 +262,17 @@ export const CATEGORIES = [
   { id: "adicionais", label: "Adicionais" },
 ] as const;
 
+export const CATEGORY_ICONS: Record<string, string> = {
+  todas: "🍕",
+  tradicionais: "🍕",
+  especiais: "⭐",
+  doces: "🍫",
+  "doces-especiais": "🍰",
+  brotos: "🍕",
+  bebidas: "🥤",
+  adicionais: "🍟",
+};
+
 export const MENU_BY_ID = Object.fromEntries(MENU.map((p) => [p.id, p]));
 
 export interface CrustOption {
@@ -532,7 +543,7 @@ function Home() {
         </>
       )}
 
-      {/* Modal de Personalização e Meio a Meio */}
+      {/* Modal de Personalização e Meio a Meio (Bottom Sheet no Mobile, Dialog no Desktop) */}
       {customizingPizza && (
         <PizzaCustomizerModal
           pizza={customizingPizza}
@@ -558,7 +569,7 @@ function Home() {
 }
 
 /**
- * Modal Elegante de Personalização da Pizza com Meio a Meio e Bordas
+ * Modal Elegante de Personalização com Estilo Bottom Sheet no Mobile e Dialog no Desktop
  */
 function PizzaCustomizerModal({
   pizza,
@@ -578,6 +589,7 @@ function PizzaCustomizerModal({
   const [notes1, setNotes1] = useState("");
   const [notes2, setNotes2] = useState("");
   const [notesSingle, setNotesSingle] = useState("");
+  const [qty, setQty] = useState(1);
 
   // Sabores elegíveis para o 2º sabor (Pizzas)
   const eligibleSecondFlavors = useMemo(() => {
@@ -605,6 +617,7 @@ function PizzaCustomizerModal({
     : pizza.price;
 
   const unitPrice = basePizzaPrice + selectedCrust.price;
+  const totalPrice = unitPrice * qty;
 
   const handleConfirm = () => {
     const isHalf = mode === "meio" && !!flavor2;
@@ -638,8 +651,8 @@ function PizzaCustomizerModal({
         : undefined,
       crust: selectedCrust,
       unitPrice,
-      quantity: 1,
-      totalPrice: unitPrice,
+      quantity: qty,
+      totalPrice,
     };
 
     onAddCustomized(cartItem);
@@ -648,10 +661,11 @@ function PizzaCustomizerModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
+      {/* Container Responsivo: Bottom Sheet no Mobile / Dialog no Desktop */}
       <div className="relative flex flex-col w-full max-w-lg max-h-[92vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl border border-gold/40 bg-card shadow-2xl overflow-hidden text-foreground">
         
         {/* Header com Imagem e Fechar */}
-        <div className="relative flex-none h-44 sm:h-48 w-full overflow-hidden bg-secondary">
+        <div className="relative flex-none h-40 sm:h-48 w-full overflow-hidden bg-secondary">
           <img
             src={pizza.image}
             alt={pizza.name}
@@ -659,6 +673,9 @@ function PizzaCustomizerModal({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
           
+          {/* Barra superior de arrasto / indicador de Bottom Sheet no Mobile */}
+          <div className="sm:hidden absolute top-2.5 left-1/2 -translate-x-1/2 w-12 h-1.5 rounded-full bg-white/40" />
+
           <button
             type="button"
             onClick={onClose}
@@ -688,7 +705,7 @@ function PizzaCustomizerModal({
           {/* 1. Escolha de Modo: 1 Sabor ou Meio a Meio */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-gold mb-2.5">
-              1. Escolha a Composição da Pizza
+              1. Quantos sabores você deseja?
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -701,8 +718,8 @@ function PizzaCustomizerModal({
                 }`}
               >
                 <span className="text-lg">🍕</span>
-                <span className="text-xs font-semibold">Pizza Inteira</span>
-                <span className="text-[10px] text-muted-foreground/80">Sabor Único</span>
+                <span className="text-xs font-semibold">1 Sabor (Inteira)</span>
+                <span className="text-[10px] text-muted-foreground/80">{formatBRL(pizza.price)}</span>
               </button>
 
               <button
@@ -720,8 +737,8 @@ function PizzaCustomizerModal({
                 }`}
               >
                 <span className="text-lg">🍕🍕</span>
-                <span className="text-xs font-semibold">Meio a Meio</span>
-                <span className="text-[10px] text-muted-foreground/80">2 Sabores</span>
+                <span className="text-xs font-semibold">2 Sabores (Meio a Meio)</span>
+                <span className="text-[10px] text-muted-foreground/80">Regra do Maior Valor</span>
               </button>
             </div>
           </div>
@@ -756,7 +773,7 @@ function PizzaCustomizerModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-gold px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold-foreground">
-                      Metade 1
+                      Metade 1 (50%)
                     </span>
                     <span className="font-serif font-bold text-sm text-foreground">{pizza.name}</span>
                   </div>
@@ -777,7 +794,7 @@ function PizzaCustomizerModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-secondary border border-border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Metade 2
+                      Metade 2 (50%)
                     </span>
                     <span className="font-serif font-bold text-sm text-foreground">
                       {flavor2 ? flavor2.name : "Escolha o 2º sabor"}
@@ -885,23 +902,36 @@ function PizzaCustomizerModal({
           </div>
         </div>
 
-        {/* 4. Sticky Footer com Preço Recalculado */}
-        <div className="flex-none border-t border-border bg-secondary/80 backdrop-blur-md p-4 sm:p-5 flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Valor da Pizza {mode === "meio" && "(Regra do Maior Sabor)"}
-            </span>
-            <span className="font-serif text-2xl font-bold text-gold">
-              {formatBRL(unitPrice)}
-            </span>
+        {/* 4. Sticky Footer com Quantidade e Preço Recalculado */}
+        <div className="flex-none border-t border-border bg-secondary/90 backdrop-blur-md p-4 sm:p-5 flex items-center justify-between gap-3">
+          {/* Seletor de Quantidade */}
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 flex-none shadow-sm">
+            <button
+              type="button"
+              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              disabled={qty <= 1}
+              className="rounded-full p-1 text-foreground transition hover:bg-gold/20 disabled:opacity-30"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="min-w-5 text-center text-xs font-bold">{qty}</span>
+            <button
+              type="button"
+              onClick={() => setQty((q) => Math.min(20, q + 1))}
+              className="rounded-full p-1 text-foreground transition hover:bg-gold/20"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
 
+          {/* Botão de Adicionar com Preço Total */}
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex-1 rounded-full bg-gold px-6 py-3 text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95 flex items-center justify-center gap-2"
+            className="flex-1 rounded-full bg-gold px-4 py-3 text-xs sm:text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95 flex items-center justify-between gap-2"
           >
-            <Plus className="h-4 w-4" /> Adicionar ao Pedido
+            <span>Adicionar ao Pedido</span>
+            <span className="font-serif font-bold text-sm sm:text-base">{formatBRL(totalPrice)}</span>
           </button>
         </div>
       </div>
@@ -963,19 +993,19 @@ function Hero() {
       />
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-background/40 via-background/80 to-background" />
 
-      <div className="mx-auto max-w-7xl px-6 py-28 md:py-36">
+      <div className="mx-auto max-w-7xl px-6 py-24 md:py-36">
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-secondary/80 px-4 py-1.5 text-xs font-semibold tracking-wider text-gold">
             <Flame className="h-3.5 w-3.5 fill-gold" />
             FORNO A LENHA TRADICIONAL
           </div>
 
-          <h1 className="mt-6 font-serif text-5xl font-bold tracking-tight md:text-7xl">
+          <h1 className="mt-6 font-serif text-4xl font-bold tracking-tight sm:text-6xl md:text-7xl leading-tight">
             A verdadeira arte da pizza{" "}
             <span className="italic text-gradient-gold">em sua mesa</span>
           </h1>
 
-          <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
+          <p className="mt-4 sm:mt-6 text-sm sm:text-lg leading-relaxed text-muted-foreground">
             Massa de fermentação lenta de 48 horas, molho artesanal de tomates selecionados e ingredientes da mais alta qualidade. Assadas no calor perfeito do forno a lenha.
           </p>
 
@@ -994,27 +1024,27 @@ function Hero() {
             </a>
           </div>
 
-          <div className="mt-12 grid grid-cols-3 gap-6 border-t border-border/60 pt-8">
+          <div className="mt-12 grid grid-cols-3 gap-4 sm:gap-6 border-t border-border/60 pt-8">
             <div>
-              <div className="flex items-center gap-2 text-gold">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-gold">
                 <Clock className="h-4 w-4" />
-                <span className="font-serif text-xl font-bold">40-50 min</span>
+                <span className="font-serif text-base sm:text-xl font-bold">40-50m</span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Entrega rápida</div>
+              <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground">Entrega rápida</div>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-gold">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-gold">
                 <Truck className="h-4 w-4" />
-                <span className="font-serif text-xl font-bold">Quentinha</span>
+                <span className="font-serif text-base sm:text-xl font-bold">Quentinha</span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Embalagem térmica</div>
+              <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground">Térmica</div>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-gold">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-gold">
                 <Flame className="h-4 w-4 fill-gold" />
-                <span className="font-serif text-xl font-bold">400°C</span>
+                <span className="font-serif text-base sm:text-xl font-bold">400°C</span>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">Forno a lenha</div>
+              <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground">Forno lenha</div>
             </div>
           </div>
         </div>
@@ -1112,53 +1142,196 @@ function Menu({
   onCategory: (id: (typeof CATEGORIES)[number]["id"]) => void;
   onAdd: (id: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredBySearch = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = cleanString(searchQuery);
+    return items.filter(
+      (p) => cleanString(p.name).includes(q) || cleanString(p.ingredients || "").includes(q)
+    );
+  }, [items, searchQuery]);
+
   return (
-    <section id="cardapio" className="border-t border-border/50 bg-background py-24">
-      <div className="mx-auto max-w-7xl px-6">
+    <section id="cardapio" className="border-t border-border/50 bg-background py-16 sm:py-24">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-[0.3em] text-gold">
             <Star className="h-3 w-3 fill-gold" /> NOSSO CARDÁPIO{" "}
             <Star className="h-3 w-3 fill-gold" />
           </div>
-          <h2 className="mt-4 font-serif text-4xl md:text-5xl">
+          <h2 className="mt-3 font-serif text-3xl sm:text-4xl md:text-5xl">
             Feita com tempo,{" "}
             <span className="italic text-gradient-gold">servida com alma</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Tradição desde 2008, sabor em cada fatia.
-          </p>
-          <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
+          <p className="mx-auto mt-2 max-w-2xl text-xs sm:text-sm text-muted-foreground">
             Monte sua pizza com até <strong>2 sabores (Meio a Meio)</strong> e adicione bordas recheadas artesanais.
           </p>
         </div>
 
-        <div className="mt-10 flex flex-wrap justify-center gap-2">
+        {/* 🔍 Barra de Busca Rápida no Cardápio */}
+        <div className="mt-8 max-w-md mx-auto">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar pizza, sabor, bebida..."
+              className="w-full rounded-full border border-border/80 bg-card pl-10 pr-4 py-2.5 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 shadow-sm focus:outline-none focus:ring-2 focus:ring-gold/50 transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 🏷️ Barra de Categorias Deslizante (Sticky Pills no Mobile) */}
+        <div className="mt-6 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto no-scrollbar py-2 -mx-4 px-4 sm:mx-0 sm:px-0">
           {CATEGORIES.map((c) => {
             const active = c.id === category;
+            const icon = CATEGORY_ICONS[c.id] || "🍕";
+
             return (
               <button
                 key={c.id}
                 type="button"
-                onClick={() => onCategory(c.id)}
-                className={`rounded-full px-5 py-2 text-sm font-medium tracking-wide transition ${
+                onClick={() => {
+                  onCategory(c.id);
+                  setSearchQuery("");
+                }}
+                className={`flex-none rounded-full px-4 py-2 text-xs sm:text-sm font-medium tracking-wide transition flex items-center gap-1.5 ${
                   active
-                    ? "bg-gold text-gold-foreground shadow-gold-glow"
-                    : "border border-border bg-secondary/60 text-muted-foreground hover:text-foreground"
+                    ? "bg-gold text-gold-foreground shadow-gold-glow font-bold"
+                    : "border border-border bg-secondary/60 text-muted-foreground hover:text-foreground active:scale-95"
                 }`}
               >
-                {c.label}
+                <span>{icon}</span>
+                <span>{c.label}</span>
               </button>
             );
           })}
         </div>
 
-        <div className="mt-12 grid gap-7 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((p) => (
+        {/* 🍕 Banner Destaque Meio a Meio (Visível no Mobile) */}
+        <div
+          onClick={() => onAdd("calabresa")}
+          className="sm:hidden mt-6 relative overflow-hidden rounded-2xl border border-gold/50 bg-gradient-to-r from-gold/25 via-gold/10 to-card p-4 cursor-pointer shadow-gold-glow active:scale-[0.98] transition"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-gold px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-gold-foreground">
+                <Sparkles className="h-3 w-3" /> Especial
+              </span>
+              <h3 className="mt-1 font-serif text-base font-bold text-foreground">
+                Monte sua Pizza Meio a Meio
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Toque aqui para escolher 2 sabores e montar a sua pizza!
+              </p>
+            </div>
+            <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gold text-gold-foreground shadow-md">
+              <ChevronRight className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* 💻 Visualização Desktop (Grade com Fotos em Alta Resolução) */}
+        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-7 mt-10">
+          {filteredBySearch.map((p) => (
             <PizzaCard key={p.id} pizza={p} onAdd={() => onAdd(p.id)} />
           ))}
         </div>
+
+        {/* 📱 Visualização Mobile Compacta (Lista Horizontal Estilo 99Food / iFood) */}
+        <div className="block sm:hidden space-y-3 mt-6">
+          {filteredBySearch.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              Nenhum sabor encontrado para "{searchQuery}".
+            </div>
+          ) : (
+            filteredBySearch.map((p) => (
+              <MobilePizzaCard key={p.id} pizza={p} onAdd={() => onAdd(p.id)} />
+            ))
+          )}
+        </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Card Horizontal Compacto Estilo 99Food / iFood para Dispositivos Móveis
+ */
+function MobilePizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void }) {
+  const isCustomizable =
+    pizza.category === "tradicionais" ||
+    pizza.category === "especiais" ||
+    pizza.category === "doces" ||
+    pizza.category === "doces-especiais";
+
+  return (
+    <article
+      onClick={onAdd}
+      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-border/70 bg-card active:scale-[0.98] transition-transform duration-150 shadow-sm hover:border-gold/50 cursor-pointer"
+    >
+      {/* Informações da Pizza à Esquerda */}
+      <div className="flex flex-1 flex-col justify-between min-w-0 pr-1">
+        <div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h3 className="font-serif text-base font-bold text-foreground leading-tight truncate">
+              {pizza.name}
+            </h3>
+            {pizza.badge && (
+              <span className="rounded-full bg-gold/15 border border-gold/30 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-gold">
+                {pizza.badge}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground line-clamp-2 leading-snug">
+            {pizza.ingredients || pizza.desc}
+          </p>
+        </div>
+
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="font-serif text-base font-bold text-gold">
+            {formatBRL(pizza.price)}
+          </span>
+          {isCustomizable && (
+            <span className="text-[10px] text-muted-foreground/80 bg-secondary/80 px-1.5 py-0.5 rounded border border-border/60">
+              Meio a Meio
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Foto Quadrada Compacta 80x80px & Botão à Direita */}
+      <div className="relative flex-none w-20 h-20 rounded-xl overflow-hidden bg-secondary border border-border/50">
+        <img
+          src={pizza.image}
+          alt={pizza.name}
+          loading="lazy"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black/10" />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd();
+          }}
+          className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-gold text-gold-foreground shadow-md transition hover:scale-110 active:scale-90"
+        >
+          <Plus className="h-3.5 w-3.5 stroke-[3]" />
+        </button>
+      </div>
+    </article>
   );
 }
 
