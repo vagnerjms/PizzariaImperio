@@ -2,7 +2,7 @@ import { Plus } from "lucide-react";
 import { Pizza, formatBRL } from "@/data/catalog";
 
 export function PizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void }) {
-  const isCustomizable =
+  const isPizza =
     pizza.category === "tradicionais" ||
     pizza.category === "especiais" ||
     pizza.category === "doces" ||
@@ -41,9 +41,9 @@ export function PizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void })
       <div className="flex flex-1 flex-col p-6">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-serif text-2xl">{pizza.name}</h3>
-          {isCustomizable && (
-            <span className="text-[10px] uppercase font-bold text-gold bg-gold/10 px-2 py-0.5 rounded border border-gold/30">
-              Meio a Meio
+          {isPizza && (
+            <span className="text-[10px] uppercase font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded border border-border/60">
+              1 Sabor
             </span>
           )}
         </div>
@@ -57,9 +57,9 @@ export function PizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void })
         <button
           type="button"
           onClick={onAdd}
-          className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-gold/50 bg-gold/10 px-5 py-2.5 text-sm font-semibold text-gold transition hover:bg-gold hover:text-gold-foreground"
+          className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-gold/50 bg-gold/10 px-5 py-2.5 text-sm font-semibold text-gold transition hover:bg-gold hover:text-gold-foreground active:scale-95"
         >
-          <Plus className="h-4 w-4" /> {isCustomizable ? "Montar Pizza / Pedir" : "Adicionar ao Pedido"}
+          <Plus className="h-4 w-4" /> {isPizza ? "Pedir Pizza Inteira" : "Adicionar ao Pedido"}
         </button>
       </div>
     </article>

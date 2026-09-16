@@ -9,7 +9,8 @@ import { Header } from "@/components/home/Header";
 import { Hero } from "@/components/home/Hero";
 import { Promocoes } from "@/components/home/Promocoes";
 import { Menu } from "@/components/home/Menu";
-import { PizzaCustomizerModal } from "@/components/home/PizzaCustomizerModal";
+import { SinglePizzaModal } from "@/components/home/SinglePizzaModal";
+import { HalfAndHalfModal } from "@/components/home/HalfAndHalfModal";
 import { Story } from "@/components/home/Story";
 import { Contact } from "@/components/home/Contact";
 import { Footer } from "@/components/home/Footer";
@@ -49,7 +50,11 @@ export const Route = createFileRoute("/")({
 function Home() {
   const loaderData = Route.useLoaderData();
   const [cat, setCat] = useState<(typeof CATEGORIES)[number]["id"]>("todas");
-  const [customizingPizza, setCustomizingPizza] = useState<Pizza | null>(null);
+
+  // Estado independente para os modais de 1 Sabor e Meio a Meio
+  const [singlePizzaModal, setSinglePizzaModal] = useState<Pizza | null>(null);
+  const [halfAndHalfModalOpen, setHalfAndHalfModalOpen] = useState(false);
+  const [halfAndHalfInitialFlavor, setHalfAndHalfInitialFlavor] = useState<Pizza | null>(null);
 
   const fetchPromotions = useServerFn(getPublicPromotions);
   const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
@@ -85,9 +90,8 @@ function Home() {
     [cat],
   );
 
-  // Clique no cardápio: Abre modal para pizzas grandes ou adiciona direto brotos/bebidas
-  const handleMenuItemClick = (pizzaId: string) => {
-    const p = MENU_BY_ID[pizzaId];
+  // 1. Clique em Pizza Individual (1 Sabor Inteira ou Bebida)
+  const handleAddSingle = (p: Pizza) => {
     if (!p) return;
 
     if (
@@ -96,10 +100,11 @@ function Home() {
       p.category === "doces" ||
       p.category === "doces-especiais"
     ) {
-      setCustomizingPizza(p);
+      setSinglePizzaModal(p);
       return;
     }
 
+    // Bebidas ou outros itens simples
     const simpleItem: CartItem = {
       id: `${p.id}_${Date.now()}`,
       pizzaId: p.id,
@@ -120,16 +125,29 @@ function Home() {
     handleAddCustomizedToCart(simpleItem);
   };
 
+  // 2. Clique no Card/Banner de 2 Sabores (Meio a Meio)
+  const handleOpenHalfAndHalf = (initialFlavor?: Pizza) => {
+    setHalfAndHalfInitialFlavor(initialFlavor || null);
+    setHalfAndHalfModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header cartCount={cartCount} pulse={justAdded} onOpenCart={handleOpenCart} />
       <Hero />
-      <Promocoes promotions={promotions} onAdd={handleMenuItemClick} />
+      <Promocoes
+        promotions={promotions}
+        onAdd={(pizzaId) => {
+          const p = MENU_BY_ID[pizzaId];
+          if (p) handleAddSingle(p);
+        }}
+      />
       <Menu
         items={filtered}
         category={cat}
         onCategory={setCat}
-        onAdd={handleMenuItemClick}
+        onAddSingle={handleAddSingle}
+        onOpenHalfAndHalf={() => handleOpenHalfAndHalf()}
       />
       <Story />
       <Contact />
@@ -172,12 +190,24 @@ function Home() {
         </>
       )}
 
-      {/* Modal de Personalização e Meio a Meio */}
-      {customizingPizza && (
-        <PizzaCustomizerModal
-          pizza={customizingPizza}
+      {/* 1. Modal Exclusivo de 1 Sabor (Pizza Inteira) */}
+      {singlePizzaModal && (
+        <SinglePizzaModal
+          pizza={singlePizzaModal}
+          onClose={() => setSinglePizzaModal(null)}
+          onAddCustomized={handleAddCustomizedToCart}
+        />
+      )}
+
+      {/* 2. Modal Exclusivo de 2 Sabores (Meio a Meio) */}
+      {halfAndHalfModalOpen && (
+        <HalfAndHalfModal
           allPizzas={MENU}
-          onClose={() => setCustomizingPizza(null)}
+          initialFlavor1={halfAndHalfInitialFlavor}
+          onClose={() => {
+            setHalfAndHalfModalOpen(false);
+            setHalfAndHalfInitialFlavor(null);
+          }}
           onAddCustomized={handleAddCustomizedToCart}
         />
       )}

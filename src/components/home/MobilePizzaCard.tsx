@@ -2,12 +2,6 @@ import { Plus } from "lucide-react";
 import { Pizza, formatBRL } from "@/data/catalog";
 
 export function MobilePizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => void }) {
-  const isCustomizable =
-    pizza.category === "tradicionais" ||
-    pizza.category === "especiais" ||
-    pizza.category === "doces" ||
-    pizza.category === "doces-especiais";
-
   return (
     <article
       onClick={onAdd}
@@ -35,11 +29,9 @@ export function MobilePizzaCard({ pizza, onAdd }: { pizza: Pizza; onAdd: () => v
           <span className="font-serif text-base font-bold text-gold">
             {formatBRL(pizza.price)}
           </span>
-          {isCustomizable && (
-            <span className="text-[10px] text-muted-foreground/80 bg-secondary/80 px-1.5 py-0.5 rounded border border-border/60">
-              Meio a Meio
-            </span>
-          )}
+          <span className="text-[10px] text-muted-foreground/80 bg-secondary/80 px-1.5 py-0.5 rounded border border-border/60">
+            1 Sabor
+          </span>
         </div>
       </div>
 
