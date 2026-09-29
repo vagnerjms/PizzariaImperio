@@ -92,6 +92,26 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  evolution_manager:
+    image: evoapicloud/evolution-manager:latest
+    container_name: pizzaria_evolution_manager
+    restart: always
+    ports:
+      - "8086:80"
+    environment:
+      - VITE_EVOLUTION_API_URL=http://179.197.231.106:8085
+      - VITE_EVOLUTION_API_KEY=pizzaria_evolution_secret_key_2026
+      - VITE_APP_NAME=Evolution Manager - Pizzaria Império
+    depends_on:
+      - evolution_api
+    mem_limit: 256m
+    mem_reservation: 64m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   mongo_data:
   evolution_instances:
