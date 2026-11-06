@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { Check, Clock, Copy, ExternalLink, ShoppingBag, X, Loader2, Sparkles, Bike, Flame } from "lucide-react";
+import {
+  Check,
+  Clock,
+  Copy,
+  ExternalLink,
+  ShoppingBag,
+  X,
+  Loader2,
+  Sparkles,
+  Bike,
+  Flame,
+  Store,
+  UtensilsCrossed,
+} from "lucide-react";
 import { formatBRL } from "@/data/catalog";
 
 export function OrderStatusView({
@@ -19,24 +32,109 @@ export function OrderStatusView({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isPix = order.payment_method === "Pix" || order.payment_details?.type === "pix" || !!order.payment_details?.qr_code;
+  const deliveryMode: "delivery" | "pickup" | "dine_in" = order?.delivery_mode || "delivery";
+  const isPickup = deliveryMode === "pickup";
+  const isDineIn = deliveryMode === "dine_in";
+
+  const isPix =
+    order.payment_method === "Pix" ||
+    order.payment_details?.type === "pix" ||
+    !!order.payment_details?.qr_code;
   const isCardOnline =
     (order.payment_method === "Cartão de crédito" || order.payment_method === "Cartão") &&
     (order.payment_details?.type === "mercadopago_preference" || !!order.payment_details?.init_point);
   const isPaid = order.payment_status === "paid";
-  const isFailed = order.payment_status === "failed";
+  const isFailed = order.payment_status === "failed" || order.status === "cancelado";
   const isPending = order.payment_status === "pending";
   const isOnDelivery =
     order.payment_status === "on_delivery" ||
     order.payment_method === "Dinheiro" ||
     order.payment_method === "Cartão de débito" ||
-    order.payment_method === "Cartão na Entrega";
+    order.payment_method === "Cartão de crédito";
+
+  const step3Title = isPickup
+    ? "Pronto para Retirada"
+    : isDineIn
+    ? "Pronto para Servir"
+    : "Saiu para Entrega";
+
+  const step3Desc =
+    order.status === "entregue"
+      ? isPickup
+        ? "Pedido retirado no balcão!"
+        : isDineIn
+        ? "Servido na mesa!"
+        : "Pedido entregue!"
+      : order.status === "saiu"
+      ? isPickup
+        ? "Seu pedido está pronto no balcão!"
+        : isDineIn
+        ? "Sendo levado à sua mesa!"
+        : "A caminho do seu endereço!"
+      : isPickup
+      ? "Avisaremos quando estiver pronto no balcão"
+      : isDineIn
+      ? "Avisaremos quando sair do forno"
+      : "Aguardando motoboy";
+
+  const Step3Icon = isPickup ? Store : isDineIn ? UtensilsCrossed : Bike;
+
+  const renderProgressTimeline = (firstStepTitle: string, firstStepSub: string) => (
+    <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3 text-left">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white flex-none">
+          <Check className="h-4 w-4 stroke-[3]" />
+        </div>
+        <div className="text-xs">
+          <p className="font-bold text-foreground">{firstStepTitle}</p>
+          <p className="text-muted-foreground text-[11px]">{firstStepSub}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-full flex-none ${
+            order.status === "preparando" || order.status === "saiu" || order.status === "entregue"
+              ? "bg-amber-500 text-white"
+              : "bg-secondary text-muted-foreground border border-border"
+          }`}
+        >
+          <Flame className="h-4 w-4" />
+        </div>
+        <div className="text-xs">
+          <p className="font-bold text-foreground">No Forno a Lenha</p>
+          <p className="text-muted-foreground text-[11px]">
+            {order.status === "preparando"
+              ? "Em preparação agora..."
+              : order.status === "saiu" || order.status === "entregue"
+              ? "Finalizado no forno"
+              : "Aguardando entrada no forno"}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-full flex-none ${
+            order.status === "saiu" || order.status === "entregue"
+              ? "bg-purple-500 text-white"
+              : "bg-secondary text-muted-foreground border border-border"
+          }`}
+        >
+          <Step3Icon className="h-4 w-4" />
+        </div>
+        <div className="text-xs">
+          <p className="font-bold text-foreground">{step3Title}</p>
+          <p className="text-muted-foreground text-[11px]">{step3Desc}</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      
       {/* CENÁRIO 1: PIX PENDENTE */}
-      {isPix && isPending ? (
+      {isPix && isPending && !isFailed ? (
         <div className="w-full space-y-4">
           <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500 animate-pulse">
             <Clock className="h-7 w-7" />
@@ -92,7 +190,7 @@ export function OrderStatusView({
             <span>Aguardando confirmação do banco em tempo real...</span>
           </div>
         </div>
-      ) : isCardOnline && isPending ? (
+      ) : isCardOnline && isPending && !isFailed ? (
         /* CENÁRIO 2: CARTÃO ONLINE PENDENTE */
         <div className="w-full space-y-4">
           <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500">
@@ -125,7 +223,7 @@ export function OrderStatusView({
             O pedido entrará automaticamente em preparação na cozinha assim que o pagamento for aprovado.
           </div>
         </div>
-      ) : isPaid ? (
+      ) : isPaid && !isFailed ? (
         /* CENÁRIO 3: PAGAMENTO CONFIRMADO */
         <div className="w-full space-y-4 animate-in zoom-in-95 duration-300">
           <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-lg scale-110">
@@ -143,80 +241,53 @@ export function OrderStatusView({
             </p>
           </div>
 
-          {/* Etapas KDS de Acompanhamento */}
-          <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3 text-left">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white flex-none">
-                <Check className="h-4 w-4 stroke-[3]" />
-              </div>
-              <div className="text-xs">
-                <p className="font-bold text-foreground">Pagamento Aprovado</p>
-                <p className="text-muted-foreground text-[11px]">Transação processada com sucesso</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full flex-none ${
-                order.status === "preparando" || order.status === "saiu" || order.status === "entregue"
-                  ? "bg-amber-500 text-white"
-                  : "bg-secondary text-muted-foreground border border-border"
-              }`}>
-                <Flame className="h-4 w-4" />
-              </div>
-              <div className="text-xs">
-                <p className="font-bold text-foreground">No Forno a Lenha</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {order.status === "preparando" ? "Em preparação agora..." : "Aguardando entrada no forno"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full flex-none ${
-                order.status === "saiu" || order.status === "entregue"
-                  ? "bg-purple-500 text-white"
-                  : "bg-secondary text-muted-foreground border border-border"
-              }`}>
-                <Bike className="h-4 w-4" />
-              </div>
-              <div className="text-xs">
-                <p className="font-bold text-foreground">Saiu para Entrega</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {order.status === "saiu" ? "A caminho do seu endereço!" : "Aguardando motoboy"}
-                </p>
-              </div>
-            </div>
-          </div>
+          {renderProgressTimeline("Pagamento Aprovado", "Transação processada com sucesso")}
         </div>
       ) : isFailed ? (
-        /* CENÁRIO 4: FALHA */
+        /* CENÁRIO 4: FALHA OU CANCELADO */
         <div className="w-full space-y-4">
           <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full border border-destructive/30 bg-destructive/10 text-destructive">
             <X className="h-8 w-8" />
           </div>
-          <h3 className="font-serif text-xl font-bold text-destructive">Falha no Pagamento</h3>
+          <h3 className="font-serif text-xl font-bold text-destructive">
+            {order.status === "cancelado" ? "Pedido Cancelado" : "Falha no Pagamento"}
+          </h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Infelizmente o seu pagamento online não pôde ser processado. Por favor, tente refazer o pedido escolhendo outra forma de pagamento.
+            {order.status === "cancelado"
+              ? "Este pedido foi cancelado. Caso precise de ajuda, fale conosco pelo WhatsApp."
+              : "Infelizmente o seu pagamento online não pôde ser processado. Por favor, tente refazer o pedido escolhendo outra forma de pagamento."}
           </p>
         </div>
       ) : (
-        /* CENÁRIO 5: PAGAMENTO NA ENTREGA (Dinheiro / Cartão na Maquininha) */
+        /* CENÁRIO 5: PAGAMENTO NA ENTREGA / RETIRADA / LOCAL */
         <div className="w-full space-y-4">
           <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full border border-gold/30 bg-secondary/60 text-gold shadow-gold-glow">
             <ShoppingBag className="h-7 w-7" />
           </div>
           <div>
             <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 border border-gold/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold">
-              Pagamento na Entrega
+              {isPickup
+                ? "Pagamento na Retirada"
+                : isDineIn
+                ? "Pagamento no Local"
+                : "Pagamento na Entrega"}
             </span>
             <h3 className="mt-2 font-serif text-xl font-bold text-foreground">
               Pedido Recebido!
             </h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Seu pedido foi enviado para o nosso forno. O pagamento de{" "}
-              <strong className="text-gold">{formatBRL(order.total || 0)}</strong> será realizado diretamente na entrega ({order.payment_method}).
+              Seu pedido foi enviado para a cozinha. O pagamento de{" "}
+              <strong className="text-gold">{formatBRL(order.total || 0)}</strong> será realizado{" "}
+              {isPickup
+                ? "na retirada no balcão"
+                : isDineIn
+                ? "no local"
+                : "diretamente na entrega"}{" "}
+              ({order.payment_method}).
             </p>
           </div>
+
+          {renderProgressTimeline("Pedido Recebido", "Enviado para a cozinha")}
         </div>
       )}
 
@@ -225,6 +296,12 @@ export function OrderStatusView({
         <div className="flex justify-between items-center">
           <span>Nº do pedido:</span>
           <span className="font-mono text-foreground font-bold">{order.id?.slice(0, 8)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span>Modalidade:</span>
+          <span className="font-semibold text-foreground">
+            {isPickup ? "Retirada no balcão" : isDineIn ? "Consumir no local" : "Entrega"}
+          </span>
         </div>
         <div className="flex justify-between items-center">
           <span>Forma de pagamento:</span>

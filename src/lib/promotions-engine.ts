@@ -20,8 +20,20 @@ export function evaluateCartPromotions(
 ): AppliedPromotionResult | null {
   if (!promotions || promotions.length === 0) return null;
 
-  // Active promotions only
-  const activePromos = promotions.filter((p) => p.active);
+  const now = new Date();
+  // Active promotions within optional date range
+  const activePromos = promotions.filter((p) => {
+    if (!p.active) return false;
+    if (p.start_date) {
+      const start = new Date(`${p.start_date}T00:00:00`);
+      if (!isNaN(start.getTime()) && now < start) return false;
+    }
+    if (p.end_date) {
+      const end = new Date(`${p.end_date}T23:59:59`);
+      if (!isNaN(end.getTime()) && now > end) return false;
+    }
+    return true;
+  });
   if (activePromos.length === 0) return null;
 
   // Calculate cart line items
@@ -47,7 +59,6 @@ export function evaluateCartPromotions(
 
   for (const promo of activePromos) {
     let isTriggered = false;
-    let triggerCount = 0;
     let triggerSubtotal = 0;
 
     if (promo.trigger_type === "min_total" || promo.trigger_type === "all") {
@@ -55,13 +66,16 @@ export function evaluateCartPromotions(
       const minQty = promo.trigger_min_qty || 1;
       if (cartSubtotal >= minTotal && totalCartQty >= minQty) {
         isTriggered = true;
-        triggerCount = totalCartQty;
         triggerSubtotal = cartSubtotal;
       }
     } else if (promo.trigger_type === "category" && promo.trigger_category) {
       const cat = promo.trigger_category;
       const matchingLines = cartLines.filter(
-        (l) => cat === "todas" || l.item.category === cat || (cat === "salgadas" && (l.item.category === "tradicionais" || l.item.category === "especiais"))
+        (l) =>
+          cat === "todas" ||
+          l.item.category === cat ||
+          (cat === "salgadas" &&
+            (l.item.category === "tradicionais" || l.item.category === "especiais"))
       );
       const catQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
       const catSubtotal = matchingLines.reduce((sum, l) => sum + l.subtotal, 0);
@@ -70,8 +84,19 @@ export function evaluateCartPromotions(
 
       if (catQty >= requiredQty && catSubtotal >= requiredTotal) {
         isTriggered = true;
-        triggerCount = catQty;
         triggerSubtotal = catSubtotal;
+      }
+    } else if (promo.trigger_type === "specific_items" && Array.isArray(promo.trigger_item_ids)) {
+      const allowedIds = new Set(promo.trigger_item_ids);
+      const matchingLines = cartLines.filter((l) => allowedIds.has(l.item.id));
+      const specQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
+      const specSubtotal = matchingLines.reduce((sum, l) => sum + l.subtotal, 0);
+      const requiredQty = promo.trigger_min_qty || 1;
+      const requiredTotal = promo.trigger_min_total || 0;
+
+      if (specQty >= requiredQty && specSubtotal >= requiredTotal) {
+        isTriggered = true;
+        triggerSubtotal = specSubtotal;
       }
     }
 
@@ -87,18 +112,27 @@ export function evaluateCartPromotions(
       reason = `${promo.discount_value}% de desconto aplicado!`;
     } else if (promo.type === "FIXED_DISCOUNT") {
       discountAmount = Math.min(cartSubtotal, promo.discount_value || 0);
-      reason = `Desconto de R$ ${(promo.discount_value || 0).toFixed(2).replace('.', ',')} aplicado!`;
+      reason = `Desconto de R$ ${(promo.discount_value || 0).toFixed(2).replace(".", ",")} aplicado!`;
     } else if (promo.type === "BUY_X_GET_Y") {
       const rewardPizza = menuById[promo.reward_item_id || ""];
       if (rewardPizza) {
+        const rewardDiscPct =
+          promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100;
+        const unitPrice = Number(
+          Math.max(0, rewardPizza.price * (1 - rewardDiscPct / 100)).toFixed(2)
+        );
+        const isGift = unitPrice === 0;
         rewardItem = {
           pizza_id: rewardPizza.id,
           pizza_name: rewardPizza.name,
           original_price: rewardPizza.price,
-          unit_price: 0,
-          is_gift: true,
+          unit_price: unitPrice,
+          quantity: 1,
+          is_gift: isGift,
         };
-        reason = `Brinde adicionado: 1x ${rewardPizza.name}!`;
+        reason = isGift
+          ? `Brinde adicionado: 1x ${rewardPizza.name}!`
+          : `Item promocional: 1x ${rewardPizza.name} com ${rewardDiscPct}% OFF!`;
       }
     }
 
@@ -116,8 +150,12 @@ export function evaluateCartPromotions(
 
   // Prioritize promotion that offers the greatest financial benefit to the customer
   validResults.sort((a, b) => {
-    const valA = a.discountAmount + (a.rewardItem?.original_price || 0);
-    const valB = b.discountAmount + (b.rewardItem?.original_price || 0);
+    const valA =
+      a.discountAmount +
+      (a.rewardItem ? a.rewardItem.original_price - a.rewardItem.unit_price : 0);
+    const valB =
+      b.discountAmount +
+      (b.rewardItem ? b.rewardItem.original_price - b.rewardItem.unit_price : 0);
     return valB - valA;
   });
 

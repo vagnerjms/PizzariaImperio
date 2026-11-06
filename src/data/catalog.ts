@@ -29,6 +29,7 @@ export type Pizza = {
   image: string;
   badge?: string;
   category: Category;
+  available?: boolean;
 };
 
 export interface CrustOption {

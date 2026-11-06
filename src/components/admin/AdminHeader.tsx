@@ -1,8 +1,9 @@
-import { Flame, LogOut, RefreshCw, Printer, Link as LinkIcon } from "lucide-react";
+import { Flame, LogOut, RefreshCw, Printer, Volume2, VolumeX } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export type AdminViewMode =
   | "pedidos"
+  | "cardapio"
   | "whatsapp"
   | "indicadores"
   | "taxas"
@@ -18,6 +19,8 @@ export function AdminHeader({
   setFilter,
   counts,
   printerConnected,
+  soundEnabled,
+  onToggleSound,
   onConnectPrinter,
   onDisconnectPrinter,
   onRefreshOrders,
@@ -30,6 +33,8 @@ export function AdminHeader({
   setFilter: (f: any) => void;
   counts: Record<string, number>;
   printerConnected: boolean;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
   onConnectPrinter: () => void;
   onDisconnectPrinter: () => void;
   onRefreshOrders: () => void;
@@ -38,6 +43,7 @@ export function AdminHeader({
   const tabs = [
     { id: "ativos", label: `Ativos (${counts.ativos ?? 0})` },
     { id: "novo", label: `Novos (${counts.novo ?? 0})` },
+    { id: "pix_pendente", label: `Pix Pendente (${counts.pix_pendente ?? 0})` },
     { id: "preparando", label: `Preparando (${counts.preparando ?? 0})` },
     { id: "saiu", label: `Saiu (${counts.saiu ?? 0})` },
     { id: "entregue", label: `Entregues (${counts.entregue ?? 0})` },
@@ -55,7 +61,11 @@ export function AdminHeader({
               <div className="flex items-center gap-2">
                 <h1 className="font-serif text-lg leading-tight">Painel Administrativo</h1>
                 <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold leading-none">
-                  {user?.roles?.includes("admin") ? "Admin" : user?.roles?.includes("supervisor") ? "Supervisor" : "Atendente"}
+                  {user?.roles?.includes("admin")
+                    ? "Admin"
+                    : user?.roles?.includes("supervisor")
+                      ? "Supervisor"
+                      : "Atendente"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
@@ -69,24 +79,35 @@ export function AdminHeader({
             <button
               type="button"
               onClick={() => setViewMode("pedidos")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                viewMode === "pedidos"
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "pedidos"
                   ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}
+                }`}
             >
               🍕 Pedidos (KDS)
             </button>
 
-            {user?.roles?.some(r => ["admin", "supervisor"].includes(r)) && (
+            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+              <button
+                type="button"
+                onClick={() => setViewMode("cardapio")}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "cardapio"
+                    ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+              >
+                📋 Cardápio
+              </button>
+            )}
+
+            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
               <button
                 type="button"
                 onClick={() => setViewMode("indicadores")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "indicadores"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "indicadores"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 📊 Indicadores & DRE
               </button>
@@ -96,53 +117,49 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("usuarios")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "usuarios"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "usuarios"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 👥 Usuários
               </button>
             )}
 
-            {user?.roles?.some(r => ["admin", "supervisor"].includes(r)) && (
+            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
               <button
                 type="button"
                 onClick={() => setViewMode("taxas")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "taxas"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "taxas"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 🛵 Taxas de Entrega
               </button>
             )}
 
-            {user?.roles?.some(r => ["admin", "supervisor"].includes(r)) && (
+            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
               <button
                 type="button"
                 onClick={() => setViewMode("promocoes")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "promocoes"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "promocoes"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 🏷️ Promoções
               </button>
             )}
 
-            {user?.roles?.includes("admin") && (
+            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
               <button
                 type="button"
                 onClick={() => setViewMode("whatsapp")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "whatsapp"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "whatsapp"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 💬 WhatsApp
               </button>
@@ -152,11 +169,10 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("configuracoes")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  viewMode === "configuracoes"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "configuracoes"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 ⚙️ Configurações
               </button>
@@ -165,15 +181,29 @@ export function AdminHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          {onToggleSound && (
+            <button
+              type="button"
+              onClick={onToggleSound}
+              title={soundEnabled ? "Alerta sonoro de novos pedidos ativo" : "Alerta sonoro silenciado"}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${soundEnabled
+                  ? "border-gold/40 bg-gold/10 text-gold hover:bg-gold/20"
+                  : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground"
+                }`}
+            >
+              {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{soundEnabled ? "Som KDS" : "Mudo"}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={printerConnected ? onDisconnectPrinter : onConnectPrinter}
             title={printerConnected ? "Impressora USB Conectada" : "Conectar impressora USB (Bematech MP-4200)"}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
-              printerConnected
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${printerConnected
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                 : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground hover:border-gold/50"
-            }`}
+              }`}
           >
             <Printer className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{printerConnected ? "Impressora USB" : "Conectar USB"}</span>
@@ -212,11 +242,10 @@ export function AdminHeader({
               key={t.id}
               type="button"
               onClick={() => setFilter(t.id)}
-              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                filter === t.id
+              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${filter === t.id
                   ? "border-gold bg-gold/15 text-gold font-bold"
                   : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               {t.label}
             </button>

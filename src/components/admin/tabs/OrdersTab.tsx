@@ -1,4 +1,4 @@
-import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle, QrCode, Timer } from "lucide-react";
 import { formatBRL } from "@/data/catalog";
 
 export type OrderRow = {
@@ -6,6 +6,7 @@ export type OrderRow = {
   customer_name: string;
   customer_phone: string;
   customer_address: string;
+  delivery_mode?: "delivery" | "pickup" | "dine_in";
   payment_method: string;
   troco?: number | null;
   subtotal: number;
@@ -68,36 +69,56 @@ const PAYMENT_STATUS_META: Record<
   { label: string; className: string }
 > = {
   pending: {
-    label: "Pendente",
-    className: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+    label: "Aguardando Pix",
+    className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   },
   paid: {
     label: "Pago",
-    className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+    className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   },
   failed: {
     label: "Falhou",
-    className: "bg-red-500/10 text-red-500 border-red-500/20",
+    className: "bg-red-500/15 text-red-400 border-red-500/30",
   },
   refunded: {
     label: "Reembolsado",
-    className: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+    className: "bg-gray-500/15 text-gray-400 border-gray-500/30",
   },
   on_delivery: {
     label: "Na Entrega",
-    className: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    className: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   },
 };
+
+function getElapsedBadge(createdAtIso: string) {
+  const diffMs = Math.max(0, Date.now() - new Date(createdAtIso).getTime());
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) {
+    return { text: "Agora mesmo", className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
+  }
+  if (mins < 20) {
+    return { text: `há ${mins} min`, className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
+  }
+  if (mins < 40) {
+    return { text: `há ${mins} min`, className: "border-amber-500/30 bg-amber-500/10 text-amber-400" };
+  }
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  const label = hours > 0 ? `há ${hours}h ${remMins}m` : `há ${mins} min`;
+  return { text: label, className: "border-red-500/40 bg-red-500/15 text-red-400 animate-pulse" };
+}
 
 export function OrdersTab({
   orders,
   loading,
   onStatus,
+  onConfirmPayment,
   onPrint,
 }: {
   orders: OrderRow[];
   loading: boolean;
   onStatus: (id: string, status: OrderRow["status"]) => void;
+  onConfirmPayment?: (id: string) => void;
   onPrint?: (order: OrderRow) => void;
 }) {
   if (loading) {
@@ -118,7 +139,13 @@ export function OrdersTab({
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {orders.map((o) => (
-        <OrderCard key={o.id} order={o} onStatus={onStatus} onPrint={onPrint} />
+        <OrderCard
+          key={o.id}
+          order={o}
+          onStatus={onStatus}
+          onConfirmPayment={onConfirmPayment}
+          onPrint={onPrint}
+        />
       ))}
     </div>
   );
@@ -127,10 +154,12 @@ export function OrdersTab({
 function OrderCard({
   order,
   onStatus,
+  onConfirmPayment,
   onPrint,
 }: {
   order: OrderRow;
   onStatus: (id: string, status: OrderRow["status"]) => void;
+  onConfirmPayment?: (id: string) => void;
   onPrint?: (order: OrderRow) => void;
 }) {
   const meta = STATUS_META[order.status];
@@ -138,14 +167,40 @@ function OrderCard({
   const timeStr = created.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const dateStr = created.toLocaleDateString("pt-BR");
   const phoneDigits = order.customer_phone.replace(/\D/g, "");
+  const isActive = order.status !== "entregue" && order.status !== "cancelado";
+  const elapsed = isActive ? getElapsedBadge(order.created_at) : null;
+  const isPendingPix =
+    order.payment_method === "Pix" &&
+    order.payment_status === "pending" &&
+    order.status !== "cancelado";
 
   return (
-    <article className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <article
+      className={`flex flex-col rounded-2xl border bg-card p-5 shadow-sm transition ${
+        isPendingPix ? "border-amber-500/50" : "border-border"
+      }`}
+    >
       <header className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-serif text-lg leading-tight">{order.customer_name}</div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" /> {dateStr} · {timeStr}
+          <div className="flex items-center gap-2">
+            <span className="font-serif text-lg leading-tight font-bold">
+              {order.customer_name}
+            </span>
+            <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              #{order.id.slice(0, 6)}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" /> {dateStr} · {timeStr}
+            </span>
+            {elapsed && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${elapsed.className}`}
+              >
+                <Timer className="h-3 w-3" /> {elapsed.text}
+              </span>
+            )}
           </div>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}>
@@ -161,7 +216,7 @@ function OrderCard({
           <Phone className="h-3.5 w-3.5" /> {order.customer_phone}
         </a>
         <div className="flex items-start gap-2 text-muted-foreground">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 flex-none" />
+          <MapPin className="mt-0.5 h-3.5 w-3.5 flex-none text-gold" />
           <span className="whitespace-pre-wrap">{order.customer_address}</span>
         </div>
       </div>
@@ -189,7 +244,9 @@ function OrderCard({
               const status = order.payment_status || "on_delivery";
               const pMeta = PAYMENT_STATUS_META[status] || PAYMENT_STATUS_META.on_delivery;
               return (
-                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none ${pMeta.className}`}>
+                <span
+                  className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none ${pMeta.className}`}
+                >
                   {pMeta.label}
                 </span>
               );
@@ -197,8 +254,8 @@ function OrderCard({
           </div>
         </div>
         {order.notes && (
-          <div>
-            <span className="font-semibold text-foreground">Obs.:</span> {order.notes}
+          <div className="rounded-lg border border-gold/30 bg-gold/5 px-2.5 py-1.5 text-foreground">
+            <span className="font-bold text-gold">Obs.:</span> {order.notes}
           </div>
         )}
         {order.delivery_fee !== undefined && order.delivery_fee !== null && (
@@ -219,8 +276,19 @@ function OrderCard({
         </div>
       </div>
 
-      {(meta.next || order.status !== "cancelado" || onPrint) && (
+      {(meta.next || order.status !== "cancelado" || onPrint || isPendingPix) && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {isPendingPix && onConfirmPayment && (
+            <button
+              type="button"
+              onClick={() => onConfirmPayment(order.id)}
+              title="Aprovar manualmente o pagamento Pix deste pedido"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-emerald-500 active:scale-95"
+            >
+              <QrCode className="h-3.5 w-3.5" /> Confirmar Recebimento Pix
+            </button>
+          )}
+
           {onPrint && (
             <button
               type="button"

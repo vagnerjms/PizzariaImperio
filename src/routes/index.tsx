@@ -2,8 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getPublicPromotions } from "@/lib/promotions.functions";
+import { getPublicMenuOverrides, PublicMenuOverride } from "@/lib/menu.functions";
 import { Promotion } from "@/lib/promotions.types";
-import { MENU, MENU_BY_ID, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS, formatBRL } from "@/data/catalog";
+import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS, formatBRL } from "@/data/catalog";
 import { useCart } from "@/hooks/useCart";
 import { Header } from "@/components/home/Header";
 import { Hero } from "@/components/home/Hero";
@@ -20,11 +21,26 @@ import { ShoppingBag } from "lucide-react";
 export const Route = createFileRoute("/")({
   loader: async () => {
     try {
-      const { listPublicPromotionsFromDb } = await import("@/lib/promotions.server");
-      const promos = await listPublicPromotionsFromDb();
-      return { promotions: promos || [] };
+      const [{ listPublicPromotionsFromDb }, { getMenuOverridesFromDb }] = await Promise.all([
+        import("@/lib/promotions.server"),
+        import("@/lib/menu.server"),
+      ]);
+      const [promos, overridesMap] = await Promise.all([
+        listPublicPromotionsFromDb(),
+        getMenuOverridesFromDb(),
+      ]);
+      const overrides: Record<string, PublicMenuOverride> = {};
+      for (const [id, doc] of Object.entries(overridesMap)) {
+        overrides[id] = {
+          id,
+          price: doc.price,
+          available: doc.available !== undefined ? doc.available : true,
+          badge: doc.badge,
+        };
+      }
+      return { promotions: promos || [], menuOverrides: overrides };
     } catch {
-      return { promotions: [] };
+      return { promotions: [], menuOverrides: {} as Record<string, PublicMenuOverride> };
     }
   },
   head: () => ({
@@ -57,7 +73,11 @@ function Home() {
   const [halfAndHalfInitialFlavor, setHalfAndHalfInitialFlavor] = useState<Pizza | null>(null);
 
   const fetchPromotions = useServerFn(getPublicPromotions);
+  const fetchMenuOverrides = useServerFn(getPublicMenuOverrides);
   const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
+  const [menuOverrides, setMenuOverrides] = useState<Record<string, PublicMenuOverride>>(
+    () => loaderData?.menuOverrides || {}
+  );
 
   useEffect(() => {
     fetchPromotions()
@@ -65,12 +85,35 @@ function Home() {
         if (data && Array.isArray(data)) setPromotions(data);
       })
       .catch((err) => console.error("Erro ao carregar promoções públicas:", err));
+
+    fetchMenuOverrides()
+      .then((data) => {
+        if (data && typeof data === "object") setMenuOverrides(data);
+      })
+      .catch((err) => console.error("Erro ao carregar overrides do cardápio:", err));
   }, []);
+
+  const effectiveMenu = useMemo(() => {
+    return MENU.map((item) => {
+      const ov = menuOverrides[item.id];
+      if (!ov) return { ...item, available: true };
+      return {
+        ...item,
+        price: typeof ov.price === "number" && ov.price >= 0 ? ov.price : item.price,
+        badge: ov.badge !== undefined ? (ov.badge || undefined) : item.badge,
+        available: ov.available !== false,
+      };
+    }).filter((item) => item.available !== false);
+  }, [menuOverrides]);
+
+  const effectiveMenuById = useMemo(
+    () => Object.fromEntries(effectiveMenu.map((p) => [p.id, p])),
+    [effectiveMenu]
+  );
 
   const {
     cart,
     cartCount,
-    subtotal,
     discount,
     total,
     appliedPromotion,
@@ -86,8 +129,8 @@ function Home() {
   } = useCart(promotions);
 
   const filtered = useMemo(
-    () => (cat === "todas" ? MENU : MENU.filter((p) => p.category === cat)),
-    [cat],
+    () => (cat === "todas" ? effectiveMenu : effectiveMenu.filter((p) => p.category === cat)),
+    [cat, effectiveMenu]
   );
 
   // 1. Clique em Pizza Individual (1 Sabor Inteira ou Bebida)
@@ -138,7 +181,7 @@ function Home() {
       <Promocoes
         promotions={promotions}
         onAdd={(pizzaId) => {
-          const p = MENU_BY_ID[pizzaId];
+          const p = effectiveMenuById[pizzaId];
           if (p) handleAddSingle(p);
         }}
       />
@@ -164,11 +207,13 @@ function Home() {
             <ShoppingBag className="h-4 w-4" />
             Ver carrinho · {cartCount}
           </button>
-          
+
           {/* Mobile Sticky Bottom Bar */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-secondary/95 backdrop-blur-md border-t border-border/40 p-4 pb-safe flex items-center justify-between shadow-2xl">
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total do carrinho</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Total do carrinho
+              </span>
               <div className="flex items-center gap-1.5">
                 <span className="text-gold font-serif font-bold text-lg">{formatBRL(total)}</span>
                 {discount > 0 && (
@@ -202,7 +247,7 @@ function Home() {
       {/* 2. Modal Exclusivo de 2 Sabores (Meio a Meio) */}
       {halfAndHalfModalOpen && (
         <HalfAndHalfModal
-          allPizzas={MENU}
+          allPizzas={effectiveMenu}
           initialFlavor1={halfAndHalfInitialFlavor}
           onClose={() => {
             setHalfAndHalfModalOpen(false);

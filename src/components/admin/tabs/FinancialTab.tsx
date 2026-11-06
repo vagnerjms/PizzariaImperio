@@ -3,27 +3,30 @@ import { formatBRL } from "@/data/catalog";
 import { OrderRow } from "./OrdersTab";
 
 export function FinancialTab({ orders }: { orders: OrderRow[] }) {
-  const revenue = orders.filter(o => o.status !== "cancelado").reduce((sum, o) => sum + o.total, 0);
-  const activeCount = orders.filter(o => o.status !== "entregue" && o.status !== "cancelado").length;
-  const completedCount = orders.filter(o => o.status === "entregue").length;
-  const canceledCount = orders.filter(o => o.status === "cancelado").length;
-  const ticketMedio = (completedCount + activeCount) > 0 ? revenue / (completedCount + activeCount) : 0;
+  // Exclui pedidos cancelados e pedidos Pix ainda não pagos (pendentes)
+  const confirmedOrders = orders.filter(
+    (o) =>
+      o.status !== "cancelado" &&
+      (o.payment_method !== "Pix" || o.payment_status === "paid")
+  );
+  const revenue = confirmedOrders.reduce((sum, o) => sum + o.total, 0);
+  const activeCount = confirmedOrders.filter((o) => o.status !== "entregue").length;
+  const completedCount = confirmedOrders.filter((o) => o.status === "entregue").length;
+  const canceledCount = orders.filter((o) => o.status === "cancelado").length;
+  const ticketMedio =
+    completedCount + activeCount > 0 ? revenue / (completedCount + activeCount) : 0;
 
   const pizzaSales: Record<string, number> = {};
-  orders.forEach(o => {
-    if (o.status !== "cancelado") {
-      o.order_items?.forEach(i => {
-        pizzaSales[i.pizza_name] = (pizzaSales[i.pizza_name] || 0) + i.quantity;
-      });
-    }
+  confirmedOrders.forEach((o) => {
+    o.order_items?.forEach((i) => {
+      pizzaSales[i.pizza_name] = (pizzaSales[i.pizza_name] || 0) + i.quantity;
+    });
   });
   const sortedSales = Object.entries(pizzaSales).sort((a, b) => b[1] - a[1]);
 
   const paymentCounts: Record<string, number> = {};
-  orders.forEach(o => {
-    if (o.status !== "cancelado") {
-      paymentCounts[o.payment_method] = (paymentCounts[o.payment_method] || 0) + 1;
-    }
+  confirmedOrders.forEach((o) => {
+    paymentCounts[o.payment_method] = (paymentCounts[o.payment_method] || 0) + 1;
   });
 
   return (
@@ -99,7 +102,7 @@ export function FinancialTab({ orders }: { orders: OrderRow[] }) {
           ) : (
             <div className="space-y-4">
               {Object.entries(paymentCounts).map(([method, count]) => {
-                const activeTotal = orders.filter(o => o.status !== "cancelado").length;
+                const activeTotal = confirmedOrders.length;
                 const pct = activeTotal > 0 ? (count / activeTotal) * 100 : 0;
                 return (
                   <div key={method} className="space-y-1">

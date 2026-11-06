@@ -21,6 +21,7 @@ export interface PrintableOrder {
   customer_name: string;
   customer_phone: string;
   customer_address: string;
+  delivery_mode?: "delivery" | "pickup" | "dine_in";
   payment_method: string;
   payment_status?: string;
   troco?: number | null;
@@ -189,7 +190,14 @@ export function buildEscPosBuffer(order: PrintableOrder, settings: PrinterSettin
   addDivider("-");
 
   // 5. Customer & Delivery info
+  const modeLabel =
+    order.delivery_mode === "pickup"
+      ? "RETIRADA NO BALCAO"
+      : order.delivery_mode === "dine_in"
+      ? "CONSUMIR NO LOCAL"
+      : "ENTREGA DELIVERY";
   addBytes(ESC, 0x45, 0x01);
+  addLine(`MODALIDADE: [${modeLabel}]`);
   addLine(`CLIENTE: ${order.customer_name}`);
   addBytes(ESC, 0x45, 0x00);
   addLine(`TEL:     ${order.customer_phone}`);
@@ -385,6 +393,13 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
       </div>
       <div class="divider"></div>
 
+      <div><span class="bold">MODALIDADE:</span> ${
+        order.delivery_mode === "pickup"
+          ? "RETIRADA NO BALCÃO"
+          : order.delivery_mode === "dine_in"
+          ? "CONSUMIR NO LOCAL"
+          : "ENTREGA DELIVERY"
+      }</div>
       <div><span class="bold">CLIENTE:</span> ${order.customer_name}</div>
       <div><span class="bold">TEL:</span> ${order.customer_phone}</div>
       <div><span class="bold">END:</span> ${order.customer_address}</div>

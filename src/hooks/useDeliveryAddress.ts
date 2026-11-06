@@ -4,9 +4,12 @@ import { getDeliveryFeeForNeighborhood, cleanString } from "@/lib/delivery-confi
 import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
 import { reverseGeocodeGPS, searchStreetAddress, LocationResult } from "@/lib/location.functions";
 
+export type DeliveryMode = "delivery" | "pickup" | "dine_in" | "";
+
 export interface DeliveryAddressForm {
   name: string;
   phone: string;
+  deliveryMode: DeliveryMode;
   cep: string;
   rua: string;
   bairro: string;
@@ -19,9 +22,12 @@ export interface DeliveryAddressForm {
   notes: string;
 }
 
+const CUSTOMER_STORAGE_KEY = "imperio_customer_profile_v1";
+
 const initialForm: DeliveryAddressForm = {
   name: "",
   phone: "",
+  deliveryMode: "",
   cep: "",
   rua: "",
   bairro: "",
@@ -34,8 +40,21 @@ const initialForm: DeliveryAddressForm = {
   notes: "",
 };
 
+export function formatPhoneMask(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 3) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 7) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)} ${digits.slice(3)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)} ${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
 export function useDeliveryAddress() {
   const [form, setForm] = useState<DeliveryAddressForm>(initialForm);
+  const [hasSavedIdentity, setHasSavedIdentity] = useState(false);
+  const [hasSavedAddress, setHasSavedAddress] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [locatingGPS, setLocatingGPS] = useState(false);
   const [streetSearching, setStreetSearching] = useState(false);
@@ -52,9 +71,73 @@ export function useDeliveryAddress() {
   useEffect(() => {
     fetchDeliveryConfig()
       .then((cfg) => {
-        if (cfg) setDeliveryConfig(cfg);
+        if (cfg) {
+          setDeliveryConfig(cfg);
+          // Recalcula taxa caso já tenha bairro salvo carregado do localStorage
+          setForm((prev) => {
+            if (prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in") {
+              return { ...prev, deliveryFee: 0 };
+            }
+            if (prev.bairro) {
+              const fee = getDeliveryFeeForNeighborhood(prev.bairro, cfg.neighborhoods, cfg.default_fee);
+              return { ...prev, deliveryFee: fee };
+            }
+            return prev;
+          });
+        }
       })
       .catch((err) => console.error("Erro ao carregar taxas de entrega:", err));
+  }, []);
+
+  // Carrega dados salvos do cliente no localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved && typeof saved === "object") {
+        const validIdentity = Boolean(saved.name && saved.phone && String(saved.phone).replace(/\D/g, "").length >= 10);
+        const validAddress = Boolean(saved.rua && saved.numero && saved.bairro);
+        setHasSavedIdentity(validIdentity);
+        setHasSavedAddress(validAddress);
+        setForm((prev) => ({
+          ...prev,
+          name: saved.name || prev.name,
+          phone: saved.phone ? formatPhoneMask(saved.phone) : prev.phone,
+          cep: saved.cep || prev.cep,
+          rua: saved.rua || prev.rua,
+          numero: saved.numero || prev.numero,
+          bairro: saved.bairro || prev.bairro,
+          complemento: saved.complemento || prev.complemento,
+          cidadeUf: saved.cidadeUf || prev.cidadeUf,
+          deliveryMode: validAddress ? "delivery" : prev.deliveryMode,
+        }));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const persistCustomerProfile = useCallback((nextForm: DeliveryAddressForm) => {
+    if (typeof window === "undefined") return;
+    try {
+      const payload = {
+        name: nextForm.name.trim(),
+        phone: nextForm.phone.trim(),
+        cep: nextForm.cep.trim(),
+        rua: nextForm.rua.trim(),
+        numero: nextForm.numero.trim(),
+        bairro: nextForm.bairro.trim(),
+        complemento: nextForm.complemento.trim(),
+        cidadeUf: nextForm.cidadeUf.trim(),
+      };
+      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(payload));
+      setHasSavedIdentity(Boolean(payload.name && payload.phone.replace(/\D/g, "").length >= 10));
+      setHasSavedAddress(Boolean(payload.rua && payload.numero && payload.bairro));
+    } catch {
+      // ignore storage errors
+    }
   }, []);
 
   const sanitize = (s: string, max: number) =>
@@ -77,7 +160,7 @@ export function useDeliveryAddress() {
       });
       if (!res.ok) throw new Error("Erro na busca de CEP");
       const data = await res.json();
-      
+
       if (data.erro) {
         setErrors((prev) => ({ ...prev, cep: "CEP não encontrado." }));
         return;
@@ -90,7 +173,7 @@ export function useDeliveryAddress() {
         rua: data.logradouro || "",
         bairro: data.bairro || "",
         cidadeUf: `${data.localidade} - ${data.uf}`,
-        deliveryFee: fee,
+        deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
       }));
     } catch {
       try {
@@ -107,7 +190,7 @@ export function useDeliveryAddress() {
           rua: data.street || "",
           bairro: data.neighborhood || "",
           cidadeUf: `${data.city} - ${data.state}`,
-          deliveryFee: fee,
+          deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
         }));
       } catch {
         try {
@@ -123,7 +206,7 @@ export function useDeliveryAddress() {
             rua: data.address || "",
             bairro: data.district || data.neighborhood || "",
             cidadeUf: `${data.city} - ${data.state}`,
-            deliveryFee: fee,
+            deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
           }));
         } catch {
           setErrors((prev) => ({ ...prev, cep: "CEP não localizado nas bases públicas. Digite sua rua abaixo." }));
@@ -140,7 +223,7 @@ export function useDeliveryAddress() {
     if (numeric.length > 5) {
       formatted = `${numeric.slice(0, 5)}-${numeric.slice(5, 8)}`;
     }
-    
+
     setForm((f) => ({ ...f, cep: formatted.slice(0, 9) }));
     if (errors.cep) setErrors((e) => ({ ...e, cep: "" }));
 
@@ -185,9 +268,9 @@ export function useDeliveryAddress() {
             bairro: loc.bairro || prev.bairro,
             cidadeUf: `${loc.cidade} - ${loc.uf}`,
             cep: loc.cep || prev.cep || "12900-000",
-            deliveryFee: fee,
+            deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
           }));
-          setLocationMsg(`📍 Localizado: ${loc.rua ? loc.rua + ', ' : ''}${loc.bairro || loc.cidade}`);
+          setLocationMsg(`📍 Localizado: ${loc.rua ? loc.rua + ", " : ""}${loc.bairro || loc.cidade}`);
           setTimeout(() => setLocationMsg(null), 5000);
         } catch (e) {
           console.error("GPS Reverse Error:", e);
@@ -248,7 +331,7 @@ export function useDeliveryAddress() {
       bairro: loc.bairro,
       cidadeUf: `${loc.cidade} - ${loc.uf}`,
       cep: loc.cep || prev.cep || "12900-000",
-      deliveryFee: fee,
+      deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
     }));
 
     setStreetSuggestions([]);
@@ -258,7 +341,11 @@ export function useDeliveryAddress() {
 
   const handleBairroInputChange = (val: string) => {
     const fee = getDeliveryFeeForNeighborhood(val, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
-    setForm((f) => ({ ...f, bairro: val, deliveryFee: fee }));
+    setForm((f) => ({
+      ...f,
+      bairro: val,
+      deliveryFee: f.deliveryMode === "pickup" || f.deliveryMode === "dine_in" ? 0 : fee,
+    }));
     if (errors.bairro) setErrors((e) => ({ ...e, bairro: "" }));
 
     if (val.trim().length >= 2 && deliveryConfig?.neighborhoods) {
@@ -273,44 +360,131 @@ export function useDeliveryAddress() {
   };
 
   const handleSelectBairro = (n: { name: string; fee: number }) => {
-    setForm((f) => ({ ...f, bairro: n.name, deliveryFee: n.fee }));
+    setForm((f) => ({
+      ...f,
+      bairro: n.name,
+      deliveryFee: f.deliveryMode === "pickup" || f.deliveryMode === "dine_in" ? 0 : n.fee,
+    }));
     setBairroSuggestions([]);
-    setLocationMsg(`📍 Bairro selecionado: ${n.name} (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`);
+    setLocationMsg(`📍 Bairro selecionado: ${n.name} (Taxa: R$ ${n.fee.toFixed(2).replace(".", ",")})`);
     setTimeout(() => setLocationMsg(null), 4000);
   };
 
+  const handleDeliveryModeChange = (mode: DeliveryMode) => {
+    setForm((prev) => {
+      if (mode === "pickup" || mode === "dine_in") {
+        return { ...prev, deliveryMode: mode, deliveryFee: 0 };
+      }
+      const fee = prev.bairro
+        ? getDeliveryFeeForNeighborhood(prev.bairro, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee)
+        : null;
+      return { ...prev, deliveryMode: mode, deliveryFee: fee };
+    });
+    if (errors.deliveryMode) setErrors((e) => ({ ...e, deliveryMode: "" }));
+  };
+
   const setField = (k: keyof DeliveryAddressForm) => (v: string) => {
-    setForm((f) => ({ ...f, [k]: v }));
+    setForm((f) => {
+      const val = k === "phone" ? formatPhoneMask(v) : v;
+      return { ...f, [k]: val };
+    });
     if (errors[k]) setErrors((e) => ({ ...e, [k]: "" }));
   };
+
+  const validateIdentity = useCallback(() => {
+    const e: Record<string, string> = {};
+    const name = sanitize(form.name, 80);
+    const phoneDigits = form.phone.replace(/\D/g, "");
+
+    if (name.length < 2) e.name = "Informe seu nome e sobrenome.";
+    if (phoneDigits.length < 10) e.phone = "Informe um WhatsApp válido com DDD.";
+
+    setErrors(e);
+    if (Object.keys(e).length === 0) {
+      persistCustomerProfile(form);
+      return true;
+    }
+    return false;
+  }, [form, persistCustomerProfile]);
+
+  const validateDelivery = useCallback(() => {
+    const e: Record<string, string> = {};
+    if (!form.deliveryMode) {
+      e.deliveryMode = "Escolha como deseja receber seu pedido.";
+      setErrors(e);
+      return false;
+    }
+
+    if (form.deliveryMode === "delivery") {
+      const cep = form.cep.replace(/\D/g, "");
+      if (cep.length !== 8 && (!form.rua.trim() || !form.bairro.trim())) {
+        e.cep = "Informe seu CEP ou use o GPS/Busca por rua.";
+      }
+      if (!form.rua.trim()) e.rua = "Informe a rua.";
+      if (!form.numero.trim()) e.numero = "Informe o número.";
+      if (!form.bairro.trim()) e.bairro = "Informe o bairro.";
+    }
+
+    setErrors(e);
+    if (Object.keys(e).length === 0) {
+      persistCustomerProfile(form);
+      return true;
+    }
+    return false;
+  }, [form, persistCustomerProfile]);
 
   const validate = useCallback((totalAmount: number) => {
     const e: Record<string, string> = {};
     const name = sanitize(form.name, 80);
     const phone = sanitize(form.phone, 20);
-    const cep = form.cep.replace(/\D/g, "");
-    
+
     if (name.length < 2) e.name = "Informe seu nome completo.";
     if (phone.replace(/\D/g, "").length < 10) e.phone = "Telefone inválido (com DDD).";
-    if (cep.length !== 8 && (!form.rua.trim() || !form.bairro.trim())) e.cep = "Informe seu CEP ou use o GPS/Busca por rua.";
-    if (!form.rua.trim()) e.rua = "Informe a rua.";
-    if (!form.numero.trim()) e.numero = "Informe o número.";
-    if (!form.bairro.trim()) e.bairro = "Informe o bairro.";
+
+    if (!form.deliveryMode) {
+      e.deliveryMode = "Escolha onde receber o pedido.";
+    } else if (form.deliveryMode === "delivery") {
+      const cep = form.cep.replace(/\D/g, "");
+      if (cep.length !== 8 && (!form.rua.trim() || !form.bairro.trim())) {
+        e.cep = "Informe seu CEP ou use o GPS/Busca por rua.";
+      }
+      if (!form.rua.trim()) e.rua = "Informe a rua.";
+      if (!form.numero.trim()) e.numero = "Informe o número.";
+      if (!form.bairro.trim()) e.bairro = "Informe o bairro.";
+    }
+
     if (!form.payment) e.payment = "Selecione a forma de pagamento.";
-    
+
     if (form.payment === "Dinheiro" && form.troco) {
       const trocoVal = Number(form.troco.replace(",", "."));
       if (isNaN(trocoVal) || trocoVal < totalAmount) {
-        e.troco = `O troco deve ser maior que o total do pedido (R$ ${totalAmount.toFixed(2).replace('.', ',')}).`;
+        e.troco = `O troco deve ser maior que o total do pedido (R$ ${totalAmount.toFixed(2).replace(".", ",")}).`;
       }
     }
 
     setErrors(e);
-    return Object.keys(e).length === 0;
-  }, [form]);
+    if (Object.keys(e).length === 0) {
+      persistCustomerProfile(form);
+      return true;
+    }
+    return false;
+  }, [form, persistCustomerProfile]);
 
   const resetForm = useCallback(() => {
-    setForm(initialForm);
+    setForm((prev) => ({
+      ...initialForm,
+      // Mantém nome, telefone e endereço salvos para facilitar novas compras
+      name: prev.name,
+      phone: prev.phone,
+      cep: prev.cep,
+      rua: prev.rua,
+      numero: prev.numero,
+      bairro: prev.bairro,
+      complemento: prev.complemento,
+      cidadeUf: prev.cidadeUf,
+      deliveryMode: prev.deliveryMode || (prev.rua && prev.bairro ? "delivery" : ""),
+      deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : prev.deliveryFee,
+    }));
     setErrors({});
     setLocationMsg(null);
   }, []);
@@ -318,6 +492,8 @@ export function useDeliveryAddress() {
   return {
     form,
     errors,
+    hasSavedIdentity,
+    hasSavedAddress,
     cepLoading,
     locatingGPS,
     streetSearching,
@@ -330,7 +506,10 @@ export function useDeliveryAddress() {
     handleSelectSuggestion,
     handleBairroInputChange,
     handleSelectBairro,
+    handleDeliveryModeChange,
     setField,
+    validateIdentity,
+    validateDelivery,
     validate,
     resetForm,
     sanitize,

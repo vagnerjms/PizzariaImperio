@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { listOrders, updateOrderStatus } from "@/lib/orders.functions";
+import { listOrders, updateOrderStatus, confirmOrderPayment } from "@/lib/orders.functions";
 import {
   connectSerialPrinter,
   disconnectSerialPrinter,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/thermal-printer";
 import { AdminHeader, AdminViewMode } from "@/components/admin/AdminHeader";
 import { OrdersTab, OrderRow } from "@/components/admin/tabs/OrdersTab";
+import { MenuTab } from "@/components/admin/tabs/MenuTab";
 import { WhatsAppTab } from "@/components/admin/tabs/WhatsAppTab";
 import { FinancialTab } from "@/components/admin/tabs/FinancialTab";
 import { DeliveryTab } from "@/components/admin/tabs/DeliveryTab";
@@ -31,18 +32,65 @@ export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
 
+function playNewOrderChime() {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const notes = [587.33, 880]; // D5 -> A5 chime
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.18);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.18);
+      osc.stop(ctx.currentTime + i * 0.18 + 0.35);
+    });
+  } catch {
+    // ignore audio autoplay restrictions
+  }
+}
+
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
   const navigate = useNavigate();
   const fetchOrders = useServerFn(listOrders);
   const updateStatus = useServerFn(updateOrderStatus);
+  const confirmPaymentFn = useServerFn(confirmOrderPayment);
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"ativos" | "todos" | OrderRow["status"]>("ativos");
+  const [filter, setFilter] = useState<
+    "ativos" | "todos" | "pix_pendente" | OrderRow["status"]
+  >("ativos");
   const [error, setError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<AdminViewMode>("pedidos");
+
+  // Alerta sonoro KDS
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("imperio_kds_sound") !== "false";
+    }
+    return true;
+  });
+  const knownOrderIdsRef = useRef<Set<string> | null>(null);
+
+  const handleToggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("imperio_kds_sound", String(next));
+      }
+      if (next) playNewOrderChime();
+      return next;
+    });
+  };
 
   // Configuração da Impressora Térmica Serial / USB
   const [printerConnected, setPrinterConnected] = useState(false);
@@ -73,7 +121,10 @@ function AdminPage() {
     setTimeout(() => setPrinterMsg(null), 5000);
   };
 
-  const handleUpdatePrinterSetting = <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => {
+  const handleUpdatePrinterSetting = <K extends keyof PrinterSettings>(
+    key: K,
+    value: PrinterSettings[K]
+  ) => {
     const updated = savePrinterSettings({ [key]: value });
     setPrinterSettings(updated);
   };
@@ -92,8 +143,22 @@ function AdminPage() {
 
   const load = async () => {
     try {
-      const data = await fetchOrders();
-      setOrders(data as OrderRow[]);
+      const data = (await fetchOrders()) as OrderRow[];
+      const readyOrders = data.filter(
+        (o) => o.payment_method !== "Pix" || o.payment_status === "paid"
+      );
+      if (knownOrderIdsRef.current === null) {
+        knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
+      } else {
+        const hasBrandNewReady = readyOrders.some(
+          (o) => !knownOrderIdsRef.current!.has(o.id) && o.status === "novo"
+        );
+        if (hasBrandNewReady && soundEnabled) {
+          playNewOrderChime();
+        }
+        knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
+      }
+      setOrders(data);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar pedidos.");
@@ -110,18 +175,25 @@ function AdminPage() {
     return () => {
       clearInterval(interval);
     };
-  }, []);
+  }, [soundEnabled]);
 
   const filtered = useMemo(() => {
     const visible = orders.filter((o) => {
-      const isOnline = o.payment_method === "Pix";
-      if (isOnline) {
+      if (o.payment_method === "Pix") {
         return o.payment_status === "paid";
       }
       return true;
     });
 
     if (filter === "todos") return orders;
+    if (filter === "pix_pendente") {
+      return orders.filter(
+        (o) =>
+          o.payment_method === "Pix" &&
+          o.payment_status === "pending" &&
+          o.status !== "cancelado"
+      );
+    }
     if (filter === "ativos") {
       return visible.filter((o) => o.status !== "entregue" && o.status !== "cancelado");
     }
@@ -130,17 +202,31 @@ function AdminPage() {
 
   const counts = useMemo(() => {
     const visible = orders.filter((o) => {
-      const isOnline = o.payment_method === "Pix";
-      if (isOnline) {
+      if (o.payment_method === "Pix") {
         return o.payment_status === "paid";
       }
       return true;
     });
 
-    const c: Record<string, number> = { ativos: 0, todos: orders.length };
+    const c: Record<string, number> = {
+      ativos: 0,
+      pix_pendente: 0,
+      todos: orders.length,
+    };
     for (const o of visible) {
       c[o.status] = (c[o.status] ?? 0) + 1;
-      if (o.status !== "entregue" && o.status !== "cancelado") c.ativos++;
+      if (o.status !== "entregue" && o.status !== "cancelado") {
+        c.ativos++;
+      }
+    }
+    for (const o of orders) {
+      if (
+        o.payment_method === "Pix" &&
+        o.payment_status === "pending" &&
+        o.status !== "cancelado"
+      ) {
+        c.pix_pendente++;
+      }
     }
     return c;
   }, [orders]);
@@ -163,8 +249,22 @@ function AdminPage() {
     }
   };
 
+  const handleConfirmPayment = async (id: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o))
+    );
+    try {
+      await confirmPaymentFn({ data: { id } });
+      setPrinterMsg({ text: `Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!` });
+      setTimeout(() => setPrinterMsg(null), 4000);
+    } catch {
+      load();
+    }
+  };
+
   const onLogout = async () => {
-    document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+    document.cookie =
+      "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
     localStorage.removeItem("auth_token");
     navigate({ to: "/auth" });
   };
@@ -179,6 +279,8 @@ function AdminPage() {
         setFilter={setFilter}
         counts={counts}
         printerConnected={printerConnected}
+        soundEnabled={soundEnabled}
+        onToggleSound={handleToggleSound}
         onConnectPrinter={handleConnectPrinter}
         onDisconnectPrinter={handleDisconnectPrinter}
         onRefreshOrders={load}
@@ -213,9 +315,12 @@ function AdminPage() {
             orders={filtered}
             loading={loading}
             onStatus={handleStatus}
+            onConfirmPayment={handleConfirmPayment}
             onPrint={handlePrintOrder}
           />
         )}
+
+        {viewMode === "cardapio" && <MenuTab />}
 
         {viewMode === "indicadores" && <FinancialTab orders={orders} />}
 
