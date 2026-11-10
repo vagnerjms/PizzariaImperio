@@ -90,8 +90,8 @@ export function CheckoutDeliveryStep({
       </div>
 
       {/* Card principal: Escolha onde receber */}
-      <div className="overflow-hidden rounded-2xl border-2 border-red-600/80 bg-card shadow-lg">
-        <div className="bg-gradient-to-r from-red-700 via-red-600 to-red-700 px-4 py-3.5 text-sm font-bold text-white shadow-xs">
+      <div className="overflow-hidden rounded-2xl border border-gold/40 bg-card shadow-xl">
+        <div className="bg-gradient-to-r from-gold via-amber-400 to-gold px-4 py-3 text-sm font-bold text-black shadow-xs tracking-wide">
           Escolha onde receber
         </div>
 
@@ -104,7 +104,7 @@ export function CheckoutDeliveryStep({
               className="flex w-full items-center justify-between gap-3 text-left"
             >
               <div className="flex items-center gap-3.5">
-                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-red-500/10 text-red-400">
+                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
                   <Home className="h-5 w-5" />
                 </div>
                 <div>
@@ -352,7 +352,7 @@ export function CheckoutDeliveryStep({
             className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-secondary/20"
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-red-500/10 text-red-400">
+              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
                 <Store className="h-5 w-5" />
               </div>
               <div>
@@ -381,7 +381,7 @@ export function CheckoutDeliveryStep({
             className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-secondary/20"
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-red-500/10 text-red-400">
+              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
                 <UtensilsCrossed className="h-5 w-5" />
               </div>
               <div>

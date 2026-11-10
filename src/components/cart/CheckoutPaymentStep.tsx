@@ -55,7 +55,7 @@ export function CheckoutPaymentStep({
         </div>
 
         <div className="flex items-center gap-2.5 px-4 py-3 text-xs text-muted-foreground">
-          <Clock className="h-4 w-4 text-red-500 flex-none" />
+          <Clock className="h-4 w-4 text-gold flex-none" />
           <span>
             Previsão: <strong className="text-foreground">{timeEstimate}</strong>
           </span>
@@ -63,8 +63,8 @@ export function CheckoutPaymentStep({
       </div>
 
       {/* Card principal: Escolha como pagar */}
-      <div className="overflow-hidden rounded-2xl border-2 border-red-600/80 bg-card shadow-lg">
-        <div className="bg-gradient-to-r from-red-700 via-red-600 to-red-700 px-4 py-3.5 text-sm font-bold text-white shadow-xs">
+      <div className="overflow-hidden rounded-2xl border border-gold/40 bg-card shadow-xl">
+        <div className="bg-gradient-to-r from-gold via-amber-400 to-gold px-4 py-3 text-sm font-bold text-black shadow-xs tracking-wide">
           Escolha como pagar
         </div>
 
