@@ -47,3 +47,13 @@ export interface AppliedPromotionResult {
   };
   reason: string;
 }
+
+export const PROMO_CATEGORIES = [
+  { id: "todas", label: "Qualquer Pizza / Produto" },
+  { id: "salgadas", label: "Pizzas Salgadas (Tradicionais e Especiais)" },
+  { id: "tradicionais", label: "Pizzas Tradicionais" },
+  { id: "especiais", label: "Pizzas Especiais" },
+  { id: "doces", label: "Pizzas Doces" },
+  { id: "doces-especiais", label: "Pizzas Doces Especiais" },
+  { id: "bebidas", label: "Bebidas" },
+] as const;

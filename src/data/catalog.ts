@@ -255,5 +255,5 @@ export const SERVER_CRUST_PRICES: Record<string, { name: string; price: number }
   CRUST_OPTIONS.map((c) => [c.id, { name: c.name, price: c.price }])
 );
 
-export const formatBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+import { formatBRL } from "@/lib/formatters";
+export { formatBRL };

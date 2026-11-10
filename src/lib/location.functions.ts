@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { cleanString } from "./delivery-config";
+import { cleanString } from "./formatters";
 
 export interface LocationResult {
   rua: string;

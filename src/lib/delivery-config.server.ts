@@ -1,4 +1,8 @@
 import { getDb } from "./db";
+import { BRAGANCA_PAULISTA_NEIGHBORHOODS } from "@/data/neighborhoods";
+import { cleanString } from "./formatters";
+
+export { BRAGANCA_PAULISTA_NEIGHBORHOODS, cleanString };
 
 export interface NeighborhoodFee {
   id: string;
@@ -11,108 +15,6 @@ export interface DeliverySettings {
   neighborhoods: NeighborhoodFee[];
 }
 
-export const BRAGANCA_PAULISTA_NEIGHBORHOODS: string[] = [
-  "Centro",
-  "Lavapés",
-  "Jardim América",
-  "Jardim Europa",
-  "Jardim do Lago",
-  "Jardim Águas Claras",
-  "Cidade Planejada I",
-  "Cidade Planejada II",
-  "Henedina Cortez",
-  "Matadouro",
-  "Taboão",
-  "Tanque do Moinho",
-  "Penha",
-  "Cruzeiro",
-  "Santa Luzia",
-  "Vila Municipal",
-  "Vila Bianchi",
-  "Vila Gato",
-  "Vila Motta",
-  "Vila Santa Libânia",
-  "Vila Davi",
-  "Vila Aparecida",
-  "Altos de Bragança",
-  "Euroville I",
-  "Euroville II",
-  "Residencial Euroville",
-  "Residencial Campos do Conde",
-  "Condomínio Santa Helena",
-  "Residencial Colinas de São Francisco",
-  "Condomínio Portal da Serra",
-  "Jardim Primavera",
-  "Jardim São Lourenço",
-  "Jardim Santa Helena",
-  "Jardim São José",
-  "Jardim das Laranjeiras",
-  "Jardim Comendador Cardoso",
-  "Jardim da Fraternidade",
-  "Jardim Novo Mundo",
-  "Jardim Iguatemi",
-  "Jardim Júlio de Mesquita",
-  "Jardim Vista Alegre",
-  "Jardim Morumbi",
-  "Jardim Recreio",
-  "Jardim Santa Rita de Cássia",
-  "Jardim Sevilha",
-  "Jardim Toró",
-  "Parque das Faculdades",
-  "Parque dos Estados",
-  "Parque Brasil",
-  "Planalto das Pimenteiras",
-  "Cidade Universitária",
-  "Quinta dos Vinhedos",
-  "Recanto da Montanha",
-  "Portal São Marcelo",
-  "Conjunto Habitacional Saada Nader Abi Chedid",
-  "Conjunto Habitacional Padre Aldo Bolini",
-  "Conjunto Habitacional Nicola Cortez",
-  "Conjunto Habitacional Bragança F",
-  "Vila Nova Bragança",
-  "Vila Olinda",
-  "Vila Ramos",
-  "Vila Salmorani",
-  "Vila Santa Luzia",
-  "Vila Virgínia",
-  "Vila Belém",
-  "Vila Garcia",
-  "Água Comprida",
-  "Arara dos Pereiras",
-  "Araras dos Mori",
-  "Atibaianos",
-  "Bairro do Agudo",
-  "Bairro do Menin",
-  "Bairro do Uberaba",
-  "Bairro Sete Barras",
-  "Biriça do Campinho",
-  "Boa Vista",
-  "Boa Vista dos Silva",
-  "Bom Retiro",
-  "Bom Retiro dos Mourão",
-  "Bosques da Pedra",
-  "Campinho",
-  "Campo Novo",
-  "Chácara Alvorada",
-  "Chácaras Fernão Dias",
-  "Chácaras Luzia Vicente",
-  "Chácaras São Bento",
-  "Chácaras Silvano",
-  "Condomínio Quinta da Baroneza",
-  "Estância Santa Amélia",
-  "Guaripocaba",
-  "Morro Grande",
-  "Ponte Alta",
-  "Rio Abaixo",
-  "Santa Bárbara",
-  "Serrinha",
-  "Toró",
-  "Usina",
-  "Vargem",
-  "Vista Alegre"
-];
-
 export const INITIAL_DEFAULT_FEE = 7.00;
 
 export function getBragancaNeighborhoodsList(defaultFee = 5.00): NeighborhoodFee[] {
@@ -121,15 +23,6 @@ export function getBragancaNeighborhoodsList(defaultFee = 5.00): NeighborhoodFee
     name,
     fee: defaultFee,
   }));
-}
-
-export function cleanString(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
 }
 
 export async function getDeliverySettings(): Promise<DeliverySettings> {

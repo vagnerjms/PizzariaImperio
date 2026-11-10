@@ -1,36 +1,8 @@
 import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle, QrCode, Timer } from "lucide-react";
 import { formatBRL } from "@/data/catalog";
+import { OrderRow } from "@/types/orders";
 
-export type OrderRow = {
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_address: string;
-  delivery_mode?: "delivery" | "pickup" | "dine_in";
-  payment_method: string;
-  troco?: number | null;
-  subtotal: number;
-  discount: number;
-  promotion_id?: string | null;
-  promotion_title?: string | null;
-  total: number;
-  delivery_fee?: number | null;
-  status: "novo" | "preparando" | "saiu" | "entregue" | "cancelado";
-  created_at: string;
-  updated_at: string;
-  payment_status: "pending" | "paid" | "failed" | "refunded" | "on_delivery";
-  payment_gateway?: string | null;
-  gateway_payment_id?: string | null;
-  payment_details?: any;
-  order_items: Array<{
-    id: string;
-    pizza_name: string;
-    quantity: number;
-    unit_price: number;
-    subtotal: number;
-  }>;
-  notes?: string | null;
-};
+export type { OrderRow };
 
 const STATUS_META: Record<
   OrderRow["status"],

@@ -21,6 +21,7 @@ import { DeliveryTab } from "@/components/admin/tabs/DeliveryTab";
 import { PromotionsTab } from "@/components/admin/tabs/PromotionsTab";
 import { UsersTab } from "@/components/admin/tabs/UsersTab";
 import { SettingsTab } from "@/components/admin/tabs/SettingsTab";
+import { playNewOrderChime } from "@/lib/sound";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -31,30 +32,6 @@ export const Route = createFileRoute("/_authenticated/admin")({
   }),
   component: AdminPage,
 });
-
-function playNewOrderChime() {
-  if (typeof window === "undefined") return;
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const notes = [587.33, 880]; // D5 -> A5 chime
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.18);
-      gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.18);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + i * 0.18);
-      osc.stop(ctx.currentTime + i * 0.18 + 0.35);
-    });
-  } catch {
-    // ignore audio autoplay restrictions
-  }
-}
 
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };

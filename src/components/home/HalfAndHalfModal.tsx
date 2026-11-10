@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Search, Plus, Minus, Check, RefreshCw, Sparkles, ChevronRight } from "lucide-react";
 import { Pizza, CartItem, CRUST_OPTIONS, CrustOption, formatBRL } from "@/data/catalog";
-import { cleanString } from "@/lib/delivery-config";
+import { cleanString } from "@/lib/formatters";
 
 export function HalfAndHalfModal({
   allPizzas,

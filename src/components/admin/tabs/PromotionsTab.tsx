@@ -18,23 +18,9 @@ import {
   togglePromotionFn,
   deletePromotionFn,
 } from "@/lib/promotions.functions";
-import { Promotion } from "@/lib/promotions.types";
-import { MENU_ITEMS, PROMO_CATEGORIES } from "@/lib/menu-list";
-
-function formatPromoDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (match) {
-    const [, y, m, d] = match;
-    return `${d}/${m}/${y}`;
-  }
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  } catch {
-    return dateStr;
-  }
-}
+import { Promotion, PROMO_CATEGORIES } from "@/lib/promotions.types";
+import { MENU as MENU_ITEMS } from "@/data/catalog";
+import { formatDateBR as formatPromoDate } from "@/lib/formatters";
 
 export function PromotionsTab() {
   const fetchPromotions = useServerFn(getAdminPromotions);

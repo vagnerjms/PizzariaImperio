@@ -16,17 +16,17 @@ function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h1 className="text-7xl font-bold font-serif text-gold">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          A página que você procura não existe ou foi movida.
         </p>
         <div className="mt-6">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-xl bg-gold px-5 py-2.5 text-sm font-bold text-gold-foreground transition-all hover:brightness-110 shadow-gold-glow"
           >
-            Go home
+            Voltar ao cardápio
           </Link>
         </div>
       </div>
@@ -44,27 +44,27 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+        <h1 className="text-xl font-bold font-serif tracking-tight text-foreground">
+          Ops, algo deu errado
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Houve uma oscilação temporária. Você pode tentar atualizar a página ou voltar para o início.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-xl bg-gold px-5 py-2.5 text-sm font-bold text-gold-foreground transition-all hover:brightness-110 shadow-gold-glow"
           >
-            Try again
+            Tentar novamente
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex items-center justify-center rounded-xl border border-border bg-secondary/40 px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
           >
-            Go home
+            Página inicial
           </a>
         </div>
       </div>
@@ -78,14 +78,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#1a1410" },
-      { title: "Lovable App" },
-      { property: "og:title", content: "Lovable App" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "description", content: "Delicious Pizza Hub is a modern web application for showcasing and ordering pizza." },
-      { property: "og:description", content: "Delicious Pizza Hub is a modern web application for showcasing and ordering pizza." },
-      { name: "twitter:description", content: "Delicious Pizza Hub is a modern web application for showcasing and ordering pizza." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f178cd1b-3bef-499a-8b63-f7b2ab36e431/id-preview-5daed9e1--b6c537b4-3792-4a29-bfa4-11acd9a3fc7f.lovable.app-1782735941200.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f178cd1b-3bef-499a-8b63-f7b2ab36e431/id-preview-5daed9e1--b6c537b4-3792-4a29-bfa4-11acd9a3fc7f.lovable.app-1782735941200.png" },
+      { title: "Pizzaria Império — Forno a Lenha · São Paulo & Bragança" },
+      { property: "og:title", content: "Pizzaria Império — Forno a Lenha" },
+      { name: "twitter:title", content: "Pizzaria Império — Forno a Lenha" },
+      {
+        name: "description",
+        content:
+          "Pizzaria Império: massa de fermentação natural de 48h, forno a lenha a 400°C e ingredientes selecionados.",
+      },
+      {
+        property: "og:description",
+        content:
+          "O sabor de um verdadeiro império. Massa de 48h, forno a lenha e ingredientes selecionados.",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "O sabor de um verdadeiro império. Massa de 48h, forno a lenha e ingredientes selecionados.",
+      },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
     ],
@@ -107,7 +117,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <HeadContent />
       </head>

@@ -1,16 +1,11 @@
+import { cleanString } from "./formatters";
+
+export { cleanString };
+
 export interface NeighborhoodFeeItem {
   id?: string;
   name: string;
   fee: number;
-}
-
-export function cleanString(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
 }
 
 export function matchDeliveryFee(

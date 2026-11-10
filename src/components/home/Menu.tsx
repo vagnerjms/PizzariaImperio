@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Star, Search, X, Sparkles, ChevronRight, Plus } from "lucide-react";
 import { Pizza, CATEGORIES, CATEGORY_ICONS } from "@/data/catalog";
-import { cleanString } from "@/lib/delivery-config";
+import { cleanString } from "@/lib/formatters";
 import { PizzaCard } from "./PizzaCard";
 import { MobilePizzaCard } from "./MobilePizzaCard";
 

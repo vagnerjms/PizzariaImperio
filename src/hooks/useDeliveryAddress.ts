@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getDeliveryFeeForNeighborhood, cleanString } from "@/lib/delivery-config";
+import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
+import { cleanString, formatPhoneMask } from "@/lib/formatters";
+import { useCustomerProfile, CUSTOMER_STORAGE_KEY } from "./useCustomerProfile";
+export { formatPhoneMask };
 import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
 import { reverseGeocodeGPS, searchStreetAddress, LocationResult } from "@/lib/location.functions";
 
@@ -22,8 +25,6 @@ export interface DeliveryAddressForm {
   notes: string;
 }
 
-const CUSTOMER_STORAGE_KEY = "imperio_customer_profile_v1";
-
 const initialForm: DeliveryAddressForm = {
   name: "",
   phone: "",
@@ -40,21 +41,9 @@ const initialForm: DeliveryAddressForm = {
   notes: "",
 };
 
-export function formatPhoneMask(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length === 0) return "";
-  if (digits.length <= 2) return `(${digits}`;
-  if (digits.length <= 3) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 7) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)} ${digits.slice(3)}`;
-  }
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)} ${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
-}
-
 export function useDeliveryAddress() {
+  const { profile, hasSavedIdentity, hasSavedAddress, saveProfile } = useCustomerProfile();
   const [form, setForm] = useState<DeliveryAddressForm>(initialForm);
-  const [hasSavedIdentity, setHasSavedIdentity] = useState(false);
-  const [hasSavedAddress, setHasSavedAddress] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [locatingGPS, setLocatingGPS] = useState(false);
   const [streetSearching, setStreetSearching] = useState(false);
@@ -89,56 +78,27 @@ export function useDeliveryAddress() {
       .catch((err) => console.error("Erro ao carregar taxas de entrega:", err));
   }, []);
 
-  // Carrega dados salvos do cliente no localStorage
+  // Hidrata dados do perfil do cliente quando carregado do storage
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(CUSTOMER_STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      if (saved && typeof saved === "object") {
-        const validIdentity = Boolean(saved.name && saved.phone && String(saved.phone).replace(/\D/g, "").length >= 10);
-        const validAddress = Boolean(saved.rua && saved.numero && saved.bairro);
-        setHasSavedIdentity(validIdentity);
-        setHasSavedAddress(validAddress);
-        setForm((prev) => ({
-          ...prev,
-          name: saved.name || prev.name,
-          phone: saved.phone ? formatPhoneMask(saved.phone) : prev.phone,
-          cep: saved.cep || prev.cep,
-          rua: saved.rua || prev.rua,
-          numero: saved.numero || prev.numero,
-          bairro: saved.bairro || prev.bairro,
-          complemento: saved.complemento || prev.complemento,
-          cidadeUf: saved.cidadeUf || prev.cidadeUf,
-          deliveryMode: validAddress ? "delivery" : prev.deliveryMode,
-        }));
-      }
-    } catch {
-      // ignore storage errors
+    if (profile) {
+      setForm((prev) => ({
+        ...prev,
+        name: profile.name || prev.name,
+        phone: profile.phone || prev.phone,
+        cep: profile.cep || prev.cep,
+        rua: profile.rua || prev.rua,
+        numero: profile.numero || prev.numero,
+        bairro: profile.bairro || prev.bairro,
+        complemento: profile.complemento || prev.complemento,
+        cidadeUf: profile.cidadeUf || prev.cidadeUf,
+        deliveryMode: profile.rua && profile.numero && profile.bairro ? "delivery" : prev.deliveryMode,
+      }));
     }
-  }, []);
+  }, [profile]);
 
   const persistCustomerProfile = useCallback((nextForm: DeliveryAddressForm) => {
-    if (typeof window === "undefined") return;
-    try {
-      const payload = {
-        name: nextForm.name.trim(),
-        phone: nextForm.phone.trim(),
-        cep: nextForm.cep.trim(),
-        rua: nextForm.rua.trim(),
-        numero: nextForm.numero.trim(),
-        bairro: nextForm.bairro.trim(),
-        complemento: nextForm.complemento.trim(),
-        cidadeUf: nextForm.cidadeUf.trim(),
-      };
-      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(payload));
-      setHasSavedIdentity(Boolean(payload.name && payload.phone.replace(/\D/g, "").length >= 10));
-      setHasSavedAddress(Boolean(payload.rua && payload.numero && payload.bairro));
-    } catch {
-      // ignore storage errors
-    }
-  }, []);
+    saveProfile(nextForm);
+  }, [saveProfile]);
 
   const sanitize = (s: string, max: number) =>
     s.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
