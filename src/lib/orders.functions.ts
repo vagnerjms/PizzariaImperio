@@ -71,7 +71,7 @@ function generateStaticPix(key: string, name: string, city: string, amount: numb
 }
 
 export const createOrder = createServerFn({ method: "POST" })
-  .inputValidator((raw: unknown) => createOrderSchema.parse(raw))
+  .validator((raw: unknown) => createOrderSchema.parse(raw))
   .handler(async ({ data }) => {
     const { getOrdersCollection } = await import("./db");
     const { randomUUID } = await import("node:crypto");
@@ -485,7 +485,7 @@ const updateStatusSchema = z.object({
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updateStatusSchema.parse(raw))
+  .validator((raw: unknown) => updateStatusSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
       throw new Error("Acesso restrito.");
@@ -548,7 +548,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
 
 export const confirmOrderPayment = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
+  .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
       throw new Error("Acesso restrito.");
@@ -602,7 +602,7 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
 
 // A lightweight status checking helper function for clients
 export const getOrderStatus = createServerFn({ method: "GET" })
-  .inputValidator((raw: unknown) => z.string().parse(raw))
+  .validator((raw: unknown) => z.string().parse(raw))
   .handler(async ({ data: orderId }) => {
     const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();

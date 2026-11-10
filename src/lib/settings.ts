@@ -24,7 +24,7 @@ export const getAdminSettings = createServerFn({ method: "GET" })
 
 export const updateAdminSettings = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updateSettingsSchema.parse(raw))
+  .validator((raw: unknown) => updateSettingsSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito.");

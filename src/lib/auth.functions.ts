@@ -7,7 +7,7 @@ const loginSchema = z.object({
 });
 
 export const loginFn = createServerFn({ method: "POST" })
-  .inputValidator((raw: unknown) => loginSchema.parse(raw))
+  .validator((raw: unknown) => loginSchema.parse(raw))
   .handler(async ({ data }) => {
     const { getUsersCollection } = await import("./db");
     const { verifyPassword } = await import("./hash");

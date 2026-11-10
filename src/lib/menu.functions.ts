@@ -33,7 +33,7 @@ const updateMenuOverrideSchema = z.object({
 
 export const saveMenuOverride = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updateMenuOverrideSchema.parse(raw))
+  .validator((raw: unknown) => updateMenuOverrideSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito a supervisores e administradores.");
@@ -60,7 +60,7 @@ export const saveMenuOverride = createServerFn({ method: "POST" })
 
 export const resetMenuOverride = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
+  .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito a supervisores e administradores.");

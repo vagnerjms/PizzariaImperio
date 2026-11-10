@@ -31,7 +31,7 @@ const createUserSchema = z.object({
 
 export const createUser = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => createUserSchema.parse(raw))
+  .validator((raw: unknown) => createUserSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito a Administradores.");
@@ -65,7 +65,7 @@ const updateRoleSchema = z.object({
 
 export const updateUserRole = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updateRoleSchema.parse(raw))
+  .validator((raw: unknown) => updateRoleSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito a Administradores.");
@@ -108,7 +108,7 @@ const updatePasswordSchema = z.object({
 
 export const updateUserPassword = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updatePasswordSchema.parse(raw))
+  .validator((raw: unknown) => updatePasswordSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito a Administradores.");
@@ -147,7 +147,7 @@ const deleteUserSchema = z.object({
 
 export const deleteUser = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => deleteUserSchema.parse(raw))
+  .validator((raw: unknown) => deleteUserSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito a Administradores.");

@@ -22,7 +22,7 @@ export const getPublicDeliveryConfig = createServerFn({ method: "GET" })
 
 // 2. Calcular taxa de entrega por nome de bairro no servidor
 export const lookupDeliveryFee = createServerFn({ method: "POST" })
-  .inputValidator((raw: unknown) => z.object({ neighborhood: z.string() }).parse(raw))
+  .validator((raw: unknown) => z.object({ neighborhood: z.string() }).parse(raw))
   .handler(async ({ data }) => {
     const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
     const fee = await calculateFeeForNeighborhood(data.neighborhood);
@@ -43,7 +43,7 @@ export const getAdminDeliverySettings = createServerFn({ method: "GET" })
 // 4. Salvar novas taxas de entrega no MongoDB (Admin ou Supervisor)
 export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => updateDeliverySettingsSchema.parse(raw))
+  .validator((raw: unknown) => updateDeliverySettingsSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");

@@ -42,7 +42,7 @@ export const getAdminPromotions = createServerFn({ method: "GET" })
 // 3. Criação de promoção
 export const createPromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => createPromoSchema.parse(raw))
+  .validator((raw: unknown) => createPromoSchema.parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
@@ -55,7 +55,7 @@ export const createPromotionFn = createServerFn({ method: "POST" })
 // 4. Edição de promoção
 export const updatePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) =>
+  .validator((raw: unknown) =>
     z.object({
       id: z.string(),
       data: createPromoSchema.partial(),
@@ -73,7 +73,7 @@ export const updatePromotionFn = createServerFn({ method: "POST" })
 // 5. Alternar status ativo/inativo
 export const togglePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) =>
+  .validator((raw: unknown) =>
     z.object({
       id: z.string(),
       active: z.boolean(),
@@ -91,7 +91,7 @@ export const togglePromotionFn = createServerFn({ method: "POST" })
 // 6. Deletar promoção
 export const deletePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
+  .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
   .handler(async ({ data, context }) => {
     if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");

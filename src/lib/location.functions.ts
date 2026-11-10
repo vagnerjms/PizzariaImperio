@@ -51,7 +51,7 @@ function matchesSignificantQuery(streetName: string, queryWords: string[]): bool
  * (Cache em Memória/MongoDB ➔ Nominatim OSM ➔ Photon Komoot ➔ Google Maps Reverse Geocoding)
  */
 export const reverseGeocodeGPS = createServerFn({ method: "POST" })
-  .inputValidator((raw: unknown) =>
+  .validator((raw: unknown) =>
     z.object({
       lat: z.number(),
       lon: z.number(),
@@ -242,7 +242,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
  * 2. Motor de Busca de Ruas com Cache Inteligente e Failover Protegido
  */
 export const searchStreetAddress = createServerFn({ method: "POST" })
-  .inputValidator((raw: unknown) =>
+  .validator((raw: unknown) =>
     z.object({
       query: z.string().trim().min(3),
     }).parse(raw)
