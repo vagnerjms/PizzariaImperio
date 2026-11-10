@@ -9,7 +9,6 @@ import {
   Edit3,
   Trash2,
   XCircle,
-  Eye,
 } from "lucide-react";
 import {
   getAdminPromotions,
@@ -18,9 +17,9 @@ import {
   togglePromotionFn,
   deletePromotionFn,
 } from "@/lib/promotions.functions";
-import { Promotion, PROMO_CATEGORIES } from "@/lib/promotions.types";
-import { MENU as MENU_ITEMS } from "@/data/catalog";
+import { Promotion } from "@/lib/promotions.types";
 import { formatDateBR as formatPromoDate } from "@/lib/formatters";
+import { PromotionModal, PromotionFormData } from "../promotions/PromotionModal";
 
 export function PromotionsTab() {
   const fetchPromotions = useServerFn(getAdminPromotions);
@@ -36,23 +35,7 @@ export function PromotionsTab() {
   const [promotionsErrorMsg, setPromotionsErrorMsg] = useState<string | null>(null);
 
   const [showPromoModal, setShowPromoModal] = useState(false);
-  const [editingPromoId, setEditingPromoId] = useState<string | null>(null);
-
-  const [promoTitle, setPromoTitle] = useState("");
-  const [promoDescription, setPromoDescription] = useState("");
-  const [promoBadgeText, setPromoBadgeText] = useState("OFERTA RELÂMPAGO");
-  const [promoType, setPromoType] = useState<"PERCENTAGE_DISCOUNT" | "FIXED_DISCOUNT" | "BUY_X_GET_Y">("PERCENTAGE_DISCOUNT");
-  const [promoDiscountValue, setPromoDiscountValue] = useState<number>(10);
-  const [promoTriggerType, setPromoTriggerType] = useState<"all" | "category" | "specific_items" | "min_total">("all");
-  const [promoTriggerCategory, setPromoTriggerCategory] = useState("todas");
-  const [promoTriggerItemIds, setPromoTriggerItemIds] = useState<string[]>([]);
-  const [promoTriggerMinQty, setPromoTriggerMinQty] = useState<number>(1);
-  const [promoTriggerMinTotal, setPromoTriggerMinTotal] = useState<number>(0);
-  const [promoRewardItemId, setPromoRewardItemId] = useState("coca-2l");
-  const [promoRewardDiscountPercent, setPromoRewardDiscountPercent] = useState<number>(100);
-  const [promoActive, setPromoActive] = useState(true);
-  const [promoStartDate, setPromoStartDate] = useState("");
-  const [promoEndDate, setPromoEndDate] = useState("");
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
 
   const loadPromotions = async () => {
     setPromotionsLoading(true);
@@ -72,82 +55,25 @@ export function PromotionsTab() {
   }, []);
 
   const handleOpenCreatePromo = () => {
-    setEditingPromoId(null);
-    setPromoTitle("");
-    setPromoDescription("");
-    setPromoBadgeText("OFERTA RELÂMPAGO");
-    setPromoType("PERCENTAGE_DISCOUNT");
-    setPromoDiscountValue(10);
-    setPromoTriggerType("all");
-    setPromoTriggerCategory("todas");
-    setPromoTriggerItemIds([]);
-    setPromoTriggerMinQty(1);
-    setPromoTriggerMinTotal(0);
-    setPromoRewardItemId("coca-2l");
-    setPromoRewardDiscountPercent(100);
-    setPromoActive(true);
-    setPromoStartDate("");
-    setPromoEndDate("");
+    setEditingPromo(null);
     setPromotionsErrorMsg(null);
     setShowPromoModal(true);
   };
 
   const handleOpenEditPromo = (p: Promotion) => {
-    setEditingPromoId(p._id);
-    setPromoTitle(p.title);
-    setPromoDescription(p.description);
-    setPromoBadgeText(p.badge_text || "OFERTA RELÂMPAGO");
-    setPromoType(p.type);
-    setPromoDiscountValue(p.discount_value || 10);
-    setPromoTriggerType(p.trigger_type || "all");
-    setPromoTriggerCategory(p.trigger_category || "todas");
-    setPromoTriggerItemIds(p.trigger_item_ids || []);
-    setPromoTriggerMinQty(p.trigger_min_qty || 1);
-    setPromoTriggerMinTotal(p.trigger_min_total || 0);
-    setPromoRewardItemId(p.reward_item_id || "coca-2l");
-    setPromoRewardDiscountPercent(p.reward_discount_percent !== undefined ? p.reward_discount_percent : 100);
-    setPromoActive(p.active);
-    setPromoStartDate(p.start_date || "");
-    setPromoEndDate(p.end_date || "");
+    setEditingPromo(p);
     setPromotionsErrorMsg(null);
     setShowPromoModal(true);
   };
 
-  const handleSavePromo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!promoTitle.trim() || !promoDescription.trim()) {
-      setPromotionsErrorMsg("Preencha o título e a descrição da promoção.");
-      return;
-    }
-
+  const handleSavePromo = async (payload: PromotionFormData) => {
     setPromotionsActionLoading(true);
     setPromotionsErrorMsg(null);
     setPromotionsSuccessMsg(null);
 
-    const rewardItem = MENU_ITEMS.find((i) => i.id === promoRewardItemId);
-
-    const payload = {
-      title: promoTitle.trim(),
-      description: promoDescription.trim(),
-      badge_text: promoBadgeText.trim() || "OFERTA RELÂMPAGO",
-      type: promoType,
-      discount_value: Number(promoDiscountValue) || 0,
-      trigger_type: promoTriggerType,
-      trigger_category: promoTriggerCategory,
-      trigger_item_ids: promoTriggerItemIds,
-      trigger_min_qty: Number(promoTriggerMinQty) || 1,
-      trigger_min_total: Number(promoTriggerMinTotal) || 0,
-      reward_item_id: promoType === "BUY_X_GET_Y" ? promoRewardItemId : null,
-      reward_item_name: promoType === "BUY_X_GET_Y" ? rewardItem?.name : null,
-      reward_discount_percent: promoType === "BUY_X_GET_Y" ? Number(promoRewardDiscountPercent) : null,
-      active: promoActive,
-      start_date: promoStartDate || null,
-      end_date: promoEndDate || null,
-    };
-
     try {
-      if (editingPromoId) {
-        await updatePromo({ data: { id: editingPromoId, data: payload } });
+      if (editingPromo?._id) {
+        await updatePromo({ data: { id: editingPromo._id, data: payload } });
         setPromotionsSuccessMsg("Promoção atualizada com sucesso!");
       } else {
         await createPromo({ data: payload });
@@ -158,6 +84,7 @@ export function PromotionsTab() {
       setTimeout(() => setPromotionsSuccessMsg(null), 4000);
     } catch (err: any) {
       setPromotionsErrorMsg(err?.message || "Erro ao salvar promoção.");
+      throw err;
     } finally {
       setPromotionsActionLoading(false);
     }
@@ -346,358 +273,17 @@ export function PromotionsTab() {
         )}
       </div>
 
-      {/* Modal de Criação / Edição de Promoção */}
-      {showPromoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl my-8">
-            <header className="flex items-center justify-between border-b border-border/60 pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-gold/10 p-2 text-gold">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-serif text-lg leading-tight">
-                    {editingPromoId ? "Editar Promoção" : "Nova Promoção ou Combo"}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">Configure as regras de ativação e visualize em tempo real</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPromoModal(false)}
-                className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-              >
-                <XCircle className="h-5 w-5" />
-              </button>
-            </header>
-
-            <form onSubmit={handleSavePromo} className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Coluna 1: Informações e Mecânica */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5 border-b border-border/40 pb-1">
-                    1. Informações Visuais
-                  </h4>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Título da Promoção *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Combo Fim de Semana"
-                      value={promoTitle}
-                      onChange={(e) => setPromoTitle(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Descrição / Chamada *
-                    </label>
-                    <textarea
-                      required
-                      rows={2}
-                      placeholder="Ex: Compre 2 pizzas salgadas e ganhe 1 Coca-Cola 2L grátis!"
-                      value={promoDescription}
-                      onChange={(e) => setPromoDescription(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Tag / Badge de Destaque
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: OFERTA RELÂMPAGO, 10% OFF, COMBO"
-                      value={promoBadgeText}
-                      onChange={(e) => setPromoBadgeText(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    />
-                  </div>
-
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5 border-b border-border/40 pb-1 pt-2">
-                    2. Mecânica & Desconto
-                  </h4>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Tipo de Promoção *
-                    </label>
-                    <select
-                      value={promoType}
-                      onChange={(e) => setPromoType(e.target.value as any)}
-                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    >
-                      <option value="PERCENTAGE_DISCOUNT">Desconto Percentual (%) no Total</option>
-                      <option value="FIXED_DISCOUNT">Desconto em Valor Fixo (R$) no Total</option>
-                      <option value="BUY_X_GET_Y">Compre X e Ganhe / Leve Y (Brinde)</option>
-                    </select>
-                  </div>
-
-                  {promoType === "PERCENTAGE_DISCOUNT" && (
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Porcentagem de Desconto (%) *
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        required
-                        value={promoDiscountValue}
-                        onChange={(e) => setPromoDiscountValue(Number(e.target.value))}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                  )}
-
-                  {promoType === "FIXED_DISCOUNT" && (
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Valor do Desconto (R$) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.50"
-                        min="1"
-                        required
-                        value={promoDiscountValue}
-                        onChange={(e) => setPromoDiscountValue(Number(e.target.value))}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                  )}
-
-                  {promoType === "BUY_X_GET_Y" && (
-                    <div className="space-y-3 rounded-xl border border-gold/30 bg-gold/5 p-3">
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Produto de Brinde / Recompensa *
-                        </label>
-                        <select
-                          value={promoRewardItemId}
-                          onChange={(e) => setPromoRewardItemId(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-border bg-secondary/50 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        >
-                          {MENU_ITEMS.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name} ({item.category}) - R$ {item.price.toFixed(2)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Desconto no Brinde (%)
-                        </label>
-                        <select
-                          value={promoRewardDiscountPercent}
-                          onChange={(e) => setPromoRewardDiscountPercent(Number(e.target.value))}
-                          className="mt-1.5 w-full rounded-xl border border-border bg-secondary/50 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        >
-                          <option value={100}>100% Grátis (Brinde Total)</option>
-                          <option value={50}>50% de Desconto (Metade do Preço)</option>
-                          <option value={30}>30% de Desconto</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Coluna 2: Gatilhos & Pré-visualização */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5 border-b border-border/40 pb-1">
-                    3. Regras de Ativação (Gatilho)
-                  </h4>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Aplicar Quando o Cliente Comprar:
-                    </label>
-                    <select
-                      value={promoTriggerType}
-                      onChange={(e) => setPromoTriggerType(e.target.value as any)}
-                      className="mt-1.5 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    >
-                      <option value="all">Qualquer Produto do Cardápio</option>
-                      <option value="category">Por Categoria (ex: Pizzas Salgadas)</option>
-                      <option value="specific_items">Itens Específicos do Cardápio</option>
-                      <option value="min_total">Apenas Valor Mínimo do Pedido</option>
-                    </select>
-                  </div>
-
-                  {promoTriggerType === "category" && (
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Categoria Requerida:
-                      </label>
-                      <select
-                        value={promoTriggerCategory}
-                        onChange={(e) => setPromoTriggerCategory(e.target.value)}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      >
-                        {PROMO_CATEGORIES.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {promoTriggerType === "specific_items" && (
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                        Selecione os Produtos Participantes:
-                      </label>
-                      <div className="max-h-36 overflow-y-auto rounded-xl border border-border bg-secondary/20 p-2 space-y-1 divide-y divide-border/30 text-xs">
-                        {MENU_ITEMS.map((item) => {
-                          const isSelected = promoTriggerItemIds.includes(item.id);
-                          return (
-                            <label key={item.id} className="flex items-center gap-2 py-1 px-1.5 cursor-pointer hover:bg-secondary/40 rounded">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setPromoTriggerItemIds((prev) => [...prev, item.id]);
-                                  } else {
-                                    setPromoTriggerItemIds((prev) => prev.filter((id) => id !== item.id));
-                                  }
-                                }}
-                                className="rounded border-border text-gold focus:ring-gold"
-                              />
-                              <span>
-                                {item.name} <span className="text-muted-foreground">({item.category})</span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Qtd. Mínima de Itens
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={promoTriggerMinQty}
-                        onChange={(e) => setPromoTriggerMinQty(Number(e.target.value))}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Valor Mín. Pedido (R$)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="5"
-                        value={promoTriggerMinTotal}
-                        onChange={(e) => setPromoTriggerMinTotal(Number(e.target.value))}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Início (Opcional)
-                      </label>
-                      <input
-                        type="date"
-                        value={promoStartDate}
-                        onChange={(e) => setPromoStartDate(e.target.value)}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Término (Opcional)
-                      </label>
-                      <input
-                        type="date"
-                        value={promoEndDate}
-                        onChange={(e) => setPromoEndDate(e.target.value)}
-                        className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      />
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 pt-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={promoActive}
-                      onChange={(e) => setPromoActive(e.target.checked)}
-                      className="rounded border-border text-gold focus:ring-gold"
-                    />
-                    <span className="text-xs font-semibold text-foreground">Promoção Ativa Imediatamente</span>
-                  </label>
-
-                  {/* Live Preview Card */}
-                  <div className="pt-3">
-                    <span className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <Eye className="h-3 w-3 text-gold" /> Pré-visualização no Site:
-                    </span>
-                    <div className="rounded-2xl border border-gold/40 bg-card/90 p-4 shadow-gold-glow">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-gold uppercase">
-                        <Sparkles className="h-3 w-3 fill-gold" /> {promoBadgeText || "OFERTA RELÂMPAGO"}
-                      </div>
-                      <h5 className="mt-1.5 font-serif text-base font-bold text-foreground">
-                        {promoTitle || "Título da Promoção"}
-                      </h5>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {promoDescription || "Descrição da promoção..."}
-                      </p>
-                      <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2 text-xs font-semibold">
-                        <span className="text-gold">
-                          {promoType === "PERCENTAGE_DISCOUNT" && `${promoDiscountValue}% de Desconto`}
-                          {promoType === "FIXED_DISCOUNT" && `R$ ${promoDiscountValue},00 OFF`}
-                          {promoType === "BUY_X_GET_Y" &&
-                            `Ganhe ${promoRewardDiscountPercent === 100 ? "Grátis" : `${promoRewardDiscountPercent}% OFF`} em 1x ${MENU_ITEMS.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}`}
-                        </span>
-                        <span className="rounded-full bg-gold px-2.5 py-0.5 text-[10px] font-bold text-gold-foreground">
-                          Aproveitar
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-border flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPromoModal(false)}
-                  className="rounded-full border border-border px-5 py-2 text-xs font-semibold text-muted-foreground transition hover:text-foreground"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={promotionsActionLoading}
-                  className="rounded-full bg-gold px-6 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {promotionsActionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {promotionsActionLoading ? "Salvando..." : editingPromoId ? "Salvar Alterações" : "Criar Promoção"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modal Modular de Criação / Edição de Promoção */}
+      <PromotionModal
+        isOpen={showPromoModal}
+        onClose={() => setShowPromoModal(false)}
+        initialPromo={editingPromo}
+        onSave={handleSavePromo}
+        loading={promotionsActionLoading}
+      />
     </div>
+  );
+}
+
   );
 }

@@ -56,3 +56,4 @@ export function formatDateBR(dateStr: string | null | undefined): string {
     return dateStr;
   }
 }
+

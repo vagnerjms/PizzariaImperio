@@ -40,3 +40,4 @@ export interface OrderRow {
   order_items: OrderItemRow[];
   notes?: string | null;
 }
+

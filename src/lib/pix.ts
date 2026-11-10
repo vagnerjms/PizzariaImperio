@@ -62,3 +62,4 @@ export function generateStaticPix(
 
   return payload + calculateCrc16(payload);
 }
+

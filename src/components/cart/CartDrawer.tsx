@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import {
   ShoppingBag,
   X,
@@ -10,8 +9,8 @@ import {
 } from "lucide-react";
 import { CartItem, formatBRL } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
-import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { useDeliveryAddress } from "@/hooks/useDeliveryAddress";
+import { useActiveOrder } from "@/hooks/useActiveOrder";
 import { OrderStatusView } from "./OrderStatusView";
 import { CartItemsStep } from "./CartItemsStep";
 import { CheckoutIdentityStep } from "./CheckoutIdentityStep";
@@ -42,12 +41,15 @@ export function CartDrawer({
   onClear: () => void;
 }) {
   const [step, setStep] = useState<CheckoutStep>("cart");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<any>(null);
 
-  const submitOrder = useServerFn(createOrder);
-  const checkStatus = useServerFn(getOrderStatus);
+  const {
+    activeOrder,
+    loadingOrder,
+    submitting,
+    submitError,
+    placeOrder,
+    dismissOrder,
+  } = useActiveOrder({ onOpenDrawer: onOpen });
 
   const {
     form,
@@ -71,96 +73,14 @@ export function CartDrawer({
     validateDelivery,
     validate,
     resetForm,
-    sanitize,
   } = useDeliveryAddress();
 
-  const [loadingOrder, setLoadingOrder] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return !!(params.get("order_id") || params.get("order"));
-    }
-    return false;
-  });
-
-  const hasMountedRef = useRef(false);
-
-  useEffect(() => {
-    if (hasMountedRef.current) return;
-    hasMountedRef.current = true;
-
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const urlOrderId = params.get("order_id") || params.get("order");
-
-      if (urlOrderId) {
-        setLoadingOrder(true);
-        checkStatus({ data: urlOrderId })
-          .then((order) => {
-            if (order) {
-              setSuccess(order);
-              onOpen();
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          })
-          .catch((err) => console.error("Erro ao carregar pedido do URL:", err))
-          .finally(() => setLoadingOrder(false));
-        return;
-      }
-    }
-
-    try {
-      const savedOrder = localStorage.getItem("active_order");
-      if (savedOrder) {
-        const parsed = JSON.parse(savedOrder);
-        setSuccess(parsed);
-        onOpen();
-      }
-    } catch {
-      localStorage.removeItem("active_order");
-    }
-  }, [checkStatus, onOpen]);
-
   const handleDismissOrder = () => {
-    try {
-      localStorage.removeItem("active_order");
-    } catch {}
-    setSuccess(null);
+    dismissOrder();
     setStep("cart");
     resetForm();
     onClose();
   };
-
-  useEffect(() => {
-    if (success) {
-      localStorage.setItem("active_order", JSON.stringify(success));
-    } else {
-      localStorage.removeItem("active_order");
-    }
-  }, [success]);
-
-  // Polling em tempo real para sincronizar o status do pedido
-  useEffect(() => {
-    if (!success?.id) return;
-    if (
-      success.payment_status === "failed" ||
-      success.status === "entregue" ||
-      success.status === "cancelado"
-    ) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      checkStatus({ data: success.id })
-        .then((updated) => {
-          if (updated) {
-            setSuccess((prev: any) => ({ ...prev, ...updated }));
-          }
-        })
-        .catch((err) => console.error("Erro ao verificar status do pedido:", err));
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [success?.id, success?.payment_status, success?.status, checkStatus]);
 
   const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
   const discount = appliedPromotion?.discountAmount || 0;
@@ -188,91 +108,12 @@ export function CartDrawer({
 
   const buildAndSend = async () => {
     if (!validate(total) || submitting) return;
-    setSubmitting(true);
-    setSubmitError(null);
     try {
-      const fullAddress =
-        form.deliveryMode === "pickup"
-          ? "Retirada no Balcão (Buscar o pedido)"
-          : form.deliveryMode === "dine_in"
-          ? "Consumir no Local (Salão Pizzaria Império)"
-          : `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${
-              form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""
-            }`;
-
-      const orderItems = cart.map((i) => {
-        let fullName = i.isHalf
-          ? `1/2 ${i.flavor1.name} + 1/2 ${i.flavor2?.name}`
-          : i.flavor1.name;
-
-        if (i.crust && i.crust.id !== "nenhuma") {
-          fullName += ` (${i.crust.name})`;
-        }
-
-        if (i.isHalf) {
-          const notesArr: string[] = [];
-          if (i.flavor1.notes) notesArr.push(`1/2 ${i.flavor1.name}: ${i.flavor1.notes}`);
-          if (i.flavor2?.notes) notesArr.push(`1/2 ${i.flavor2.name}: ${i.flavor2.notes}`);
-          if (notesArr.length > 0) {
-            fullName += ` [${notesArr.join(" | ")}]`;
-          }
-        } else if (i.flavor1.notes) {
-          fullName += ` [Obs: ${i.flavor1.notes}]`;
-        }
-
-        return {
-          pizza_id: i.pizzaId,
-          flavor2_id: i.isHalf ? i.flavor2?.id || null : null,
-          crust_id: i.crust?.id || "nenhuma",
-          pizza_name: fullName,
-          quantity: i.quantity,
-          unit_price: i.unitPrice,
-        };
+      await placeOrder(cart, appliedPromotion, form, () => {
+        onClear();
       });
-
-      if (appliedPromotion?.rewardItem) {
-        orderItems.push({
-          pizza_id: appliedPromotion.rewardItem.pizza_id,
-          flavor2_id: null,
-          crust_id: "nenhuma",
-          pizza_name: `${appliedPromotion.rewardItem.pizza_name} (${
-            appliedPromotion.rewardItem.is_gift ? "Brinde" : "Promoção"
-          })`,
-          quantity: 1,
-          unit_price: appliedPromotion.rewardItem.unit_price,
-        });
-      }
-
-      const res = await submitOrder({
-        data: {
-          customer_name: sanitize(form.name, 80),
-          customer_phone: sanitize(form.phone, 20),
-          customer_address: sanitize(fullAddress, 400),
-          delivery_mode: (form.deliveryMode || "delivery") as "delivery" | "pickup" | "dine_in",
-          neighborhood: form.deliveryMode === "delivery" ? sanitize(form.bairro, 80) : null,
-          payment_method: form.payment as
-            | "Pix"
-            | "Dinheiro"
-            | "Cartão de crédito"
-            | "Cartão de débito",
-          troco:
-            form.payment === "Dinheiro" && form.troco
-              ? Number(form.troco.replace(",", "."))
-              : null,
-          notes: sanitize(form.notes, 300) || null,
-          items: orderItems,
-          delivery_fee: deliveryFee,
-          discount: appliedPromotion?.discountAmount || 0,
-          promotion_id: appliedPromotion?.promotion._id || null,
-          promotion_title: appliedPromotion?.promotion.title || null,
-        },
-      });
-      setSuccess(res);
-      onClear();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Erro ao enviar pedido.");
-    } finally {
-      setSubmitting(false);
+    } catch {
+      // Erro é capturado e exibido via submitError
     }
   };
 
@@ -290,7 +131,7 @@ export function CartDrawer({
     );
   }
 
-  const headerTitle = success
+  const headerTitle = activeOrder
     ? "Status do Pedido"
     : step === "cart"
     ? "Seu Carrinho"
@@ -320,7 +161,7 @@ export function CartDrawer({
         {/* Top Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2.5">
-            {!success && step !== "cart" ? (
+            {!activeOrder && step !== "cart" ? (
               <button
                 type="button"
                 onClick={handleBackStep}
@@ -338,7 +179,7 @@ export function CartDrawer({
           </div>
 
           <div className="flex items-center gap-2">
-            {!success && step !== "cart" && (
+            {!activeOrder && step !== "cart" && (
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs">
                 <ShieldCheck className="h-3.5 w-3.5" /> Ambiente seguro
               </span>
@@ -355,8 +196,8 @@ export function CartDrawer({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-          {success ? (
-            <OrderStatusView order={success} onDismiss={handleDismissOrder} />
+          {activeOrder ? (
+            <OrderStatusView order={activeOrder} onDismiss={handleDismissOrder} />
           ) : cart.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full border border-gold/30 bg-secondary/60 text-gold">
@@ -424,7 +265,7 @@ export function CartDrawer({
         </div>
 
         {/* Bottom Sticky Bar (shown on cart, delivery, and payment steps) */}
-        {cart.length > 0 && !success && step !== "identity" && (
+        {cart.length > 0 && !activeOrder && step !== "identity" && (
           <div className="border-t border-border bg-secondary/40 p-5 space-y-3.5">
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">
