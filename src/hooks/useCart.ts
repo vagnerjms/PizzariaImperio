@@ -10,7 +10,11 @@ export function useCart(promotions: Promotion[]) {
         const saved = localStorage.getItem("imperio_cart_v2");
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.filter(
+              (i) => i && typeof i === "object" && i.pizzaId && typeof i.totalPrice === "number"
+            );
+          }
         }
       } catch {}
     }
@@ -30,11 +34,11 @@ export function useCart(promotions: Promotion[]) {
   }, [cart]);
 
   const cartCount = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.quantity, 0);
+    return cart.reduce((acc, item) => acc + (item.quantity || 1), 0);
   }, [cart]);
 
   const subtotal = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.totalPrice, 0);
+    return cart.reduce((acc, item) => acc + (item.totalPrice || 0), 0);
   }, [cart]);
 
   const genericCartLines = useMemo(() => {
@@ -58,22 +62,23 @@ export function useCart(promotions: Promotion[]) {
   const total = Math.max(0, subtotal - discount);
 
   const handleAddCustomizedToCart = useCallback((item: CartItem) => {
+    if (!item) return;
     setCart((prev) => {
       const existingIdx = prev.findIndex(
         (i) =>
           i.pizzaId === item.pizzaId &&
           i.isHalf === item.isHalf &&
-          i.flavor1.id === item.flavor1.id &&
-          (i.flavor1.notes || "") === (item.flavor1.notes || "") &&
+          i.flavor1?.id === item.flavor1?.id &&
+          (i.flavor1?.notes || "") === (item.flavor1?.notes || "") &&
           i.flavor2?.id === item.flavor2?.id &&
           (i.flavor2?.notes || "") === (item.flavor2?.notes || "") &&
-          i.crust.id === item.crust.id
+          (i.crust?.id || "nenhuma") === (item.crust?.id || "nenhuma")
       );
 
       if (existingIdx >= 0) {
         const copy = [...prev];
         const updated = { ...copy[existingIdx] };
-        updated.quantity += item.quantity;
+        updated.quantity = (updated.quantity || 1) + (item.quantity || 1);
         updated.totalPrice = updated.unitPrice * updated.quantity;
         copy[existingIdx] = updated;
         return copy;

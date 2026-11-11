@@ -560,7 +560,14 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
 
 // A lightweight status checking helper function for clients
 export const getOrderStatus = createServerFn({ method: "GET" })
-  .validator((raw: unknown) => z.string().parse(raw))
+  .validator((raw: unknown) => {
+    if (typeof raw === "string") return raw;
+    if (raw && typeof raw === "object") {
+      if ("id" in raw && typeof (raw as any).id === "string") return (raw as any).id;
+      if ("data" in raw && typeof (raw as any).data === "string") return (raw as any).data;
+    }
+    return String(raw || "");
+  })
   .handler(async ({ data: orderId }) => {
     const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();

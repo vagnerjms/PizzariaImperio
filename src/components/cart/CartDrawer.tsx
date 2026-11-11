@@ -41,6 +41,7 @@ export function CartDrawer({
   onClear: () => void;
 }) {
   const [step, setStep] = useState<CheckoutStep>("cart");
+  const [viewMode, setViewMode] = useState<"cart" | "order_status">("cart");
 
   const {
     activeOrder,
@@ -77,6 +78,7 @@ export function CartDrawer({
 
   const handleDismissOrder = () => {
     dismissOrder();
+    setViewMode("cart");
     setStep("cart");
     resetForm();
     onClose();
@@ -111,13 +113,14 @@ export function CartDrawer({
     try {
       await placeOrder(cart, appliedPromotion, form, () => {
         onClear();
+        setViewMode("order_status");
       });
     } catch {
       // Erro é capturado e exibido via submitError
     }
   };
 
-  if (loadingOrder) {
+  if (loadingOrder && open) {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">
         <div className="flex flex-col items-center gap-3 text-center px-4">
@@ -131,13 +134,14 @@ export function CartDrawer({
     );
   }
 
-  const headerTitle = activeOrder
-    ? "Status do Pedido"
-    : step === "cart"
-    ? "Seu Carrinho"
-    : step === "identity"
-    ? "Identifique-se"
-    : "Finalizar pedido";
+  const headerTitle =
+    viewMode === "order_status" && activeOrder
+      ? "Status do Pedido"
+      : step === "cart"
+      ? "Seu Carrinho"
+      : step === "identity"
+      ? "Identifique-se"
+      : "Finalizar pedido";
 
   return (
     <div
@@ -161,7 +165,7 @@ export function CartDrawer({
         {/* Top Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2.5">
-            {!activeOrder && step !== "cart" ? (
+            {viewMode !== "order_status" && step !== "cart" ? (
               <button
                 type="button"
                 onClick={handleBackStep}
@@ -179,8 +183,17 @@ export function CartDrawer({
           </div>
 
           <div className="flex items-center gap-2">
-            {!activeOrder && step !== "cart" && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs">
+            {activeOrder && (
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "cart" ? "order_status" : "cart")}
+                className="rounded-lg bg-gold/15 border border-gold/40 px-2.5 py-1 text-[11px] font-bold text-gold transition hover:bg-gold hover:text-gold-foreground"
+              >
+                {viewMode === "cart" ? "Ver Pedido Ativo" : "Ver Carrinho"}
+              </button>
+            )}
+            {viewMode !== "order_status" && step !== "cart" && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs">
                 <ShieldCheck className="h-3.5 w-3.5" /> Ambiente seguro
               </span>
             )}
@@ -196,10 +209,31 @@ export function CartDrawer({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-          {activeOrder ? (
-            <OrderStatusView order={activeOrder} onDismiss={handleDismissOrder} />
+          {viewMode === "order_status" && activeOrder ? (
+            <OrderStatusView
+              order={activeOrder}
+              onDismiss={handleDismissOrder}
+              onBackToCart={cart.length > 0 ? () => setViewMode("cart") : undefined}
+            />
           ) : cart.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
+              {activeOrder && (
+                <div className="mb-6 w-full rounded-2xl border border-gold/40 bg-gold/10 p-4 text-center">
+                  <p className="text-xs font-bold text-gold uppercase tracking-wider">
+                    Pedido em Andamento
+                  </p>
+                  <p className="mt-1 text-xs text-foreground">
+                    Você possui um pedido ativo: #{activeOrder.id?.slice(0, 8)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("order_status")}
+                    className="mt-3 rounded-full bg-gold px-4 py-1.5 text-xs font-bold text-gold-foreground transition hover:brightness-110 shadow-gold-glow"
+                  >
+                    Acompanhar Pedido
+                  </button>
+                </div>
+              )}
               <div className="flex h-16 w-16 items-center justify-center rounded-full border border-gold/30 bg-secondary/60 text-gold">
                 <ShoppingBag className="h-7 w-7" />
               </div>
@@ -216,13 +250,30 @@ export function CartDrawer({
               </button>
             </div>
           ) : step === "cart" ? (
-            <CartItemsStep
-              cart={cart}
-              appliedPromotion={appliedPromotion}
-              onInc={onInc}
-              onDec={onDec}
-              onRemove={onRemove}
-            />
+            <>
+              {activeOrder && (
+                <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 flex items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">Pedido ativo: #{activeOrder.id?.slice(0, 6)}</span>
+                    <p className="text-[11px] text-muted-foreground">Status: <span className="capitalize text-gold font-semibold">{activeOrder.status}</span></p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("order_status")}
+                    className="rounded-lg bg-gold px-2.5 py-1 font-bold text-gold-foreground text-[11px] transition hover:brightness-110"
+                  >
+                    Acompanhar
+                  </button>
+                </div>
+              )}
+              <CartItemsStep
+                cart={cart}
+                appliedPromotion={appliedPromotion}
+                onInc={onInc}
+                onDec={onDec}
+                onRemove={onRemove}
+              />
+            </>
           ) : step === "identity" ? (
             <CheckoutIdentityStep
               form={form}
@@ -265,7 +316,7 @@ export function CartDrawer({
         </div>
 
         {/* Bottom Sticky Bar (shown on cart, delivery, and payment steps) */}
-        {cart.length > 0 && !activeOrder && step !== "identity" && (
+        {cart.length > 0 && viewMode !== "order_status" && step !== "identity" && (
           <div className="border-t border-border bg-secondary/40 p-5 space-y-3.5">
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">

@@ -166,6 +166,7 @@ function Home() {
       totalPrice: p.price,
     };
     handleAddCustomizedToCart(simpleItem);
+    handleOpenCart();
   };
 
   // 2. Clique no Card/Banner de 2 Sabores (Meio a Meio)
@@ -240,7 +241,10 @@ function Home() {
         <SinglePizzaModal
           pizza={singlePizzaModal}
           onClose={() => setSinglePizzaModal(null)}
-          onAddCustomized={handleAddCustomizedToCart}
+          onAddCustomized={(item) => {
+            handleAddCustomizedToCart(item);
+            handleOpenCart();
+          }}
         />
       )}
 
@@ -253,7 +257,10 @@ function Home() {
             setHalfAndHalfModalOpen(false);
             setHalfAndHalfInitialFlavor(null);
           }}
-          onAddCustomized={handleAddCustomizedToCart}
+          onAddCustomized={(item) => {
+            handleAddCustomizedToCart(item);
+            handleOpenCart();
+          }}
         />
       )}
 

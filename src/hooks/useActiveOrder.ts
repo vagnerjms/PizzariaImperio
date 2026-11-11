@@ -58,8 +58,15 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
       const saved = localStorage.getItem(ACTIVE_ORDER_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        setActiveOrder(parsed);
-        onOpenDrawer?.();
+        if (
+          parsed.status === "entregue" ||
+          parsed.status === "cancelado" ||
+          parsed.payment_status === "failed"
+        ) {
+          localStorage.removeItem(ACTIVE_ORDER_STORAGE_KEY);
+        } else {
+          setActiveOrder(parsed);
+        }
       }
     } catch {
       localStorage.removeItem(ACTIVE_ORDER_STORAGE_KEY);
@@ -76,25 +83,32 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
   }, [activeOrder]);
 
   // 3. Polling em tempo real via TanStack Query (com cancelamento automático e sem colisão de timers)
-  const activeOrderId = activeOrder?.id;
+  const activeOrderId = activeOrder?.id || activeOrder?._id;
   const isTerminal =
     activeOrder?.payment_status === "failed" ||
     activeOrder?.status === "entregue" ||
     activeOrder?.status === "cancelado";
 
-  useQuery({
+  const { data: polledOrder } = useQuery({
     queryKey: ["active-order-status", activeOrderId],
     queryFn: async () => {
       if (!activeOrderId) return null;
-      const updated = await checkStatusRpc({ data: activeOrderId });
-      if (updated) {
-        setActiveOrder((prev: any) => ({ ...prev, ...updated }));
+      try {
+        return await checkStatusRpc({ data: activeOrderId });
+      } catch (err) {
+        console.error("Erro ao verificar status do pedido:", err);
+        return null;
       }
-      return updated;
     },
     enabled: Boolean(activeOrderId && !isTerminal),
     refetchInterval: 4000,
   });
+
+  useEffect(() => {
+    if (polledOrder) {
+      setActiveOrder((prev: any) => ({ ...prev, ...polledOrder }));
+    }
+  }, [polledOrder]);
 
   // 4. Limpar pedido ativo
   const dismissOrder = useCallback(() => {
@@ -196,10 +210,11 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
           },
         });
 
-        if (res && (res as any).success && (res as any).order) {
-          setActiveOrder((res as any).order);
+        const createdOrder = (res && (res as any).order) ? (res as any).order : res;
+        if (createdOrder && (createdOrder.id || createdOrder._id)) {
+          setActiveOrder(createdOrder);
           onSuccessCallback?.();
-          return (res as any).order;
+          return createdOrder;
         } else {
           throw new Error((res as any)?.message || "Não foi possível concluir seu pedido.");
         }

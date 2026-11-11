@@ -18,9 +18,11 @@ import { formatBRL } from "@/data/catalog";
 export function OrderStatusView({
   order,
   onDismiss,
+  onBackToCart,
 }: {
   order: any;
   onDismiss: () => void;
+  onBackToCart?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -315,10 +317,20 @@ export function OrderStatusView({
         </div>
       </div>
 
+      {onBackToCart && (
+        <button
+          type="button"
+          onClick={onBackToCart}
+          className="mt-6 w-full rounded-full bg-gold px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-gold-foreground transition hover:brightness-110 shadow-gold-glow active:scale-95"
+        >
+          Voltar ao Carrinho
+        </button>
+      )}
+
       <button
         type="button"
         onClick={onDismiss}
-        className="mt-6 w-full rounded-full bg-secondary border border-border px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground transition hover:bg-gold hover:text-gold-foreground active:scale-95"
+        className={`${onBackToCart ? "mt-2" : "mt-6"} w-full rounded-full bg-secondary border border-border px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground transition hover:bg-gold hover:text-gold-foreground active:scale-95`}
       >
         {isPaid || isOnDelivery ? "Fechar e Acompanhar" : "Fechar"}
       </button>
