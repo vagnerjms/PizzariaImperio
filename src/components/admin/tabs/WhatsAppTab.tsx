@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   MessageSquare,
   Loader2,
@@ -21,30 +22,33 @@ export function WhatsAppTab() {
   const fetchWhatsappQRCode = useServerFn(getWhatsAppQRCode);
   const logoutWhatsapp = useServerFn(disconnectWhatsApp);
 
-  const checkWhatsApp = async (showLoading = false) => {
-    if (showLoading) setWhatsappStatus("checking");
-    try {
-      const res = await fetchWhatsappStatus();
-      if (res.status === "open") {
-        setWhatsappStatus("open");
-        setQrCode(null);
-      } else if (res.status === "close") {
-        setWhatsappStatus("close");
-      } else {
-        setWhatsappStatus("close");
+  const { data: statusRes, refetch: recheckStatus } = useQuery({
+    queryKey: ["admin", "whatsapp-status"],
+    queryFn: async () => {
+      try {
+        return await fetchWhatsappStatus();
+      } catch {
+        return { status: "error" as const };
       }
-    } catch {
-      setWhatsappStatus("error");
-    }
-  };
+    },
+    refetchInterval: 10000,
+  });
 
   useEffect(() => {
-    checkWhatsApp();
-    const interval = setInterval(() => {
-      checkWhatsApp();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    if (statusRes?.status === "open") {
+      setWhatsappStatus("open");
+      setQrCode(null);
+    } else if (statusRes?.status === "close") {
+      setWhatsappStatus("close");
+    } else if (statusRes?.status === "error") {
+      setWhatsappStatus("error");
+    }
+  }, [statusRes]);
+
+  const checkWhatsApp = async () => {
+    setWhatsappStatus("checking");
+    await recheckStatus();
+  };
 
   const handleGenerateQR = async () => {
     setWhatsappLoading(true);

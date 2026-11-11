@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { CartItem } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
@@ -74,29 +75,26 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
     }
   }, [activeOrder]);
 
-  // 3. Polling em tempo real para sincronizar status com a cozinha / KDS
-  useEffect(() => {
-    if (!activeOrder?.id) return;
-    if (
-      activeOrder.payment_status === "failed" ||
-      activeOrder.status === "entregue" ||
-      activeOrder.status === "cancelado"
-    ) {
-      return;
-    }
+  // 3. Polling em tempo real via TanStack Query (com cancelamento automático e sem colisão de timers)
+  const activeOrderId = activeOrder?.id;
+  const isTerminal =
+    activeOrder?.payment_status === "failed" ||
+    activeOrder?.status === "entregue" ||
+    activeOrder?.status === "cancelado";
 
-    const interval = setInterval(() => {
-      checkStatusRpc({ data: activeOrder.id })
-        .then((updated) => {
-          if (updated) {
-            setActiveOrder((prev: any) => ({ ...prev, ...updated }));
-          }
-        })
-        .catch((err) => console.error("Erro ao verificar status do pedido:", err));
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [activeOrder?.id, activeOrder?.payment_status, activeOrder?.status, checkStatusRpc]);
+  useQuery({
+    queryKey: ["active-order-status", activeOrderId],
+    queryFn: async () => {
+      if (!activeOrderId) return null;
+      const updated = await checkStatusRpc({ data: activeOrderId });
+      if (updated) {
+        setActiveOrder((prev: any) => ({ ...prev, ...updated }));
+      }
+      return updated;
+    },
+    enabled: Boolean(activeOrderId && !isTerminal),
+    refetchInterval: 4000,
+  });
 
   // 4. Limpar pedido ativo
   const dismissOrder = useCallback(() => {
@@ -228,3 +226,4 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
     dismissOrder,
   };
 }
+

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listOrders, updateOrderStatus, confirmOrderPayment } from "@/lib/orders.functions";
 import {
   connectSerialPrinter,
@@ -36,16 +37,14 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fetchOrders = useServerFn(listOrders);
   const updateStatus = useServerFn(updateOrderStatus);
   const confirmPaymentFn = useServerFn(confirmOrderPayment);
 
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<
     "ativos" | "todos" | "pix_pendente" | OrderRow["status"]
   >("ativos");
-  const [error, setError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<AdminViewMode>("pedidos");
 
@@ -57,6 +56,22 @@ function AdminPage() {
     return true;
   });
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
+
+  // Consulta reativa dos pedidos com TanStack Query (cache e polling inteligente)
+  const {
+    data: orders = [],
+    isLoading: loading,
+    error: queryError,
+  } = useQuery<OrderRow[]>({
+    queryKey: ["admin", "orders"],
+    queryFn: async () => {
+      const data = await fetchOrders();
+      return (data || []) as OrderRow[];
+    },
+    refetchInterval: 10000,
+  });
+
+  const error = queryError instanceof Error ? queryError.message : null;
 
   const handleToggleSound = () => {
     setSoundEnabled((prev) => {
@@ -118,41 +133,24 @@ function AdminPage() {
     }
   };
 
-  const load = async () => {
-    try {
-      const data = (await fetchOrders()) as OrderRow[];
-      const readyOrders = data.filter(
-        (o) => o.payment_method !== "Pix" || o.payment_status === "paid"
-      );
-      if (knownOrderIdsRef.current === null) {
-        knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
-      } else {
-        const hasBrandNewReady = readyOrders.some(
-          (o) => !knownOrderIdsRef.current!.has(o.id) && o.status === "novo"
-        );
-        if (hasBrandNewReady && soundEnabled) {
-          playNewOrderChime();
-        }
-        knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
-      }
-      setOrders(data);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar pedidos.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Detecção reativa de novos pedidos para tocar chime sonoro
   useEffect(() => {
-    load();
-    const interval = setInterval(() => {
-      load();
-    }, 10000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [soundEnabled]);
+    if (!orders || orders.length === 0) return;
+    const readyOrders = orders.filter(
+      (o) => o.payment_method !== "Pix" || o.payment_status === "paid"
+    );
+    if (knownOrderIdsRef.current === null) {
+      knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
+    } else {
+      const hasBrandNewReady = readyOrders.some(
+        (o) => !knownOrderIdsRef.current!.has(o.id) && o.status === "novo"
+      );
+      if (hasBrandNewReady && soundEnabled) {
+        playNewOrderChime();
+      }
+      knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
+    }
+  }, [orders, soundEnabled]);
 
   const filtered = useMemo(() => {
     const visible = orders.filter((o) => {
@@ -210,7 +208,11 @@ function AdminPage() {
 
   const handleStatus = async (id: string, status: OrderRow["status"]) => {
     const targetOrder = orders.find((o) => o.id === id);
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+
+    // Atualização otimista no cache do TanStack Query
+    queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
+      prev.map((o) => (o.id === id ? { ...o, status } : o))
+    );
 
     // Auto-print thermal receipt when accepting order ("preparando")
     if (status === "preparando" && printerSettings.autoPrintOnAccept && targetOrder) {
@@ -221,21 +223,23 @@ function AdminPage() {
 
     try {
       await updateStatus({ data: { id, status } });
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     } catch {
-      load();
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };
 
   const handleConfirmPayment = async (id: string) => {
-    setOrders((prev) =>
+    queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
       prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o))
     );
     try {
       await confirmPaymentFn({ data: { id } });
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
       setPrinterMsg({ text: `Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!` });
       setTimeout(() => setPrinterMsg(null), 4000);
     } catch {
-      load();
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };
 
