@@ -19,16 +19,7 @@ export const getPublicDeliveryConfig = createServerFn({ method: "GET" }).handler
   return getDeliverySettings();
 });
 
-// 2. Calcular taxa de entrega por nome de bairro no servidor
-export const lookupDeliveryFee = createServerFn({ method: "POST" })
-  .validator((raw: unknown) => z.object({ neighborhood: z.string() }).parse(raw))
-  .handler(async ({ data }) => {
-    const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
-    const fee = await calculateFeeForNeighborhood(data.neighborhood);
-    return { fee };
-  });
-
-// 3. Obter configurações completas para o painel Admin/Supervisor
+// 2. Obter configurações completas para o painel Admin/Supervisor
 export const getAdminDeliverySettings = createServerFn({ method: "GET" })
   .middleware([requireSupervisorOrAdmin])
   .handler(async () => {

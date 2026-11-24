@@ -67,7 +67,18 @@ export function maskSettingsForAdminClient(settings: SystemSettings): MaskedAdmi
   };
 }
 
+const SETTINGS_CACHE_TTL_MS = 15_000;
+let cachedSettings: { value: SystemSettings; expiresAt: number } | null = null;
+
+export function invalidateSystemSettingsCache(): void {
+  cachedSettings = null;
+}
+
 export async function getSystemSettings(): Promise<SystemSettings> {
+  if (cachedSettings && Date.now() < cachedSettings.expiresAt) {
+    return cachedSettings.value;
+  }
+
   const envDefaults: SystemSettings = {
     evolution_api_url: process.env.EVOLUTION_API_URL || "",
     evolution_api_key: process.env.EVOLUTION_API_KEY || "",
@@ -94,7 +105,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     const pickStr = (dbVal: string | undefined, envVal: string) =>
       dbVal !== undefined ? dbVal : envVal;
 
-    return {
+    const resolved: SystemSettings = {
       evolution_api_url: pickStr(settings?.evolution_api_url, envDefaults.evolution_api_url),
       evolution_api_key: pickStr(settings?.evolution_api_key, envDefaults.evolution_api_key),
       n8n_webhook_url: pickStr(settings?.n8n_webhook_url, envDefaults.n8n_webhook_url),
@@ -128,6 +139,9 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       meta_pixel_id: pickStr(settings?.meta_pixel_id, envDefaults.meta_pixel_id),
       ga4_measurement_id: pickStr(settings?.ga4_measurement_id, envDefaults.ga4_measurement_id),
     };
+
+    cachedSettings = { value: resolved, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
+    return resolved;
   } catch (error) {
     console.error("Failed to load settings from DB, using environment variables:", error);
     return envDefaults;
@@ -179,4 +193,5 @@ export async function saveSystemSettings(settings: Partial<SystemSettings>): Pro
     { $set: { ...cleanSettings, updated_at: new Date() } },
     { upsert: true },
   );
+  invalidateSystemSettingsCache();
 }

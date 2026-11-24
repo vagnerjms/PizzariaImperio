@@ -3,13 +3,6 @@ import { z } from "zod";
 import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
 import { CatalogCrustOption, CatalogMenuItem, PublicCatalogResponse } from "./menu-domain";
 
-export interface PublicMenuOverride {
-  id: string;
-  price?: number;
-  available: boolean;
-  badge?: string | null;
-}
-
 const VALID_CATEGORIES = [
   "tradicionais",
   "especiais",
@@ -26,22 +19,6 @@ export const getPublicCatalog = createServerFn({ method: "GET" }).handler(
     return getFullCatalogFromDb();
   },
 );
-
-// Compatibility helper for legacy callers
-export const getPublicMenuOverrides = createServerFn({ method: "GET" }).handler(async () => {
-  const { getFullCatalogFromDb } = await import("./menu.server");
-  const { items } = await getFullCatalogFromDb();
-  const list: Record<string, PublicMenuOverride> = {};
-  for (const item of items) {
-    list[item.id] = {
-      id: item.id,
-      price: item.price,
-      available: item.available,
-      badge: item.badge ?? null,
-    };
-  }
-  return list;
-});
 
 const saveMenuItemSchema = z.object({
   id: z.string().trim().max(80).optional(),
