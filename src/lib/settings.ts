@@ -52,6 +52,19 @@ const updateSettingsSchema = z.object({
       dine_in: z.boolean(),
     })
     .optional(),
+  meta_pixel_id: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || /^\d{5,25}$/.test(v), "Meta Pixel ID deve conter apenas dígitos.")
+    .optional(),
+  ga4_measurement_id: z
+    .string()
+    .trim()
+    .refine(
+      (v) => v === "" || /^G-[A-Z0-9]{4,20}$/i.test(v),
+      "GA4 Measurement ID deve começar com G- (ex: G-XXXXXXXXXX)."
+    )
+    .optional(),
 });
 
 // Public store configuration (never exposes tokens or API keys)

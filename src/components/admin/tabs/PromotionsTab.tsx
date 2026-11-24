@@ -239,6 +239,37 @@ export function PromotionsTab() {
                       </span>
                     </div>
 
+                    {promo.coupon_code && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Cupom:</span>
+                        <span className="rounded border border-dashed border-gold/50 bg-gold/10 px-2 py-0.5 font-mono text-[11px] font-bold text-gold">
+                          {promo.coupon_code}
+                        </span>
+                      </div>
+                    )}
+
+                    {Array.isArray(promo.days_of_week) && promo.days_of_week.length > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Dias:</span>
+                        <span className="text-foreground font-medium">
+                          {promo.days_of_week
+                            .map((d) => ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][d])
+                            .filter(Boolean)
+                            .join(", ")}
+                        </span>
+                      </div>
+                    )}
+
+                    {(promo.max_uses || (promo.current_uses ?? 0) > 0) && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Usos:</span>
+                        <span className="font-semibold text-foreground">
+                          {promo.current_uses ?? 0}
+                          {promo.max_uses ? ` / ${promo.max_uses}` : " (ilimitado)"}
+                        </span>
+                      </div>
+                    )}
+
                     {(promo.start_date || promo.end_date) && (
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1 border-t border-border/30">
                         <Calendar className="h-3 w-3 text-gold" />

@@ -28,6 +28,7 @@ const createOrderSchema = z.object({
   discount: z.number().min(0).max(5000).optional().nullable(),
   promotion_id: z.string().optional().nullable(),
   promotion_title: z.string().optional().nullable(),
+  coupon_code: z.string().trim().max(32).optional().nullable(),
 });
 
 export const createOrder = createServerFn({ method: "POST" })
@@ -35,10 +36,11 @@ export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { getOrdersCollection } = await import("./db");
     const { randomUUID } = await import("node:crypto");
-    const { SERVER_CRUST_PRICES } = await import("./menu-prices");
-    const { getEffectiveServerMenuPrices } = await import("./menu.server");
+    const { getEffectiveServerMenuPrices, getEffectiveServerCrustPrices } = await import(
+      "./menu.server"
+    );
     const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
-    const { listPublicPromotionsFromDb } = await import("./promotions.server");
+    const { listPublicPromotionsFromDb, consumePromotionUse } = await import("./promotions.server");
     const { calculateVerifiedOrderPricing } = await import("./order-pricing");
     const { getSystemSettings } = await import("./settings.server");
     const {
@@ -51,15 +53,21 @@ export const createOrder = createServerFn({ method: "POST" })
     const orderId = randomUUID();
     const deliveryMode = data.delivery_mode || "delivery";
 
-    const [effectiveMenuPrices, activePromotions, officialDeliveryFee, settings] =
-      await Promise.all([
-        getEffectiveServerMenuPrices(),
-        listPublicPromotionsFromDb(),
-        deliveryMode === "delivery"
-          ? calculateFeeForNeighborhood(data.neighborhood || "")
-          : Promise.resolve(0),
-        getSystemSettings(),
-      ]);
+    const [
+      effectiveMenuPrices,
+      effectiveCrustPrices,
+      activePromotions,
+      officialDeliveryFee,
+      settings,
+    ] = await Promise.all([
+      getEffectiveServerMenuPrices(),
+      getEffectiveServerCrustPrices(),
+      listPublicPromotionsFromDb(),
+      deliveryMode === "delivery"
+        ? calculateFeeForNeighborhood(data.neighborhood || "")
+        : Promise.resolve(0),
+      getSystemSettings(),
+    ]);
 
     // Store operational checks (hours/pause, enabled delivery modes & payment methods)
     const storeStatus = evaluateStoreOpenStatus(settings);
@@ -84,13 +92,15 @@ export const createOrder = createServerFn({ method: "POST" })
       total,
       promotionId,
       promotionTitle,
+      appliedCouponCode,
     } = calculateVerifiedOrderPricing({
       items: data.items,
       deliveryMode,
       officialDeliveryFee,
       effectiveMenuPrices,
-      crustPrices: SERVER_CRUST_PRICES,
+      crustPrices: effectiveCrustPrices,
       activePromotions,
+      couponCode: data.coupon_code,
     });
 
     const isOnlinePix = data.payment_method === "Pix";
@@ -210,6 +220,18 @@ export const createOrder = createServerFn({ method: "POST" })
       }
     }
 
+    // Atomically enforce promotion max_uses under concurrency right before persisting the order
+    if (promotionId) {
+      const reserved = await consumePromotionUse(promotionId);
+      if (!reserved) {
+        throw new Error(
+          appliedCouponCode
+            ? `O cupom "${appliedCouponCode}" atingiu o limite máximo de usos.`
+            : "A promoção aplicada atingiu o limite máximo de usos. Atualize o carrinho e tente novamente."
+        );
+      }
+    }
+
     // Insert verified order document (including payment metadata when Pix succeeded)
     const now = new Date();
     const newOrder = {
@@ -226,6 +248,7 @@ export const createOrder = createServerFn({ method: "POST" })
       discount: verifiedDiscount,
       promotion_id: promotionId,
       promotion_title: promotionTitle,
+      coupon_code: appliedCouponCode,
       total,
       delivery_fee: verifiedDeliveryFee,
       status: "novo" as const,

@@ -30,6 +30,8 @@ export interface StoreOperationalConfig {
   opening_hours: OpeningHoursMap;
   enabled_payment_methods: EnabledPaymentMethods;
   enabled_delivery_modes: EnabledDeliveryModes;
+  meta_pixel_id?: string;
+  ga4_measurement_id?: string;
 }
 
 export interface StoreOpenEvaluation {

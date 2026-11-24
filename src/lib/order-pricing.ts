@@ -1,11 +1,22 @@
-import { Promotion } from "./promotions.types";
-import { evaluateCartPromotions, GenericCartLine, MenuItemRef } from "./promotions-engine";
+import { normalizeCouponCode, Promotion } from "./promotions.types";
+import {
+  evaluateCartPromotions,
+  GenericCartLine,
+  MenuItemRef,
+  validateCouponForCart,
+} from "./promotions-engine";
 
 export interface EffectiveMenuPriceEntry {
   name: string;
   price: number;
   category: string;
   available: boolean;
+}
+
+export interface EffectiveCrustPriceEntry {
+  name: string;
+  price: number;
+  available?: boolean;
 }
 
 export interface OrderPricingInputItem {
@@ -37,6 +48,7 @@ export interface VerifiedOrderPricingResult {
   total: number;
   promotionId: string | null;
   promotionTitle: string | null;
+  appliedCouponCode: string | null;
 }
 
 const LEGACY_REWARD_SUFFIX_RE = /\((Brinde|Promoção)\)\s*$/;
@@ -60,8 +72,9 @@ export function calculateVerifiedOrderPricing(params: {
   deliveryMode: "delivery" | "pickup" | "dine_in";
   officialDeliveryFee: number;
   effectiveMenuPrices: Record<string, EffectiveMenuPriceEntry>;
-  crustPrices: Record<string, { name: string; price: number }>;
+  crustPrices: Record<string, EffectiveCrustPriceEntry>;
   activePromotions: Promotion[];
+  couponCode?: string | null;
   now?: Date;
 }): VerifiedOrderPricingResult {
   const {
@@ -71,6 +84,7 @@ export function calculateVerifiedOrderPricing(params: {
     effectiveMenuPrices,
     crustPrices,
     activePromotions,
+    couponCode,
     now,
   } = params;
 
@@ -108,6 +122,9 @@ export function calculateVerifiedOrderPricing(params: {
       const crustItem = crustPrices[normalizedCrustId];
       if (!crustItem) {
         throw new Error(`Borda inválida no pedido: "${normalizedCrustId}".`);
+      }
+      if (crustItem.available === false) {
+        throw new Error(`A borda "${crustItem.name}" está temporariamente esgotada.`);
       }
       crustPrice = crustItem.price;
     }
@@ -164,11 +181,27 @@ export function calculateVerifiedOrderPricing(params: {
     };
   }
 
+  // If client explicitly submitted a coupon code, validate it strictly so the customer isn't silently charged full price
+  const normalizedCoupon = normalizeCouponCode(couponCode);
+  if (normalizedCoupon) {
+    const couponCheck = validateCouponForCart(
+      normalizedCoupon,
+      promoCartLines,
+      menuForPromo,
+      activePromotions,
+      now
+    );
+    if (!couponCheck.valid) {
+      throw new Error(couponCheck.message);
+    }
+  }
+
   const evaluatedPromo = evaluateCartPromotions(
     promoCartLines,
     menuForPromo,
     activePromotions,
-    now
+    now,
+    normalizedCoupon || null
   );
 
   // Append server-authorized BUY_X_GET_Y reward item if triggered
@@ -211,5 +244,9 @@ export function calculateVerifiedOrderPricing(params: {
     total,
     promotionId: evaluatedPromo ? evaluatedPromo.promotion._id : null,
     promotionTitle: evaluatedPromo ? evaluatedPromo.promotion.title : null,
+    appliedCouponCode:
+      evaluatedPromo?.appliedViaCoupon && evaluatedPromo.promotion.coupon_code
+        ? normalizeCouponCode(evaluatedPromo.promotion.coupon_code)
+        : null,
   };
 }

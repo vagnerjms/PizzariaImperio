@@ -4,14 +4,17 @@ import { Pizza, CartItem, CRUST_OPTIONS, CrustOption, formatBRL } from "@/data/c
 
 export function SinglePizzaModal({
   pizza,
+  crustOptions = CRUST_OPTIONS,
   onClose,
   onAddCustomized,
 }: {
   pizza: Pizza;
+  crustOptions?: CrustOption[];
   onClose: () => void;
   onAddCustomized: (item: CartItem) => void;
 }) {
-  const [selectedCrust, setSelectedCrust] = useState<CrustOption>(CRUST_OPTIONS[0]);
+  const availableCrusts = crustOptions.length > 0 ? crustOptions : CRUST_OPTIONS;
+  const [selectedCrust, setSelectedCrust] = useState<CrustOption>(availableCrusts[0]);
   const [notes, setNotes] = useState("");
   const [qty, setQty] = useState(1);
 
@@ -128,7 +131,7 @@ export function SinglePizzaModal({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {CRUST_OPTIONS.map((crust) => {
+              {availableCrusts.map((crust) => {
                 const isSelected = selectedCrust.id === crust.id;
                 return (
                   <button

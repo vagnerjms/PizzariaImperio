@@ -40,12 +40,17 @@ async function ensureIndexes(db: Db) {
     const addressCache = db.collection("address_cache");
     const cashShifts = db.collection("cash_shifts");
     const couriers = db.collection("couriers");
+    const menuItems = db.collection("menu_items");
+    const crustOptions = db.collection("crust_options");
     await Promise.all([
       users.createIndex({ email: 1 }, { unique: true }),
       promotions.createIndex({ active: 1, created_at: -1 }),
+      promotions.createIndex({ coupon_code: 1 }),
       addressCache.createIndex({ updated_at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }),
       cashShifts.createIndex({ status: 1, opened_at: -1 }),
       couriers.createIndex({ active: 1, name: 1 }),
+      menuItems.createIndex({ category: 1, sort_order: 1 }),
+      crustOptions.createIndex({ sort_order: 1 }),
     ]);
 
     indexesInitialized = true;

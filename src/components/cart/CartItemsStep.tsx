@@ -1,31 +1,100 @@
-import { Plus, Minus, Trash2, Gift, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Plus, Minus, Trash2, Gift, Sparkles, Ticket, X } from "lucide-react";
 import { CartItem, formatBRL } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
+import { CouponFeedbackState } from "@/hooks/useCart";
 
 export function CartItemsStep({
   cart,
   appliedPromotion,
+  couponCode,
+  couponFeedback,
+  onApplyCoupon,
+  onClearCoupon,
   onInc,
   onDec,
   onRemove,
 }: {
   cart: CartItem[];
   appliedPromotion: AppliedPromotionResult | null;
+  couponCode?: string | null;
+  couponFeedback?: CouponFeedbackState;
+  onApplyCoupon?: (code: string) => boolean;
+  onClearCoupon?: () => void;
   onInc: (itemId: string) => void;
   onDec: (itemId: string) => void;
   onRemove: (itemId: string) => void;
 }) {
+  const [couponInput, setCouponInput] = useState(couponCode || "");
+
+  const handleApply = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onApplyCoupon) return;
+    const ok = onApplyCoupon(couponInput);
+    if (ok) {
+      setCouponInput(couponInput.trim().toUpperCase());
+    }
+  };
+
   return (
     <div className="space-y-4">
       {appliedPromotion && (
         <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-xs text-emerald-400 shadow-sm">
           <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px]">
             <Sparkles className="h-3.5 w-3.5 fill-emerald-400" />
-            Promoção Ativa: {appliedPromotion.promotion.title}
+            {appliedPromotion.appliedViaCoupon
+              ? `Cupom Ativo: ${appliedPromotion.promotion.title}`
+              : `Promoção Ativa: ${appliedPromotion.promotion.title}`}
           </div>
           <p className="mt-1 font-medium text-emerald-300">
             {appliedPromotion.reason}
           </p>
+        </div>
+      )}
+
+      {onApplyCoupon && (
+        <div className="rounded-2xl border border-border bg-card/80 p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+            <Ticket className="h-3.5 w-3.5 text-gold" />
+            Tem um cupom de desconto?
+          </div>
+          {couponCode ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs">
+              <span className="font-mono font-bold text-emerald-400">{couponCode}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onClearCoupon?.();
+                  setCouponInput("");
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-destructive transition"
+              >
+                <X className="h-3.5 w-3.5" /> Remover
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleApply} className="flex gap-2">
+              <input
+                type="text"
+                maxLength={32}
+                value={couponInput}
+                onChange={(e) =>
+                  setCouponInput(e.target.value.toUpperCase().replace(/\s+/g, ""))
+                }
+                placeholder="Digite o código (ex: IMPERIO10)"
+                className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-mono uppercase text-foreground placeholder:font-sans placeholder:normal-case placeholder:text-muted-foreground/60 focus:border-gold focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-secondary px-3.5 py-2 text-xs font-bold text-foreground hover:bg-gold hover:text-gold-foreground transition"
+              >
+                Aplicar
+              </button>
+            </form>
+          )}
+          {couponFeedback && couponFeedback.status === "error" && couponFeedback.message && (
+            <p className="text-[11px] font-medium text-destructive">{couponFeedback.message}</p>
+          )}
         </div>
       )}
 

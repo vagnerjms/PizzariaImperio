@@ -125,7 +125,8 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
       cart: CartItem[],
       appliedPromotion: AppliedPromotionResult | null,
       form: DeliveryAddressForm,
-      onSuccessCallback?: () => void
+      onSuccessCallback?: () => void,
+      couponCode?: string | null
     ) => {
       setSubmitting(true);
       setSubmitError(null);
@@ -214,12 +215,20 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
             discount: appliedPromotion?.discountAmount || 0,
             promotion_id: appliedPromotion?.promotion?._id || null,
             promotion_title: appliedPromotion?.promotion?.title || null,
+            coupon_code: couponCode || null,
           },
         });
 
         const createdOrder = (res && (res as any).order) ? (res as any).order : res;
         if (createdOrder && (createdOrder.id || createdOrder._id)) {
           setActiveOrder(createdOrder);
+          const { trackPurchase } = await import("@/lib/analytics");
+          trackPurchase({
+            orderId: String(createdOrder.id || createdOrder._id),
+            total: Number(createdOrder.total || 0),
+            couponCode: couponCode || null,
+            itemsCount: cart.reduce((acc, i) => acc + (i.quantity || 1), 0),
+          });
           onSuccessCallback?.();
           return createdOrder;
         } else {

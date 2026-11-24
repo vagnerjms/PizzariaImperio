@@ -27,6 +27,9 @@ export interface SystemSettings {
   opening_hours: OpeningHoursMap;
   enabled_payment_methods: EnabledPaymentMethods;
   enabled_delivery_modes: EnabledDeliveryModes;
+  // Marketing & Tracking Pixels (Pacote 3)
+  meta_pixel_id: string;
+  ga4_measurement_id: string;
 }
 
 interface SettingsDoc extends Partial<SystemSettings> {
@@ -49,6 +52,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     opening_hours: { ...DEFAULT_OPENING_HOURS },
     enabled_payment_methods: { ...DEFAULT_ENABLED_PAYMENT_METHODS },
     enabled_delivery_modes: { ...DEFAULT_ENABLED_DELIVERY_MODES },
+    meta_pixel_id: process.env.META_PIXEL_ID || "",
+    ga4_measurement_id: process.env.GA4_MEASUREMENT_ID || "",
   };
 
   try {
@@ -84,6 +89,12 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         ...DEFAULT_ENABLED_DELIVERY_MODES,
         ...(settings?.enabled_delivery_modes || {}),
       },
+      meta_pixel_id:
+        settings?.meta_pixel_id !== undefined ? settings.meta_pixel_id : envDefaults.meta_pixel_id,
+      ga4_measurement_id:
+        settings?.ga4_measurement_id !== undefined
+          ? settings.ga4_measurement_id
+          : envDefaults.ga4_measurement_id,
     };
   } catch (error) {
     console.error("Failed to load settings from DB, using environment variables:", error);
@@ -105,6 +116,8 @@ export function getPublicStoreConfigFromSettings(settings: SystemSettings): Publ
       ...DEFAULT_ENABLED_DELIVERY_MODES,
       ...(settings.enabled_delivery_modes || {}),
     },
+    meta_pixel_id: settings.meta_pixel_id || "",
+    ga4_measurement_id: settings.ga4_measurement_id || "",
   };
 
   return {

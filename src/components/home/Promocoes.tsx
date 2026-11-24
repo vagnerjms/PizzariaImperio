@@ -1,13 +1,15 @@
-import { Sparkles, Tag, Plus } from "lucide-react";
+import { Sparkles, Tag, Plus, Ticket } from "lucide-react";
 import { Promotion } from "@/lib/promotions.types";
 import { formatBRL } from "@/data/catalog";
 
 export function Promocoes({
   promotions,
   onAdd,
+  onUseCoupon,
 }: {
   promotions: Promotion[];
   onAdd: (id: string) => void;
+  onUseCoupon?: (code: string) => void;
 }) {
   const activePromos = promotions.filter((p) => p.active);
   if (activePromos.length === 0) return null;
@@ -23,7 +25,7 @@ export function Promocoes({
             Promoções do Império
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Aproveite nossos combos e descontos automáticos calculados direto no carrinho.
+            Aproveite nossos combos, cupons e descontos calculados direto no carrinho.
           </p>
         </div>
 
@@ -54,6 +56,20 @@ export function Promocoes({
                 <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                   {promo.description}
                 </p>
+
+                {promo.coupon_code && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(promo.coupon_code!).catch(() => {});
+                      onUseCoupon?.(promo.coupon_code!);
+                    }}
+                    title="Clique para copiar ou aplicar o cupom"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gold/60 bg-gold/10 px-3 py-1.5 font-mono text-xs font-bold text-gold hover:bg-gold/20 transition"
+                  >
+                    <Ticket className="h-3.5 w-3.5" /> Cupom: {promo.coupon_code}
+                  </button>
+                )}
               </div>
 
               <div className="mt-6 pt-4 border-t border-border/60">

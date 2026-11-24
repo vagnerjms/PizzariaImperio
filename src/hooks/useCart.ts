@@ -1,7 +1,22 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { CartItem, MENU_BY_ID } from "@/data/catalog";
-import { Promotion, AppliedPromotionResult } from "@/lib/promotions.types";
-import { evaluateCartPromotions, MenuItemRef } from "@/lib/promotions-engine";
+import {
+  Promotion,
+  AppliedPromotionResult,
+  normalizeCouponCode,
+} from "@/lib/promotions.types";
+import {
+  evaluateCartPromotions,
+  MenuItemRef,
+  validateCouponForCart,
+} from "@/lib/promotions-engine";
+import { trackAddToCart } from "@/lib/analytics";
+
+export interface CouponFeedbackState {
+  status: "idle" | "applied" | "error";
+  code: string;
+  message: string;
+}
 
 export function useCart(
   promotions: Promotion[],
@@ -26,6 +41,8 @@ export function useCart(
 
   const [cartOpen, setCartOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  const [couponCode, setCouponCode] = useState<string>("");
+  const [couponError, setCouponError] = useState<string | null>(null);
 
   // Persiste carrinho no localStorage
   useEffect(() => {
@@ -66,9 +83,67 @@ export function useCart(
     });
   }, [cart, menuById]);
 
+  const couponValidation = useMemo(() => {
+    if (!couponCode) return null;
+    return validateCouponForCart(couponCode, genericCartLines, menuById, promotions);
+  }, [couponCode, genericCartLines, menuById, promotions]);
+
   const appliedPromotion = useMemo<AppliedPromotionResult | null>(() => {
-    return evaluateCartPromotions(genericCartLines, menuById, promotions);
-  }, [genericCartLines, menuById, promotions]);
+    return evaluateCartPromotions(
+      genericCartLines,
+      menuById,
+      promotions,
+      new Date(),
+      couponCode || null
+    );
+  }, [genericCartLines, menuById, promotions, couponCode]);
+
+  const couponFeedback = useMemo<CouponFeedbackState>(() => {
+    if (couponCode) {
+      if (couponValidation?.valid) {
+        return {
+          status: "applied",
+          code: couponCode,
+          message: couponValidation.message,
+        };
+      }
+      return {
+        status: "error",
+        code: couponCode,
+        message: couponValidation?.message || "Cupom não aplicável ao carrinho atual.",
+      };
+    }
+    if (couponError) {
+      return { status: "error", code: "", message: couponError };
+    }
+    return { status: "idle", code: "", message: "" };
+  }, [couponCode, couponValidation, couponError]);
+
+  const handleApplyCoupon = useCallback(
+    (rawCode: string): boolean => {
+      const normalized = normalizeCouponCode(rawCode);
+      if (!normalized) {
+        setCouponCode("");
+        setCouponError("Digite um código de cupom.");
+        return false;
+      }
+      const check = validateCouponForCart(normalized, genericCartLines, menuById, promotions);
+      if (!check.valid) {
+        setCouponCode("");
+        setCouponError(check.message);
+        return false;
+      }
+      setCouponError(null);
+      setCouponCode(normalized);
+      return true;
+    },
+    [genericCartLines, menuById, promotions]
+  );
+
+  const handleClearCoupon = useCallback(() => {
+    setCouponCode("");
+    setCouponError(null);
+  }, []);
 
   const discount = appliedPromotion?.discountAmount || 0;
   const rewardCost = appliedPromotion?.rewardItem?.unit_price || 0;
@@ -97,6 +172,13 @@ export function useCart(
         return copy;
       }
       return [...prev, item];
+    });
+
+    trackAddToCart({
+      id: item.pizzaId,
+      name: item.name,
+      price: item.unitPrice,
+      quantity: item.quantity || 1,
     });
 
     setJustAdded(true);
@@ -133,10 +215,17 @@ export function useCart(
     setCart((prev) => prev.filter((i) => i.id !== itemId));
   }, []);
 
-  const handleClearCart = useCallback(() => setCart([]), []);
+  const handleClearCart = useCallback(() => {
+    setCart([]);
+    setCouponCode("");
+    setCouponError(null);
+  }, []);
 
   const handleOpenCart = useCallback(() => setCartOpen(true), []);
   const handleCloseCart = useCallback(() => setCartOpen(false), []);
+
+  const activeValidCouponCode =
+    couponCode && couponValidation?.valid ? couponCode : null;
 
   return {
     cart,
@@ -145,6 +234,10 @@ export function useCart(
     discount,
     total,
     appliedPromotion,
+    couponCode: activeValidCouponCode,
+    couponFeedback,
+    handleApplyCoupon,
+    handleClearCoupon,
     cartOpen,
     justAdded,
     handleAddCustomizedToCart,

@@ -10,6 +10,8 @@ import {
 import { CartItem, formatBRL } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
 import { PublicStoreConfig } from "@/lib/store-hours";
+import { CouponFeedbackState } from "@/hooks/useCart";
+import { trackInitiateCheckout } from "@/lib/analytics";
 import { useDeliveryAddress } from "@/hooks/useDeliveryAddress";
 import { useActiveOrder } from "@/hooks/useActiveOrder";
 import { OrderStatusView } from "./OrderStatusView";
@@ -26,6 +28,10 @@ export function CartDrawer({
   onOpen,
   cart,
   appliedPromotion,
+  couponCode,
+  couponFeedback,
+  onApplyCoupon,
+  onClearCoupon,
   storeConfig,
   onInc,
   onDec,
@@ -37,6 +43,10 @@ export function CartDrawer({
   onOpen: () => void;
   cart: CartItem[];
   appliedPromotion: AppliedPromotionResult | null;
+  couponCode?: string | null;
+  couponFeedback?: CouponFeedbackState;
+  onApplyCoupon?: (code: string) => boolean;
+  onClearCoupon?: () => void;
   storeConfig?: PublicStoreConfig | null;
   onInc: (itemId: string) => void;
   onDec: (itemId: string) => void;
@@ -104,6 +114,10 @@ export function CartDrawer({
   const total = Math.max(0, subtotal - discount) + deliveryFee;
 
   const handleStartCheckout = () => {
+    trackInitiateCheckout({
+      total,
+      numItems: cart.reduce((acc, i) => acc + (i.quantity || 1), 0),
+    });
     setStep("identity");
   };
 
@@ -122,10 +136,16 @@ export function CartDrawer({
   const buildAndSend = async () => {
     if (!validate(total) || submitting) return;
     try {
-      await placeOrder(cart, appliedPromotion, form, () => {
-        onClear();
-        setViewMode("order_status");
-      });
+      await placeOrder(
+        cart,
+        appliedPromotion,
+        form,
+        () => {
+          onClear();
+          setViewMode("order_status");
+        },
+        couponCode
+      );
     } catch {
       // Erro é capturado e exibido via submitError
     }
@@ -281,6 +301,10 @@ export function CartDrawer({
               <CartItemsStep
                 cart={cart}
                 appliedPromotion={appliedPromotion}
+                couponCode={couponCode}
+                couponFeedback={couponFeedback}
+                onApplyCoupon={onApplyCoupon}
+                onClearCoupon={onClearCoupon}
                 onInc={onInc}
                 onDec={onDec}
                 onRemove={onRemove}

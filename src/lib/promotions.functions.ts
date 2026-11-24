@@ -19,6 +19,15 @@ const createPromoSchema = z.object({
   active: z.boolean().default(true),
   start_date: z.string().optional().nullable(),
   end_date: z.string().optional().nullable(),
+  coupon_code: z
+    .string()
+    .trim()
+    .max(32)
+    .regex(/^[A-Za-z0-9_-]*$/, "Use apenas letras, números, hífen ou sublinhado no cupom.")
+    .optional()
+    .nullable(),
+  days_of_week: z.array(z.number().int().min(0).max(6)).max(7).optional().nullable(),
+  max_uses: z.number().int().min(1).max(100000).optional().nullable(),
 });
 
 // 1. Consulta pública para cardápio e vitrine

@@ -26,6 +26,7 @@ export async function initializeDatabase() {
 
     const promotionsCol = db.collection("promotions");
     await promotionsCol.createIndex({ active: 1, created_at: -1 });
+    await promotionsCol.createIndex({ coupon_code: 1 });
 
     const cashShiftsCol = db.collection("cash_shifts");
     await cashShiftsCol.createIndex({ status: 1, opened_at: -1 });
@@ -33,11 +34,20 @@ export async function initializeDatabase() {
     const couriersCol = db.collection("couriers");
     await couriersCol.createIndex({ active: 1, name: 1 });
 
+    const menuItemsCol = db.collection("menu_items");
+    await menuItemsCol.createIndex({ category: 1, sort_order: 1 });
+
+    const crustOptionsCol = db.collection("crust_options");
+    await crustOptionsCol.createIndex({ sort_order: 1 });
+
     const addressCacheCol = db.collection("address_cache");
     await addressCacheCol.createIndex(
       { updated_at: 1 },
       { expireAfterSeconds: 30 * 24 * 60 * 60 }
     );
+
+    const { ensureCatalogSeeded } = await import("./menu.server");
+    await ensureCatalogSeeded();
 
     // 2. Ensure initial admin user exists
     const adminEmail = process.env.ADMIN_EMAIL || "admin@pizzaria.com";

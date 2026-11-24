@@ -64,6 +64,8 @@ export function SettingsTab({
     opening_hours: OpeningHoursMap;
     enabled_payment_methods: EnabledPaymentMethods;
     enabled_delivery_modes: EnabledDeliveryModes;
+    meta_pixel_id: string;
+    ga4_measurement_id: string;
   }>({
     evolution_api_url: "",
     evolution_api_key: "",
@@ -78,6 +80,8 @@ export function SettingsTab({
     opening_hours: { ...DEFAULT_OPENING_HOURS },
     enabled_payment_methods: { ...DEFAULT_ENABLED_PAYMENT_METHODS },
     enabled_delivery_modes: { ...DEFAULT_ENABLED_DELIVERY_MODES },
+    meta_pixel_id: "",
+    ga4_measurement_id: "",
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -107,6 +111,8 @@ export function SettingsTab({
           data.enabled_payment_methods || { ...DEFAULT_ENABLED_PAYMENT_METHODS },
         enabled_delivery_modes:
           data.enabled_delivery_modes || { ...DEFAULT_ENABLED_DELIVERY_MODES },
+        meta_pixel_id: data.meta_pixel_id || "",
+        ga4_measurement_id: data.ga4_measurement_id || "",
       });
     } catch (e) {
       setSettingsErrorMsg(e instanceof Error ? e.message : "Erro ao carregar configurações.");
@@ -533,6 +539,55 @@ export function SettingsTab({
                       />
                     </label>
                   ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Marketing & Pixels de Rastreamento (Meta Pixel & GA4) */}
+            <div className="pt-4 border-t border-border/60 space-y-4">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gold">
+                  Marketing & Pixels de Conversão (Opcional)
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Rastreia automaticamente visualização de página, adição ao carrinho, início de
+                  checkout e compra concluída.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Meta / Facebook Pixel ID
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsForm.meta_pixel_id}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        meta_pixel_id: e.target.value.replace(/\D/g, ""),
+                      }))
+                    }
+                    placeholder="Ex.: 123456789012345"
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Google Analytics 4 (Measurement ID)
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsForm.ga4_measurement_id}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        ga4_measurement_id: e.target.value.toUpperCase().trim(),
+                      }))
+                    }
+                    placeholder="Ex.: G-XXXXXXXXXX"
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
                 </div>
               </div>
             </div>

@@ -6,14 +6,17 @@ import { cleanString } from "@/lib/formatters";
 export function HalfAndHalfModal({
   allPizzas,
   initialFlavor1,
+  crustOptions = CRUST_OPTIONS,
   onClose,
   onAddCustomized,
 }: {
   allPizzas: Pizza[];
   initialFlavor1?: Pizza | null;
+  crustOptions?: CrustOption[];
   onClose: () => void;
   onAddCustomized: (item: CartItem) => void;
 }) {
+  const availableCrusts = crustOptions.length > 0 ? crustOptions : CRUST_OPTIONS;
   // Sabores elegíveis (Pizzas salgadas e doces)
   const eligiblePizzas = useMemo(() => {
     return allPizzas.filter(
@@ -30,7 +33,7 @@ export function HalfAndHalfModal({
   const [flavor2, setFlavor2] = useState<Pizza | null>(null);
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(initialFlavor1 ? 2 : 1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCrust, setSelectedCrust] = useState<CrustOption>(CRUST_OPTIONS[0]);
+  const [selectedCrust, setSelectedCrust] = useState<CrustOption>(availableCrusts[0]);
   const [notes1, setNotes1] = useState("");
   const [notes2, setNotes2] = useState("");
   const [qty, setQty] = useState(1);
@@ -538,7 +541,7 @@ export function HalfAndHalfModal({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {CRUST_OPTIONS.map((crust) => {
+              {availableCrusts.map((crust) => {
                 const isSelected = selectedCrust.id === crust.id;
                 return (
                   <button

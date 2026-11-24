@@ -1,7 +1,14 @@
 import { useState, useEffect } from "react";
-import { Sparkles, XCircle, Eye, Loader2 } from "lucide-react";
-import { Promotion, PROMO_CATEGORIES } from "@/lib/promotions.types";
-import { MENU as MENU_ITEMS } from "@/data/catalog";
+import { useServerFn } from "@tanstack/react-start";
+import { Sparkles, XCircle, Eye, Loader2, Ticket } from "lucide-react";
+import {
+  normalizeCouponCode,
+  Promotion,
+  PROMO_CATEGORIES,
+  PROMO_WEEKDAYS,
+} from "@/lib/promotions.types";
+import { MENU as STATIC_MENU_ITEMS, Pizza } from "@/data/catalog";
+import { getPublicCatalog } from "@/lib/menu.functions";
 
 export interface PromotionFormData {
   title: string;
@@ -17,6 +24,9 @@ export interface PromotionFormData {
   reward_item_id: string | null;
   reward_item_name: string | null;
   reward_discount_percent: number | null;
+  coupon_code: string | null;
+  days_of_week: number[] | null;
+  max_uses: number | null;
   active: boolean;
   start_date: string | null;
   end_date: string | null;
@@ -35,6 +45,8 @@ export function PromotionModal({
   onSave: (data: PromotionFormData) => Promise<void>;
   loading: boolean;
 }) {
+  const fetchCatalog = useServerFn(getPublicCatalog);
+  const [menuItems, setMenuItems] = useState<Pizza[]>(STATIC_MENU_ITEMS);
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDescription, setPromoDescription] = useState("");
   const [promoBadgeText, setPromoBadgeText] = useState("OFERTA RELÂMPAGO");
@@ -47,10 +59,22 @@ export function PromotionModal({
   const [promoTriggerMinTotal, setPromoTriggerMinTotal] = useState<number>(0);
   const [promoRewardItemId, setPromoRewardItemId] = useState("coca-2l");
   const [promoRewardDiscountPercent, setPromoRewardDiscountPercent] = useState<number>(100);
+  const [promoCouponCode, setPromoCouponCode] = useState("");
+  const [promoDaysOfWeek, setPromoDaysOfWeek] = useState<number[]>([]);
+  const [promoMaxUses, setPromoMaxUses] = useState("");
   const [promoActive, setPromoActive] = useState(true);
   const [promoStartDate, setPromoStartDate] = useState("");
   const [promoEndDate, setPromoEndDate] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchCatalog()
+      .then((res) => {
+        if (res?.items?.length) setMenuItems(res.items);
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   useEffect(() => {
     if (initialPromo) {
@@ -68,6 +92,9 @@ export function PromotionModal({
       setPromoRewardDiscountPercent(
         initialPromo.reward_discount_percent !== undefined ? initialPromo.reward_discount_percent : 100
       );
+      setPromoCouponCode(initialPromo.coupon_code || "");
+      setPromoDaysOfWeek(initialPromo.days_of_week || []);
+      setPromoMaxUses(initialPromo.max_uses ? String(initialPromo.max_uses) : "");
       setPromoActive(initialPromo.active);
       setPromoStartDate(initialPromo.start_date || "");
       setPromoEndDate(initialPromo.end_date || "");
@@ -84,6 +111,9 @@ export function PromotionModal({
       setPromoTriggerMinTotal(0);
       setPromoRewardItemId("coca-2l");
       setPromoRewardDiscountPercent(100);
+      setPromoCouponCode("");
+      setPromoDaysOfWeek([]);
+      setPromoMaxUses("");
       setPromoActive(true);
       setPromoStartDate("");
       setPromoEndDate("");
@@ -93,6 +123,12 @@ export function PromotionModal({
 
   if (!isOpen) return null;
 
+  const toggleWeekday = (day: number) => {
+    setPromoDaysOfWeek((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promoTitle.trim() || !promoDescription.trim()) {
@@ -100,7 +136,14 @@ export function PromotionModal({
       return;
     }
 
-    const rewardItem = MENU_ITEMS.find((i) => i.id === promoRewardItemId);
+    const rewardItem = menuItems.find((i) => i.id === promoRewardItemId);
+    const normalizedCoupon = normalizeCouponCode(promoCouponCode) || null;
+    const parsedMaxUses = promoMaxUses.trim() ? parseInt(promoMaxUses.trim(), 10) : null;
+
+    if (parsedMaxUses !== null && (!Number.isFinite(parsedMaxUses) || parsedMaxUses < 1)) {
+      setFormError("O limite máximo de usos deve ser um número inteiro maior que zero.");
+      return;
+    }
 
     const payload: PromotionFormData = {
       title: promoTitle.trim(),
@@ -116,6 +159,9 @@ export function PromotionModal({
       reward_item_id: promoType === "BUY_X_GET_Y" ? promoRewardItemId : null,
       reward_item_name: promoType === "BUY_X_GET_Y" ? rewardItem?.name || null : null,
       reward_discount_percent: promoType === "BUY_X_GET_Y" ? Number(promoRewardDiscountPercent) : null,
+      coupon_code: normalizedCoupon,
+      days_of_week: promoDaysOfWeek.length > 0 ? promoDaysOfWeek : null,
+      max_uses: parsedMaxUses,
       active: promoActive,
       start_date: promoStartDate || null,
       end_date: promoEndDate || null,
@@ -276,7 +322,7 @@ export function PromotionModal({
                       onChange={(e) => setPromoRewardItemId(e.target.value)}
                       className="mt-1 w-full rounded-xl border border-border bg-secondary/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
                     >
-                      {MENU_ITEMS.map((item) => (
+                      {menuItems.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name} ({item.category}) - R$ {item.price.toFixed(2)}
                         </option>
@@ -351,7 +397,7 @@ export function PromotionModal({
                     Selecione as Pizzas que ativam a promoção:
                   </label>
                   <div className="max-h-40 overflow-y-auto space-y-1.5 rounded-xl border border-border bg-secondary/20 p-2.5">
-                    {MENU_ITEMS.map((item) => {
+                    {menuItems.map((item) => {
                       const checked = promoTriggerItemIds.includes(item.id);
                       return (
                         <label
@@ -408,8 +454,66 @@ export function PromotionModal({
               </div>
 
               <h4 className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5 border-b border-border/40 pb-1 pt-2">
-                4. Período e Ativação
+                4. Cupom, Dias da Semana & Limite
               </h4>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Código do Cupom (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={32}
+                    placeholder="Ex.: IMPERIO10 (vazio = automático)"
+                    value={promoCouponCode}
+                    onChange={(e) =>
+                      setPromoCouponCode(
+                        e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "")
+                      )
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3 py-2 text-xs font-mono font-bold uppercase text-foreground placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Limite de Usos (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Ilimitado"
+                    value={promoMaxUses}
+                    onChange={(e) => setPromoMaxUses(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Dias da Semana Válidos (vazio = todos os dias)
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROMO_WEEKDAYS.map((w) => {
+                    const active = promoDaysOfWeek.includes(w.day);
+                    return (
+                      <button
+                        key={w.day}
+                        type="button"
+                        onClick={() => toggleWeekday(w.day)}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+                          active
+                            ? "border-gold bg-gold text-gold-foreground"
+                            : "border-border bg-secondary/20 text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {w.short}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -455,8 +559,15 @@ export function PromotionModal({
                   <Eye className="h-3 w-3 text-gold" /> Pré-visualização no Site:
                 </span>
                 <div className="rounded-2xl border border-gold/40 bg-card/90 p-4 shadow-gold-glow">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-gold uppercase">
-                    <Sparkles className="h-3 w-3 fill-gold" /> {promoBadgeText || "OFERTA RELÂMPAGO"}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-gold uppercase">
+                      <Sparkles className="h-3 w-3 fill-gold" /> {promoBadgeText || "OFERTA RELÂMPAGO"}
+                    </div>
+                    {promoCouponCode && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-gold/60 bg-gold/10 px-2 py-0.5 font-mono text-[10px] font-bold text-gold">
+                        <Ticket className="h-3 w-3" /> {promoCouponCode}
+                      </span>
+                    )}
                   </div>
                   <h5 className="mt-1.5 font-serif text-base font-bold text-foreground">
                     {promoTitle || "Título da Promoção"}
@@ -469,7 +580,7 @@ export function PromotionModal({
                       {promoType === "PERCENTAGE_DISCOUNT" && `${promoDiscountValue}% de Desconto`}
                       {promoType === "FIXED_DISCOUNT" && `R$ ${promoDiscountValue},00 OFF`}
                       {promoType === "BUY_X_GET_Y" &&
-                        `Ganhe ${promoRewardDiscountPercent === 100 ? "Grátis" : `${promoRewardDiscountPercent}% OFF`} em 1x ${MENU_ITEMS.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}`}
+                        `Ganhe ${promoRewardDiscountPercent === 100 ? "Grátis" : `${promoRewardDiscountPercent}% OFF`} em 1x ${menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}`}
                     </span>
                     <span className="rounded-full bg-gold px-2.5 py-0.5 text-[10px] font-bold text-gold-foreground">
                       Aproveitar

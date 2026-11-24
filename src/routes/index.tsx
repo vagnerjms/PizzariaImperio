@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getPublicPromotions } from "@/lib/promotions.functions";
-import { getPublicMenuOverrides, PublicMenuOverride } from "@/lib/menu.functions";
+import { getPublicCatalog } from "@/lib/menu.functions";
+import { PublicCatalogResponse } from "@/lib/menu-domain";
 import { getPublicStoreConfig } from "@/lib/settings";
 import { PublicStoreConfig } from "@/lib/store-hours";
+import { initTrackingPixels } from "@/lib/analytics";
 import { Promotion } from "@/lib/promotions.types";
 import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS, formatBRL } from "@/data/catalog";
 import { useCart } from "@/hooks/useCart";
@@ -23,20 +25,20 @@ import { ShoppingBag } from "lucide-react";
 export const Route = createFileRoute("/")({
   loader: async () => {
     try {
-      const [promos, overrides, storeConfig] = await Promise.all([
+      const [promos, catalog, storeConfig] = await Promise.all([
         getPublicPromotions(),
-        getPublicMenuOverrides(),
+        getPublicCatalog(),
         getPublicStoreConfig(),
       ]);
       return {
         promotions: promos || [],
-        menuOverrides: (overrides || {}) as Record<string, PublicMenuOverride>,
+        catalog: (catalog || null) as PublicCatalogResponse | null,
         storeConfig: (storeConfig || null) as PublicStoreConfig | null,
       };
     } catch {
       return {
         promotions: [],
-        menuOverrides: {} as Record<string, PublicMenuOverride>,
+        catalog: null as PublicCatalogResponse | null,
         storeConfig: null as PublicStoreConfig | null,
       };
     }
@@ -71,11 +73,11 @@ function Home() {
   const [halfAndHalfInitialFlavor, setHalfAndHalfInitialFlavor] = useState<Pizza | null>(null);
 
   const fetchPromotions = useServerFn(getPublicPromotions);
-  const fetchMenuOverrides = useServerFn(getPublicMenuOverrides);
+  const fetchCatalog = useServerFn(getPublicCatalog);
   const fetchStoreConfig = useServerFn(getPublicStoreConfig);
   const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
-  const [menuOverrides, setMenuOverrides] = useState<Record<string, PublicMenuOverride>>(
-    () => loaderData?.menuOverrides || {}
+  const [catalog, setCatalog] = useState<PublicCatalogResponse | null>(
+    () => loaderData?.catalog || null
   );
   const [storeConfig, setStoreConfig] = useState<PublicStoreConfig | null>(
     () => loaderData?.storeConfig || null
@@ -88,11 +90,11 @@ function Home() {
       })
       .catch((err) => console.error("Erro ao carregar promoções públicas:", err));
 
-    fetchMenuOverrides()
+    fetchCatalog()
       .then((data) => {
-        if (data && typeof data === "object") setMenuOverrides(data);
+        if (data?.items) setCatalog(data);
       })
-      .catch((err) => console.error("Erro ao carregar overrides do cardápio:", err));
+      .catch((err) => console.error("Erro ao carregar catálogo dinâmico:", err));
 
     fetchStoreConfig()
       .then((data) => {
@@ -101,18 +103,28 @@ function Home() {
       .catch((err) => console.error("Erro ao carregar configurações da loja:", err));
   }, []);
 
-  const effectiveMenu = useMemo(() => {
-    return MENU.map((item) => {
-      const ov = menuOverrides[item.id];
-      if (!ov) return { ...item, available: true };
-      return {
-        ...item,
-        price: typeof ov.price === "number" && ov.price >= 0 ? ov.price : item.price,
-        badge: ov.badge !== undefined ? (ov.badge || undefined) : item.badge,
-        available: ov.available !== false,
-      };
-    }).filter((item) => item.available !== false);
-  }, [menuOverrides]);
+  // Inicializa Meta Pixel & GA4 quando configurados pelo admin
+  useEffect(() => {
+    if (storeConfig) {
+      initTrackingPixels({
+        meta_pixel_id: storeConfig.meta_pixel_id,
+        ga4_measurement_id: storeConfig.ga4_measurement_id,
+      });
+    }
+  }, [storeConfig?.meta_pixel_id, storeConfig?.ga4_measurement_id]);
+
+  const effectiveMenu = useMemo<Pizza[]>(() => {
+    const source = catalog?.items && catalog.items.length > 0 ? catalog.items : MENU;
+    return source.filter((item) => item.available !== false);
+  }, [catalog]);
+
+  const effectiveCrusts = useMemo(() => {
+    const source =
+      catalog?.crusts && catalog.crusts.length > 0
+        ? catalog.crusts.filter((c) => c.available !== false)
+        : CRUST_OPTIONS;
+    return source.length > 0 ? source : CRUST_OPTIONS;
+  }, [catalog]);
 
   const effectiveMenuById = useMemo(
     () => Object.fromEntries(effectiveMenu.map((p) => [p.id, p])),
@@ -125,6 +137,10 @@ function Home() {
     discount,
     total,
     appliedPromotion,
+    couponCode,
+    couponFeedback,
+    handleApplyCoupon,
+    handleClearCoupon,
     cartOpen,
     justAdded,
     handleAddCustomizedToCart,
@@ -168,7 +184,7 @@ function Home() {
         price: p.price,
         image: p.image,
       },
-      crust: CRUST_OPTIONS[0],
+      crust: effectiveCrusts[0] || CRUST_OPTIONS[0],
       unitPrice: p.price,
       quantity: 1,
       totalPrice: p.price,
@@ -198,6 +214,12 @@ function Home() {
         onAdd={(pizzaId) => {
           const p = effectiveMenuById[pizzaId];
           if (p) handleAddSingle(p);
+        }}
+        onUseCoupon={(code) => {
+          if (cart.length > 0) {
+            handleApplyCoupon(code);
+            handleOpenCart();
+          }
         }}
       />
       <Menu
@@ -254,6 +276,7 @@ function Home() {
       {singlePizzaModal && (
         <SinglePizzaModal
           pizza={singlePizzaModal}
+          crustOptions={effectiveCrusts}
           onClose={() => setSinglePizzaModal(null)}
           onAddCustomized={(item) => {
             handleAddCustomizedToCart(item);
@@ -267,6 +290,7 @@ function Home() {
         <HalfAndHalfModal
           allPizzas={effectiveMenu}
           initialFlavor1={halfAndHalfInitialFlavor}
+          crustOptions={effectiveCrusts}
           onClose={() => {
             setHalfAndHalfModalOpen(false);
             setHalfAndHalfInitialFlavor(null);
@@ -284,6 +308,10 @@ function Home() {
         onOpen={handleOpenCart}
         cart={cart}
         appliedPromotion={appliedPromotion}
+        couponCode={couponCode}
+        couponFeedback={couponFeedback}
+        onApplyCoupon={handleApplyCoupon}
+        onClearCoupon={handleClearCoupon}
         storeConfig={storeConfig}
         onInc={handleIncCartItem}
         onDec={handleDecCartItem}
