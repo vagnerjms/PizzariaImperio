@@ -11,7 +11,7 @@ export function isPrinterConnected(): boolean {
 }
 
 export async function connectSerialPrinter(
-  baudRate = 9600
+  baudRate = 9600,
 ): Promise<{ success: boolean; message: string }> {
   if (!isWebSerialSupported()) {
     return {
@@ -51,7 +51,7 @@ export async function disconnectSerialPrinter(): Promise<void> {
 }
 
 export async function sendEscPosToSerial(
-  buffer: Uint8Array
+  buffer: Uint8Array,
 ): Promise<{ success: boolean; error?: string }> {
   if (!activeSerialPort || !activeSerialPort.writable) {
     return { success: false, error: "Impressora não está conectada na porta USB/Serial." };

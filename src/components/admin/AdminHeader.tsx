@@ -1,4 +1,13 @@
-import { Flame, LogOut, RefreshCw, Printer, Volume2, VolumeX, Store, PauseCircle } from "lucide-react";
+import {
+  Flame,
+  LogOut,
+  RefreshCw,
+  Printer,
+  Volume2,
+  VolumeX,
+  Store,
+  PauseCircle,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { StoreStatusOverride } from "@/lib/store-hours";
 
@@ -53,7 +62,7 @@ export function AdminHeader({
 }) {
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isSupervisorOrAdmin = Boolean(
-    user?.roles?.some((r) => ["admin", "supervisor"].includes(r))
+    user?.roles?.some((r) => ["admin", "supervisor"].includes(r)),
   );
 
   const tabs = [
@@ -95,10 +104,11 @@ export function AdminHeader({
             <button
               type="button"
               onClick={() => setViewMode("pedidos")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "pedidos"
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                viewMode === "pedidos"
                   ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+              }`}
             >
               🍕 Pedidos (KDS)
             </button>
@@ -107,10 +117,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("caixa")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "caixa"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "caixa"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 💰 Caixa
               </button>
@@ -120,10 +131,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("entregadores")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "entregadores"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "entregadores"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 🏍️ Entregadores
               </button>
@@ -133,10 +145,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("cardapio")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "cardapio"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "cardapio"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 📋 {isAdmin ? "Cardápio" : "Estoque"}
               </button>
@@ -146,10 +159,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("indicadores")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "indicadores"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "indicadores"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 📊 {isAdmin ? "Indicadores & Financeiro" : "Operação (Hoje)"}
               </button>
@@ -159,10 +173,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("usuarios")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "usuarios"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "usuarios"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 👥 Usuários
               </button>
@@ -172,10 +187,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("taxas")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "taxas"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "taxas"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 🛵 Taxas de Entrega
               </button>
@@ -185,10 +201,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("promocoes")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "promocoes"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "promocoes"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 🏷️ Promoções
               </button>
@@ -198,10 +215,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("whatsapp")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "whatsapp"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "whatsapp"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 💬 WhatsApp
               </button>
@@ -211,10 +229,11 @@ export function AdminHeader({
               <button
                 type="button"
                 onClick={() => setViewMode("configuracoes")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "configuracoes"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  viewMode === "configuracoes"
                     ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                }`}
               >
                 ⚙️ Configurações
               </button>
@@ -260,13 +279,20 @@ export function AdminHeader({
             <button
               type="button"
               onClick={onToggleSound}
-              title={soundEnabled ? "Alerta sonoro de novos pedidos ativo" : "Alerta sonoro silenciado"}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${soundEnabled
+              title={
+                soundEnabled ? "Alerta sonoro de novos pedidos ativo" : "Alerta sonoro silenciado"
+              }
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+                soundEnabled
                   ? "border-gold/40 bg-gold/10 text-gold hover:bg-gold/20"
                   : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground"
-                }`}
+              }`}
             >
-              {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+              {soundEnabled ? (
+                <Volume2 className="h-3.5 w-3.5" />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5" />
+              )}
               <span className="hidden sm:inline">{soundEnabled ? "Som KDS" : "Mudo"}</span>
             </button>
           )}
@@ -274,14 +300,21 @@ export function AdminHeader({
           <button
             type="button"
             onClick={printerConnected ? onDisconnectPrinter : onConnectPrinter}
-            title={printerConnected ? "Impressora USB Conectada" : "Conectar impressora USB (Bematech MP-4200)"}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${printerConnected
+            title={
+              printerConnected
+                ? "Impressora USB Conectada"
+                : "Conectar impressora USB (Bematech MP-4200)"
+            }
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+              printerConnected
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                 : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground hover:border-gold/50"
-              }`}
+            }`}
           >
             <Printer className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{printerConnected ? "Impressora USB" : "Conectar USB"}</span>
+            <span className="hidden sm:inline">
+              {printerConnected ? "Impressora USB" : "Conectar USB"}
+            </span>
           </button>
 
           {viewMode === "pedidos" && (
@@ -317,10 +350,11 @@ export function AdminHeader({
               key={t.id}
               type="button"
               onClick={() => setFilter(t.id)}
-              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${filter === t.id
+              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                filter === t.id
                   ? "border-gold bg-gold/15 text-gold font-bold"
                   : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground"
-                }`}
+              }`}
             >
               {t.label}
             </button>

@@ -16,10 +16,12 @@ export function Story() {
               <span className="italic text-gradient-gold">paixão por pizza</span>
             </h2>
             <p className="mt-6 leading-relaxed text-muted-foreground">
-              A Pizzaria Império nasceu do sonho de trazer para a mesa das famílias a autêntica pizza feita com carinho, paciência e os melhores ingredientes.
+              A Pizzaria Império nasceu do sonho de trazer para a mesa das famílias a autêntica
+              pizza feita com carinho, paciência e os melhores ingredientes.
             </p>
             <p className="mt-4 leading-relaxed text-muted-foreground">
-              Nossa massa passa por um processo de fermentação de 48 horas, resultando em uma borda leve, crocante por fora e incrivelmente macia por dentro.
+              Nossa massa passa por um processo de fermentação de 48 horas, resultando em uma borda
+              leve, crocante por fora e incrivelmente macia por dentro.
             </p>
 
             <div className="mt-8 grid grid-cols-2 gap-6 border-t border-border/60 pt-6">
@@ -35,11 +37,7 @@ export function Story() {
           </div>
 
           <div className="relative overflow-hidden rounded-3xl border border-border shadow-2xl">
-            <img
-              src={pizzaiolo}
-              alt="Mestre Pizzaiolo"
-              className="w-full h-[450px] object-cover"
-            />
+            <img src={pizzaiolo} alt="Mestre Pizzaiolo" className="w-full h-[450px] object-cover" />
           </div>
         </div>
       </div>

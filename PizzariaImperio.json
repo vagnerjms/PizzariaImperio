@@ -11,10 +11,7 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        -1424,
-        272
-      ],
+      "position": [-1424, 272],
       "id": "cfe76871-0036-4698-b52a-f82b958d3fb9",
       "name": "Webhook",
       "webhookId": "26a5e790-8c3d-4b4c-9599-69619248bde1"
@@ -103,10 +100,7 @@
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
-      "position": [
-        -1120,
-        256
-      ],
+      "position": [-1120, 256],
       "id": "bd64b9bc-2aab-4bf9-b90e-ef12c4159af9",
       "name": "Switch"
     },
@@ -134,10 +128,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -640,
-        64
-      ],
+      "position": [-640, 64],
       "id": "f530582e-37a5-46ff-985f-fb5339030366",
       "name": "Msg Pedido Criado"
     },
@@ -165,10 +156,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -640,
-        272
-      ],
+      "position": [-640, 272],
       "id": "9173a22f-6b58-47ad-95bc-7da0fe42bede",
       "name": "Msg Pagamento Aprovado"
     },
@@ -196,10 +184,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -640,
-        464
-      ],
+      "position": [-640, 464],
       "id": "ba0c7d64-264f-4a3f-83dd-e7721a72afa9",
       "name": "Msg Status Alterado"
     }

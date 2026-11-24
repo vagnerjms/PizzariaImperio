@@ -189,7 +189,7 @@ export function calculateVerifiedOrderPricing(params: {
       promoCartLines,
       menuForPromo,
       activePromotions,
-      now
+      now,
     );
     if (!couponCheck.valid) {
       throw new Error(couponCheck.message);
@@ -201,7 +201,7 @@ export function calculateVerifiedOrderPricing(params: {
     menuForPromo,
     activePromotions,
     now,
-    normalizedCoupon || null
+    normalizedCoupon || null,
   );
 
   // Append server-authorized BUY_X_GET_Y reward item if triggered
@@ -220,7 +220,7 @@ export function calculateVerifiedOrderPricing(params: {
   }
 
   const subtotal = Number(
-    validatedItems.reduce((acc, i) => acc + i.unit_price * i.quantity, 0).toFixed(2)
+    validatedItems.reduce((acc, i) => acc + i.unit_price * i.quantity, 0).toFixed(2),
   );
 
   const verifiedDiscount = evaluatedPromo
@@ -232,9 +232,7 @@ export function calculateVerifiedOrderPricing(params: {
       ? 0
       : Number(Math.max(0, officialDeliveryFee).toFixed(2));
 
-  const total = Number(
-    Math.max(0, subtotal - verifiedDiscount + verifiedDeliveryFee).toFixed(2)
-  );
+  const total = Number(Math.max(0, subtotal - verifiedDiscount + verifiedDeliveryFee).toFixed(2));
 
   return {
     validatedItems,

@@ -100,11 +100,11 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       n8n_webhook_url: pickStr(settings?.n8n_webhook_url, envDefaults.n8n_webhook_url),
       mercado_pago_access_token: pickStr(
         settings?.mercado_pago_access_token,
-        envDefaults.mercado_pago_access_token
+        envDefaults.mercado_pago_access_token,
       ),
       mercado_pago_public_key: pickStr(
         settings?.mercado_pago_public_key,
-        envDefaults.mercado_pago_public_key
+        envDefaults.mercado_pago_public_key,
       ),
       whatsapp_instance_name:
         settings?.whatsapp_instance_name || envDefaults.whatsapp_instance_name,
@@ -177,6 +177,6 @@ export async function saveSystemSettings(settings: Partial<SystemSettings>): Pro
   await settingsCol.updateOne(
     { _id: "global" },
     { $set: { ...cleanSettings, updated_at: new Date() } },
-    { upsert: true }
+    { upsert: true },
   );
 }

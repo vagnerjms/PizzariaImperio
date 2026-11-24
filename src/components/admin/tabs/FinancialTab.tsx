@@ -22,12 +22,7 @@ import {
   getFinancialReport,
 } from "@/lib/orders.functions";
 
-export function FinancialTab({
-  isAdmin = true,
-}: {
-  orders?: OrderRow[];
-  isAdmin?: boolean;
-}) {
+export function FinancialTab({ isAdmin = true }: { orders?: OrderRow[]; isAdmin?: boolean }) {
   // Supervisors are locked to today's operational view (no consolidated historical revenue)
   const [adminPeriod, setAdminPeriod] = useState<FinancialReportPeriod>("today");
   const [exportingCsv, setExportingCsv] = useState(false);
@@ -89,7 +84,9 @@ export function FinancialTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-xl font-bold text-foreground flex items-center gap-2">
-            {isAdmin ? "Indicadores Gerenciais & Financeiro" : "Relatório Operacional do Turno (Hoje)"}
+            {isAdmin
+              ? "Indicadores Gerenciais & Financeiro"
+              : "Relatório Operacional do Turno (Hoje)"}
             {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gold" />}
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -191,7 +188,8 @@ export function FinancialTab({
               {canceledCount}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Taxa: {totalOrdersCount > 0 ? ((canceledCount / totalOrdersCount) * 100).toFixed(0) : 0}%
+              Taxa:{" "}
+              {totalOrdersCount > 0 ? ((canceledCount / totalOrdersCount) * 100).toFixed(0) : 0}%
             </div>
           </div>
         </div>
@@ -253,7 +251,8 @@ export function FinancialTab({
               {canceledCount}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Taxa: {totalOrdersCount > 0 ? ((canceledCount / totalOrdersCount) * 100).toFixed(0) : 0}%
+              Taxa:{" "}
+              {totalOrdersCount > 0 ? ((canceledCount / totalOrdersCount) * 100).toFixed(0) : 0}%
             </div>
           </div>
         </div>

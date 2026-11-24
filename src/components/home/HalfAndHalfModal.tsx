@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Search, Check, RefreshCw, Sparkles, ChevronRight } from "lucide-react";
 import { Pizza, CartItem, CRUST_OPTIONS, CrustOption } from "@/data/catalog";
-import { cleanString, formatBRL } from "@/lib/formatters";
+import { cleanString, formatBRL, isPizzaCategory } from "@/lib/formatters";
 import { CrustSelector } from "./CrustSelector";
 import { QuantityStepper } from "./QuantityStepper";
 
@@ -21,13 +21,7 @@ export function HalfAndHalfModal({
   const availableCrusts = crustOptions.length > 0 ? crustOptions : CRUST_OPTIONS;
   // Sabores elegíveis (Pizzas salgadas e doces)
   const eligiblePizzas = useMemo(() => {
-    return allPizzas.filter(
-      (p) =>
-        p.category === "tradicionais" ||
-        p.category === "especiais" ||
-        p.category === "doces" ||
-        p.category === "doces-especiais"
-    );
+    return allPizzas.filter((p) => isPizzaCategory(p.category));
   }, [allPizzas]);
 
   // Estados dos passos: 1 = Escolhendo Metade 1, 2 = Escolhendo Metade 2, 3 = Escolhendo Borda / Revisão
@@ -57,7 +51,7 @@ export function HalfAndHalfModal({
     if (!searchQuery.trim()) return list;
     const q = cleanString(searchQuery);
     return list.filter(
-      (p) => cleanString(p.name).includes(q) || cleanString(p.ingredients || "").includes(q)
+      (p) => cleanString(p.name).includes(q) || cleanString(p.ingredients || "").includes(q),
     );
   }, [eligiblePizzas, activeStep, flavor1, flavor2, searchQuery]);
 
@@ -66,10 +60,10 @@ export function HalfAndHalfModal({
     flavor1 && flavor2
       ? Math.max(flavor1.price, flavor2.price)
       : flavor1
-      ? flavor1.price
-      : flavor2
-      ? flavor2.price
-      : 0;
+        ? flavor1.price
+        : flavor2
+          ? flavor2.price
+          : 0;
 
   const unitPrice = basePizzaPrice + (basePizzaPrice > 0 ? selectedCrust.price : 0);
   const totalPrice = unitPrice * qty;
@@ -137,7 +131,6 @@ export function HalfAndHalfModal({
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
       {/* Container Responsivo */}
       <div className="relative flex flex-col w-full max-w-lg max-h-[94vh] sm:max-h-[88vh] rounded-t-3xl sm:rounded-3xl border border-gold/40 bg-card shadow-2xl overflow-hidden text-foreground">
-        
         {/* Header Visual Dividido */}
         <div className="relative flex-none h-32 sm:h-36 w-full overflow-hidden bg-secondary">
           <div className="flex h-full w-full">
@@ -197,10 +190,10 @@ export function HalfAndHalfModal({
               {flavor1 && flavor2
                 ? `${flavor1.name} / ${flavor2.name}`
                 : flavor1
-                ? `${flavor1.name} / (Escolha a 2ª metade)`
-                : flavor2
-                ? `(Escolha a 1ª metade) / ${flavor2.name}`
-                : "Monte sua Pizza com 2 Sabores"}
+                  ? `${flavor1.name} / (Escolha a 2ª metade)`
+                  : flavor2
+                    ? `(Escolha a 1ª metade) / ${flavor2.name}`
+                    : "Monte sua Pizza com 2 Sabores"}
             </h2>
           </div>
         </div>
@@ -217,13 +210,19 @@ export function HalfAndHalfModal({
               activeStep === 1
                 ? "text-gold underline"
                 : flavor1
-                ? "text-foreground hover:text-gold"
-                : "text-muted-foreground"
+                  ? "text-foreground hover:text-gold"
+                  : "text-muted-foreground"
             }`}
           >
-            <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-              flavor1 ? "bg-green-500 text-white" : activeStep === 1 ? "bg-gold text-gold-foreground" : "bg-muted text-muted-foreground"
-            }`}>
+            <span
+              className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+                flavor1
+                  ? "bg-green-500 text-white"
+                  : activeStep === 1
+                    ? "bg-gold text-gold-foreground"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
               {flavor1 ? "✓" : "1"}
             </span>
             <span>1ª Metade</span>
@@ -243,13 +242,19 @@ export function HalfAndHalfModal({
               activeStep === 2
                 ? "text-gold underline"
                 : flavor2
-                ? "text-foreground hover:text-gold"
-                : "text-muted-foreground"
+                  ? "text-foreground hover:text-gold"
+                  : "text-muted-foreground"
             }`}
           >
-            <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-              flavor2 ? "bg-green-500 text-white" : activeStep === 2 ? "bg-gold text-gold-foreground" : "bg-muted text-muted-foreground"
-            }`}>
+            <span
+              className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+                flavor2
+                  ? "bg-green-500 text-white"
+                  : activeStep === 2
+                    ? "bg-gold text-gold-foreground"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
               {flavor2 ? "✓" : "2"}
             </span>
             <span>2ª Metade</span>
@@ -268,13 +273,19 @@ export function HalfAndHalfModal({
               activeStep === 3
                 ? "text-gold underline"
                 : flavor1 && flavor2
-                ? "text-foreground hover:text-gold"
-                : "text-muted-foreground"
+                  ? "text-foreground hover:text-gold"
+                  : "text-muted-foreground"
             }`}
           >
-            <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-              flavor1 && flavor2 && selectedCrust ? "bg-green-500 text-white" : activeStep === 3 ? "bg-gold text-gold-foreground" : "bg-muted text-muted-foreground"
-            }`}>
+            <span
+              className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+                flavor1 && flavor2 && selectedCrust
+                  ? "bg-green-500 text-white"
+                  : activeStep === 3
+                    ? "bg-gold text-gold-foreground"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
               3
             </span>
             <span>Borda & Finalizar</span>
@@ -283,22 +294,25 @@ export function HalfAndHalfModal({
 
         {/* Corpo com Scroll */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          
           {/* Card da Metade 1 */}
           <div
             className={`rounded-2xl border p-3.5 space-y-2.5 transition ${
               activeStep === 1
                 ? "border-gold bg-gold/10 shadow-sm ring-2 ring-gold/40"
                 : flavor1
-                ? "border-border bg-secondary/20"
-                : "border-dashed border-gold/50 bg-secondary/10"
+                  ? "border-border bg-secondary/20"
+                  : "border-dashed border-gold/50 bg-secondary/10"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                  activeStep === 1 ? "bg-gold text-gold-foreground" : "bg-secondary text-muted-foreground border border-border"
-                }`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                    activeStep === 1
+                      ? "bg-gold text-gold-foreground"
+                      : "bg-secondary text-muted-foreground border border-border"
+                  }`}
+                >
                   1. Metade 1 (50%)
                 </span>
                 <span className="font-serif font-bold text-sm text-foreground">
@@ -308,7 +322,9 @@ export function HalfAndHalfModal({
 
               <div className="flex items-center gap-2">
                 {flavor1 && (
-                  <span className="text-xs font-semibold text-muted-foreground">{formatBRL(flavor1.price)}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {formatBRL(flavor1.price)}
+                  </span>
                 )}
                 <button
                   type="button"
@@ -335,7 +351,9 @@ export function HalfAndHalfModal({
 
             {flavor1 && (
               <>
-                <p className="text-[11px] text-muted-foreground line-clamp-1">{flavor1.ingredients || flavor1.desc}</p>
+                <p className="text-[11px] text-muted-foreground line-clamp-1">
+                  {flavor1.ingredients || flavor1.desc}
+                </p>
                 <input
                   type="text"
                   value={notes1}
@@ -354,15 +372,19 @@ export function HalfAndHalfModal({
               activeStep === 2
                 ? "border-gold bg-gold/10 shadow-sm ring-2 ring-gold/40"
                 : flavor2
-                ? "border-border bg-secondary/20"
-                : "border-dashed border-gold/50 bg-secondary/10"
+                  ? "border-border bg-secondary/20"
+                  : "border-dashed border-gold/50 bg-secondary/10"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                  activeStep === 2 ? "bg-gold text-gold-foreground" : "bg-secondary text-muted-foreground border border-border"
-                }`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                    activeStep === 2
+                      ? "bg-gold text-gold-foreground"
+                      : "bg-secondary text-muted-foreground border border-border"
+                  }`}
+                >
                   2. Metade 2 (50%)
                 </span>
                 <span className="font-serif font-bold text-sm text-foreground">
@@ -379,7 +401,9 @@ export function HalfAndHalfModal({
                   </span>
                 )}
                 {!flavor1 && flavor2 && (
-                  <span className="text-xs font-semibold text-muted-foreground">{formatBRL(flavor2.price)}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {formatBRL(flavor2.price)}
+                  </span>
                 )}
 
                 <button
@@ -407,7 +431,9 @@ export function HalfAndHalfModal({
 
             {flavor2 && (
               <>
-                <p className="text-[11px] text-muted-foreground line-clamp-1">{flavor2.ingredients || flavor2.desc}</p>
+                <p className="text-[11px] text-muted-foreground line-clamp-1">
+                  {flavor2.ingredients || flavor2.desc}
+                </p>
                 <input
                   type="text"
                   value={notes2}
@@ -426,7 +452,8 @@ export function HalfAndHalfModal({
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Passo {activeStep}: <span className="underline font-black">Escolha a {activeStep}ª Metade</span>
+                  Passo {activeStep}:{" "}
+                  <span className="underline font-black">Escolha a {activeStep}ª Metade</span>
                 </span>
                 <span className="text-[11px] text-muted-foreground">
                   {filteredFlavors.length} opções disponíveis
@@ -462,8 +489,8 @@ export function HalfAndHalfModal({
                     activeStep === 2 && flavor1
                       ? flavor1.price
                       : activeStep === 1 && flavor2
-                      ? flavor2.price
-                      : f.price;
+                        ? flavor2.price
+                        : f.price;
                   const diff = f.price - baseRefPrice;
 
                   return (
@@ -527,16 +554,21 @@ export function HalfAndHalfModal({
           >
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                  activeStep === 3 ? "bg-gold text-gold-foreground" : "bg-secondary text-muted-foreground border border-border"
-                }`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                    activeStep === 3
+                      ? "bg-gold text-gold-foreground"
+                      : "bg-secondary text-muted-foreground border border-border"
+                  }`}
+                >
                   3. Borda Recheada
                 </span>
                 <span>Escolha o Tipo de Borda (Opcional)</span>
               </label>
               {selectedCrust && (
                 <span className="text-[11px] font-bold text-gold">
-                  {selectedCrust.name} {selectedCrust.price > 0 ? `(+${formatBRL(selectedCrust.price)})` : "(Grátis)"}
+                  {selectedCrust.name}{" "}
+                  {selectedCrust.price > 0 ? `(+${formatBRL(selectedCrust.price)})` : "(Grátis)"}
                 </span>
               )}
             </div>
@@ -567,8 +599,8 @@ export function HalfAndHalfModal({
               {!flavor1
                 ? "1️⃣ Passo 1: Escolha a 1ª Metade"
                 : !flavor2
-                ? "2️⃣ Passo 2: Escolha a 2ª Metade"
-                : "✅ Adicionar ao Pedido"}
+                  ? "2️⃣ Passo 2: Escolha a 2ª Metade"
+                  : "✅ Adicionar ao Pedido"}
             </span>
             <span className="font-serif font-bold text-sm sm:text-base">
               {flavor1 && flavor2 ? formatBRL(totalPrice) : "--"}

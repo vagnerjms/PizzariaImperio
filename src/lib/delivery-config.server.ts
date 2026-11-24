@@ -15,9 +15,9 @@ export interface DeliverySettings {
   neighborhoods: NeighborhoodFee[];
 }
 
-export const INITIAL_DEFAULT_FEE = 7.00;
+export const INITIAL_DEFAULT_FEE = 7.0;
 
-export function getBragancaNeighborhoodsList(defaultFee = 5.00): NeighborhoodFee[] {
+export function getBragancaNeighborhoodsList(defaultFee = 5.0): NeighborhoodFee[] {
   return BRAGANCA_PAULISTA_NEIGHBORHOODS.map((name, index) => ({
     id: `bp-${index + 1}`,
     name,
@@ -49,13 +49,19 @@ export async function getDeliverySettings(): Promise<DeliverySettings> {
       };
     }
 
-    const defaultList = getBragancaNeighborhoodsList(5.00);
+    const defaultList = getBragancaNeighborhoodsList(5.0);
 
     // Se não existir, salva a lista oficial de Bragança Paulista
     await col.updateOne(
       { _id: "global" },
-      { $set: { default_fee: INITIAL_DEFAULT_FEE, neighborhoods: defaultList, updated_at: new Date() } },
-      { upsert: true }
+      {
+        $set: {
+          default_fee: INITIAL_DEFAULT_FEE,
+          neighborhoods: defaultList,
+          updated_at: new Date(),
+        },
+      },
+      { upsert: true },
     );
 
     return {
@@ -66,15 +72,18 @@ export async function getDeliverySettings(): Promise<DeliverySettings> {
     console.error("Failed to load delivery settings from MongoDB:", error);
     return {
       default_fee: INITIAL_DEFAULT_FEE,
-      neighborhoods: getBragancaNeighborhoodsList(5.00),
+      neighborhoods: getBragancaNeighborhoodsList(5.0),
     };
   }
 }
 
-export async function saveDeliverySettings(settings: { default_fee: number; neighborhoods: NeighborhoodFee[] }): Promise<void> {
+export async function saveDeliverySettings(settings: {
+  default_fee: number;
+  neighborhoods: NeighborhoodFee[];
+}): Promise<void> {
   const db = await getDb();
   const col = db.collection<DeliverySettingsDoc>("delivery_settings");
-  
+
   const parsedDefaultFee = Number(settings.default_fee);
   const safeDefaultFee =
     Number.isFinite(parsedDefaultFee) && parsedDefaultFee >= 0
@@ -97,7 +106,7 @@ export async function saveDeliverySettings(settings: { default_fee: number; neig
         updated_at: new Date(),
       },
     },
-    { upsert: true }
+    { upsert: true },
   );
 }
 

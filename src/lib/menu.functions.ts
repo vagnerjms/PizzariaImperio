@@ -1,11 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
-import {
-  CatalogCrustOption,
-  CatalogMenuItem,
-  PublicCatalogResponse,
-} from "./menu-domain";
+import { CatalogCrustOption, CatalogMenuItem, PublicCatalogResponse } from "./menu-domain";
 
 export interface PublicMenuOverride {
   id: string;

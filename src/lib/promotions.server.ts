@@ -90,7 +90,7 @@ async function assertUniqueCouponCode(code: string | null, excludeId?: string) {
 }
 
 export async function createPromotionInDb(
-  data: Omit<Promotion, "_id" | "created_at" | "updated_at">
+  data: Omit<Promotion, "_id" | "created_at" | "updated_at">,
 ): Promise<Promotion> {
   const col = await getPromotionsCollection();
   const normalizedCode = normalizeCouponCode(data.coupon_code) || null;
@@ -155,7 +155,7 @@ export async function updatePromotionInDb(id: string, data: Partial<Promotion>):
           ...cleanData,
           updated_at: new Date(),
         },
-      }
+      },
     );
   } catch (err: any) {
     if (err?.code === 11000 && normalizedCode) {
@@ -174,7 +174,7 @@ export async function togglePromotionInDb(id: string, active: boolean): Promise<
         active,
         updated_at: new Date(),
       },
-    }
+    },
   );
 }
 
@@ -203,7 +203,7 @@ export async function consumePromotionUse(id: string): Promise<boolean> {
       $inc: { current_uses: 1 },
       $set: { updated_at: new Date() },
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
   return Boolean(res);
 }
@@ -214,11 +214,8 @@ export async function consumePromotionUse(id: string): Promise<boolean> {
  */
 export async function releasePromotionUse(id: string): Promise<void> {
   const col = await getPromotionsCollection();
-  await col.updateOne(
-    { _id: id, current_uses: { $gt: 0 } } as any,
-    {
-      $inc: { current_uses: -1 },
-      $set: { updated_at: new Date() },
-    }
-  );
+  await col.updateOne({ _id: id, current_uses: { $gt: 0 } } as any, {
+    $inc: { current_uses: -1 },
+    $set: { updated_at: new Date() },
+  });
 }

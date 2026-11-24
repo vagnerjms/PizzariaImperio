@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bike, Loader2, Plus, Search, Trash2 } from "lucide-react";
-import { getAdminDeliverySettings, updateAdminDeliverySettings, resetToBragancaNeighborhoods } from "@/lib/delivery.functions";
+import {
+  getAdminDeliverySettings,
+  updateAdminDeliverySettings,
+  resetToBragancaNeighborhoods,
+} from "@/lib/delivery.functions";
 import { queryKeys } from "@/lib/query-keys";
 import { cleanString, formatBRL } from "@/lib/formatters";
 
@@ -30,7 +34,7 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
     default_fee: number;
     neighborhoods: Array<{ id: string; name: string; fee: number }>;
   }>({
-    default_fee: 7.00,
+    default_fee: 7.0,
     neighborhoods: [],
   });
   const [resettingBraganca, setResettingBraganca] = useState(false);
@@ -68,7 +72,8 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
     deliveryErrorMsg || (deliveryQueryError instanceof Error ? deliveryQueryError.message : null);
 
   const handleLoadBraganca = async () => {
-    if (!confirm("Deseja carregar a lista com todos os bairros oficiais de Bragança Paulista?")) return;
+    if (!confirm("Deseja carregar a lista com todos os bairros oficiais de Bragança Paulista?"))
+      return;
     setResettingBraganca(true);
     setDeliverySuccessMsg(null);
     setDeliveryErrorMsg(null);
@@ -98,7 +103,8 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
     setDeliveryErrorMsg(null);
     try {
       const parsedDefault = Number(deliveryFeeSettings.default_fee);
-      const safeDefault = Number.isFinite(parsedDefault) && parsedDefault >= 0 ? parsedDefault : 7.0;
+      const safeDefault =
+        Number.isFinite(parsedDefault) && parsedDefault >= 0 ? parsedDefault : 7.0;
       await saveDeliverySettingsFn({
         data: {
           default_fee: safeDefault,
@@ -315,7 +321,7 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
                   .filter(
                     (n) =>
                       !neighborhoodSearch.trim() ||
-                      cleanString(n.name).includes(cleanString(neighborhoodSearch.trim()))
+                      cleanString(n.name).includes(cleanString(neighborhoodSearch.trim())),
                   )
                   .map((n) => (
                     <div

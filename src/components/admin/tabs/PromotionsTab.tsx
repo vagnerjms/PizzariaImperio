@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Tag,
-  Plus,
-  Loader2,
-  Sparkles,
-  Calendar,
-  Edit3,
-  Trash2,
-} from "lucide-react";
+import { Tag, Plus, Loader2, Sparkles, Calendar, Edit3, Trash2 } from "lucide-react";
 import {
   getAdminPromotions,
   createPromotionFn,
@@ -17,7 +9,7 @@ import {
   togglePromotionFn,
   deletePromotionFn,
 } from "@/lib/promotions.functions";
-import { Promotion } from "@/lib/promotions.types";
+import { PROMO_WEEKDAYS, Promotion } from "@/lib/promotions.types";
 import { formatBRL, formatDateBR as formatPromoDate } from "@/lib/formatters";
 import { queryKeys } from "@/lib/query-keys";
 import { PromotionModal, PromotionFormData } from "../promotions/PromotionModal";
@@ -140,7 +132,8 @@ export function PromotionsTab() {
             <div>
               <h2 className="font-serif text-lg leading-tight">Gestão de Promoções e Campanhas</h2>
               <p className="text-xs text-muted-foreground">
-                Crie descontos em porcentagem, valores fixos e combos Compre & Ganhe com inserção automática no carrinho
+                Crie descontos em porcentagem, valores fixos e combos Compre & Ganhe com inserção
+                automática no carrinho
               </p>
             </div>
           </div>
@@ -156,7 +149,11 @@ export function PromotionsTab() {
         {displayedError && (
           <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive flex items-center justify-between">
             <span>{displayedError}</span>
-            <button type="button" onClick={() => setPromotionsErrorMsg(null)} className="text-destructive font-bold">
+            <button
+              type="button"
+              onClick={() => setPromotionsErrorMsg(null)}
+              className="text-destructive font-bold"
+            >
               ×
             </button>
           </div>
@@ -165,7 +162,11 @@ export function PromotionsTab() {
         {promotionsSuccessMsg && (
           <div className="mb-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-500 font-semibold flex items-center justify-between">
             <span>{promotionsSuccessMsg}</span>
-            <button type="button" onClick={() => setPromotionsSuccessMsg(null)} className="text-green-500 font-bold">
+            <button
+              type="button"
+              onClick={() => setPromotionsSuccessMsg(null)}
+              className="text-green-500 font-bold"
+            >
               ×
             </button>
           </div>
@@ -183,7 +184,8 @@ export function PromotionsTab() {
             </div>
             <h3 className="font-serif text-lg font-bold">Nenhuma promoção cadastrada</h3>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Crie campanhas de desconto ou combos com brindes para atrair mais clientes e aumentar o ticket médio.
+              Crie campanhas de desconto ou combos com brindes para atrair mais clientes e aumentar
+              o ticket médio.
             </p>
             <button
               type="button"
@@ -218,20 +220,28 @@ export function PromotionsTab() {
                           : "bg-muted text-muted-foreground border border-border"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${promo.active ? "bg-green-400 animate-pulse" : "bg-muted-foreground"}`} />
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${promo.active ? "bg-green-400 animate-pulse" : "bg-muted-foreground"}`}
+                      />
                       {promo.active ? "Ativa" : "Inativa"}
                     </button>
                   </div>
 
-                  <h3 className="mt-3 font-serif text-lg font-bold leading-tight text-foreground">{promo.title}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{promo.description}</p>
+                  <h3 className="mt-3 font-serif text-lg font-bold leading-tight text-foreground">
+                    {promo.title}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                    {promo.description}
+                  </p>
 
                   <div className="mt-4 space-y-2 rounded-xl bg-background/60 p-3 border border-border/40 text-xs">
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Mecânica:</span>
                       <span className="font-semibold text-foreground">
-                        {promo.type === "PERCENTAGE_DISCOUNT" && `${promo.discount_value}% de Desconto`}
-                        {promo.type === "FIXED_DISCOUNT" && `${formatBRL(promo.discount_value || 0)} OFF`}
+                        {promo.type === "PERCENTAGE_DISCOUNT" &&
+                          `${promo.discount_value}% de Desconto`}
+                        {promo.type === "FIXED_DISCOUNT" &&
+                          `${formatBRL(promo.discount_value || 0)} OFF`}
                         {promo.type === "BUY_X_GET_Y" && "Compre e Ganhe Brinde"}
                       </span>
                     </div>
@@ -240,8 +250,10 @@ export function PromotionsTab() {
                       <div className="flex justify-between items-center text-gold font-semibold">
                         <span>Recompensa:</span>
                         <span>
-                          {promo.reward_discount_percent === 100 ? "1x Brinde Grátis" : `${promo.reward_discount_percent}% OFF em 1x`} (
-                          {promo.reward_item_name || "Brinde"})
+                          {promo.reward_discount_percent === 100
+                            ? "1x Brinde Grátis"
+                            : `${promo.reward_discount_percent}% OFF em 1x`}{" "}
+                          ({promo.reward_item_name || "Brinde"})
                         </span>
                       </div>
                     )}
@@ -250,10 +262,15 @@ export function PromotionsTab() {
                       <span className="text-muted-foreground">Gatilho:</span>
                       <span className="text-foreground">
                         {promo.trigger_type === "all" && "Qualquer produto"}
-                        {promo.trigger_type === "category" && `Categoria: ${promo.trigger_category}`}
-                        {promo.trigger_type === "specific_items" && `${promo.trigger_item_ids?.length || 0} produto(s) específico(s)`}
-                        {promo.trigger_type === "min_total" && `Pedido acima de ${formatBRL(promo.trigger_min_total || 0)}`}
-                        {promo.trigger_min_qty && promo.trigger_min_qty > 1 ? ` (Mín: ${promo.trigger_min_qty}x)` : ""}
+                        {promo.trigger_type === "category" &&
+                          `Categoria: ${promo.trigger_category}`}
+                        {promo.trigger_type === "specific_items" &&
+                          `${promo.trigger_item_ids?.length || 0} produto(s) específico(s)`}
+                        {promo.trigger_type === "min_total" &&
+                          `Pedido acima de ${formatBRL(promo.trigger_min_total || 0)}`}
+                        {promo.trigger_min_qty && promo.trigger_min_qty > 1
+                          ? ` (Mín: ${promo.trigger_min_qty}x)`
+                          : ""}
                       </span>
                     </div>
 
@@ -271,7 +288,7 @@ export function PromotionsTab() {
                         <span className="text-muted-foreground">Dias:</span>
                         <span className="text-foreground font-medium">
                           {promo.days_of_week
-                            .map((d) => ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][d])
+                            .map((d) => PROMO_WEEKDAYS.find((w) => w.day === d)?.short)
                             .filter(Boolean)
                             .join(", ")}
                         </span>

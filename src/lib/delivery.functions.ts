@@ -14,11 +14,10 @@ const updateDeliverySettingsSchema = z.object({
 });
 
 // 1. Obter taxas e bairros para o cliente no Checkout (Público)
-export const getPublicDeliveryConfig = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { getDeliverySettings } = await import("./delivery-config.server");
-    return getDeliverySettings();
-  });
+export const getPublicDeliveryConfig = createServerFn({ method: "GET" }).handler(async () => {
+  const { getDeliverySettings } = await import("./delivery-config.server");
+  return getDeliverySettings();
+});
 
 // 2. Calcular taxa de entrega por nome de bairro no servidor
 export const lookupDeliveryFee = createServerFn({ method: "POST" })
@@ -51,8 +50,9 @@ export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
 export const resetToBragancaNeighborhoods = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
   .handler(async () => {
-    const { getBragancaNeighborhoodsList, saveDeliverySettings } = await import("./delivery-config.server");
-    const list = getBragancaNeighborhoodsList(5.00);
-    await saveDeliverySettings({ default_fee: 7.00, neighborhoods: list });
-    return { default_fee: 7.00, neighborhoods: list };
+    const { getBragancaNeighborhoodsList, saveDeliverySettings } =
+      await import("./delivery-config.server");
+    const list = getBragancaNeighborhoodsList(5.0);
+    await saveDeliverySettings({ default_fee: 7.0, neighborhoods: list });
+    return { default_fee: 7.0, neighborhoods: list };
   });

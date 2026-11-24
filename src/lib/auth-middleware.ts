@@ -52,13 +52,13 @@ export const requireAuth = createMiddleware({ type: "function" }).server(async (
 
 export function createRoleMiddleware(
   allowedRoles: ReadonlyArray<AppRole>,
-  errorMessage = "Acesso restrito."
+  errorMessage = "Acesso restrito.",
 ) {
   return createMiddleware({ type: "function" })
     .middleware([requireAuth])
     .server(async ({ next, context }) => {
       const hasRole = Boolean(
-        context.roles?.some((r) => (allowedRoles as ReadonlyArray<string>).includes(r))
+        context.roles?.some((r) => (allowedRoles as ReadonlyArray<string>).includes(r)),
       );
       if (!hasRole) {
         throw new Error(errorMessage);
@@ -67,17 +67,14 @@ export function createRoleMiddleware(
     });
 }
 
-export const requireAdmin = createRoleMiddleware(
-  ["admin"],
-  "Acesso restrito a Administradores."
-);
+export const requireAdmin = createRoleMiddleware(["admin"], "Acesso restrito a Administradores.");
 
 export const requireSupervisorOrAdmin = createRoleMiddleware(
   ["admin", "supervisor"],
-  "Acesso restrito a Supervisores e Administradores."
+  "Acesso restrito a Supervisores e Administradores.",
 );
 
 export const requireStaff = createRoleMiddleware(
   ["admin", "supervisor", "atendente"],
-  "Acesso restrito."
+  "Acesso restrito.",
 );

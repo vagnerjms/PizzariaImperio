@@ -18,31 +18,31 @@ import { playNewOrderChime } from "@/lib/sound";
 
 // Code-split all non-default Admin tabs so atendentes/supervisores don't download restricted chunks
 const CashTab = lazy(() =>
-  import("@/components/admin/tabs/CashTab").then((m) => ({ default: m.CashTab }))
+  import("@/components/admin/tabs/CashTab").then((m) => ({ default: m.CashTab })),
 );
 const CouriersTab = lazy(() =>
-  import("@/components/admin/tabs/CouriersTab").then((m) => ({ default: m.CouriersTab }))
+  import("@/components/admin/tabs/CouriersTab").then((m) => ({ default: m.CouriersTab })),
 );
 const MenuTab = lazy(() =>
-  import("@/components/admin/tabs/MenuTab").then((m) => ({ default: m.MenuTab }))
+  import("@/components/admin/tabs/MenuTab").then((m) => ({ default: m.MenuTab })),
 );
 const WhatsAppTab = lazy(() =>
-  import("@/components/admin/tabs/WhatsAppTab").then((m) => ({ default: m.WhatsAppTab }))
+  import("@/components/admin/tabs/WhatsAppTab").then((m) => ({ default: m.WhatsAppTab })),
 );
 const FinancialTab = lazy(() =>
-  import("@/components/admin/tabs/FinancialTab").then((m) => ({ default: m.FinancialTab }))
+  import("@/components/admin/tabs/FinancialTab").then((m) => ({ default: m.FinancialTab })),
 );
 const DeliveryTab = lazy(() =>
-  import("@/components/admin/tabs/DeliveryTab").then((m) => ({ default: m.DeliveryTab }))
+  import("@/components/admin/tabs/DeliveryTab").then((m) => ({ default: m.DeliveryTab })),
 );
 const PromotionsTab = lazy(() =>
-  import("@/components/admin/tabs/PromotionsTab").then((m) => ({ default: m.PromotionsTab }))
+  import("@/components/admin/tabs/PromotionsTab").then((m) => ({ default: m.PromotionsTab })),
 );
 const UsersTab = lazy(() =>
-  import("@/components/admin/tabs/UsersTab").then((m) => ({ default: m.UsersTab }))
+  import("@/components/admin/tabs/UsersTab").then((m) => ({ default: m.UsersTab })),
 );
 const SettingsTab = lazy(() =>
-  import("@/components/admin/tabs/SettingsTab").then((m) => ({ default: m.SettingsTab }))
+  import("@/components/admin/tabs/SettingsTab").then((m) => ({ default: m.SettingsTab })),
 );
 
 const VALID_TABS: ReadonlySet<AdminViewMode> = new Set([
@@ -86,7 +86,7 @@ function AdminPage() {
   const { tab } = Route.useSearch();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isSupervisorOrAdmin = Boolean(
-    user?.roles?.some((r) => ["admin", "supervisor"].includes(r))
+    user?.roles?.some((r) => ["admin", "supervisor"].includes(r)),
   );
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -97,9 +97,9 @@ function AdminPage() {
   const fetchStoreConfig = useServerFn(getPublicStoreConfig);
   const toggleStorePauseFn = useServerFn(toggleStorePause);
 
-  const [filter, setFilter] = useState<
-    "ativos" | "todos" | "pix_pendente" | OrderRow["status"]
-  >("ativos");
+  const [filter, setFilter] = useState<"ativos" | "todos" | "pix_pendente" | OrderRow["status"]>(
+    "ativos",
+  );
 
   const viewMode: AdminViewMode = useMemo(() => {
     const requested = tab || "pedidos";
@@ -185,13 +185,13 @@ function AdminPage() {
   useEffect(() => {
     if (!orders || orders.length === 0) return;
     const readyOrders = orders.filter(
-      (o) => o.payment_method !== "Pix" || o.payment_status === "paid"
+      (o) => o.payment_method !== "Pix" || o.payment_status === "paid",
     );
     if (knownOrderIdsRef.current === null) {
       knownOrderIdsRef.current = new Set(readyOrders.map((o) => o.id));
     } else {
       const hasBrandNewReady = readyOrders.some(
-        (o) => !knownOrderIdsRef.current!.has(o.id) && o.status === "novo"
+        (o) => !knownOrderIdsRef.current!.has(o.id) && o.status === "novo",
       );
       if (hasBrandNewReady && soundEnabled) {
         playNewOrderChime();
@@ -212,9 +212,7 @@ function AdminPage() {
     if (filter === "pix_pendente") {
       return orders.filter(
         (o) =>
-          o.payment_method === "Pix" &&
-          o.payment_status === "pending" &&
-          o.status !== "cancelado"
+          o.payment_method === "Pix" && o.payment_status === "pending" && o.status !== "cancelado",
       );
     }
     if (filter === "ativos") {
@@ -257,7 +255,7 @@ function AdminPage() {
   const handleStatus = async (
     id: string,
     status: OrderRow["status"],
-    courierId?: string | null
+    courierId?: string | null,
   ) => {
     const targetOrder = orders.find((o) => o.id === id);
     const chosenCourier = courierId ? couriers.find((c) => c.id === courierId) : null;
@@ -279,8 +277,8 @@ function AdminPage() {
                   }
                 : {}),
             }
-          : o
-      )
+          : o,
+      ),
     );
 
     // Auto-print thermal receipt when accepting order ("preparando")
@@ -311,7 +309,7 @@ function AdminPage() {
       showPrinterMessage(
         err instanceof Error ? err.message : "Erro ao atualizar status do pedido.",
         true,
-        5000
+        5000,
       );
       queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() });
     }
@@ -322,7 +320,7 @@ function AdminPage() {
     const previousOrders = queryClient.getQueryData<OrderRow[]>(queryKeys.admin.orders());
 
     queryClient.setQueryData<OrderRow[]>(queryKeys.admin.orders(), (prev = []) =>
-      prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o))
+      prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o)),
     );
     try {
       await confirmPaymentFn({ data: { id } });
@@ -340,7 +338,7 @@ function AdminPage() {
       showPrinterMessage(
         err instanceof Error ? err.message : "Erro ao confirmar pagamento.",
         true,
-        5000
+        5000,
       );
       queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() });
     }
@@ -355,15 +353,14 @@ function AdminPage() {
     if (currentlyOpen) {
       const reason = window.prompt(
         "Pausar recebimento de pedidos? Opcionalmente informe o motivo exibido aos clientes:",
-        storeConfig?.pause_reason || "Forno em alta demanda — voltamos em breve!"
+        storeConfig?.pause_reason || "Forno em alta demanda — voltamos em breve!",
       );
       if (reason === null) return; // cancelled
       nextOverride = "force_closed";
       pauseReason = reason.trim();
     } else {
       // If currently closed by schedule, force open; if force_closed, restore auto (or force_open if outside hours)
-      nextOverride =
-        storeConfig?.store_status_override === "force_closed" ? "auto" : "force_open";
+      nextOverride = storeConfig?.store_status_override === "force_closed" ? "auto" : "force_open";
     }
 
     setTogglingStore(true);
@@ -380,13 +377,13 @@ function AdminPage() {
           ? "Loja aberta para novos pedidos!"
           : `Recebimento pausado: ${updated.status.reason}`,
         false,
-        5000
+        5000,
       );
     } catch (e) {
       showPrinterMessage(
         e instanceof Error ? e.message : "Erro ao atualizar status da loja.",
         true,
-        5000
+        5000,
       );
     } finally {
       setTogglingStore(false);
@@ -394,8 +391,7 @@ function AdminPage() {
   };
 
   const onLogout = async () => {
-    document.cookie =
-      "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+    document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
     localStorage.removeItem("auth_token");
     navigate({ to: "/auth" });
   };

@@ -1,8 +1,16 @@
 import { Phone } from "lucide-react";
+import { formatOpeningHoursSummary, OpeningHoursMap } from "@/lib/store-hours";
 
-export function Contact({ storePhone }: { storePhone?: string }) {
+export function Contact({
+  storePhone,
+  openingHours,
+}: {
+  storePhone?: string;
+  openingHours?: OpeningHoursMap | null;
+}) {
   const digits = (storePhone || "").replace(/\D/g, "");
   const whatsappUrl = digits ? `https://wa.me/${digits}` : null;
+  const hoursSummary = formatOpeningHoursSummary(openingHours);
 
   return (
     <section id="contato" className="border-t border-border/50 bg-background py-20">
@@ -14,7 +22,7 @@ export function Contact({ storePhone }: { storePhone?: string }) {
           Peça pelo site ou pelo WhatsApp
         </h2>
         <p className="mt-2 text-muted-foreground max-w-xl mx-auto text-sm">
-          Atendemos de terça a domingo das 18h às 23h30 em toda a região de Bragança Paulista.
+          Atendemos {hoursSummary} em toda a região de Bragança Paulista.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-6">

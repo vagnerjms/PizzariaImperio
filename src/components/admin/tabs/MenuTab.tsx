@@ -44,12 +44,12 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
     queryFn: async () => fetchCatalog(),
   });
 
-  const items = catalogData?.items ?? [];
-  const crusts = catalogData?.crusts ?? [];
+  const items = useMemo(() => catalogData?.items ?? [], [catalogData?.items]);
+  const crusts = useMemo(() => catalogData?.crusts ?? [], [catalogData?.crusts]);
 
   const updateCatalogCache = (updater: (prev: PublicCatalogResponse) => PublicCatalogResponse) => {
     queryClient.setQueryData<PublicCatalogResponse>(queryKeys.admin.menuCatalog(), (prev) =>
-      updater(prev || { items: [], crusts: [] })
+      updater(prev || { items: [], crusts: [] }),
     );
   };
 
@@ -125,7 +125,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
       showToast(
         nextAvailable
           ? `"${item.name}" ativado no cardápio.`
-          : `"${item.name}" marcado como esgotado.`
+          : `"${item.name}" marcado como esgotado.`,
       );
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Erro ao atualizar item.", true);
@@ -161,9 +161,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
       updateCatalogCache((prev) => ({
         ...prev,
         items: prev.items.map((i) =>
-          i.id === item.id
-            ? { ...i, price: parsedPrice, badge: nextBadge || undefined }
-            : i
+          i.id === item.id ? { ...i, price: parsedPrice, badge: nextBadge || undefined } : i,
         ),
       }));
       setPriceDrafts((prev) => {
@@ -246,7 +244,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
       showToast(
         editingItem
           ? `"${saved.name}" atualizado no cardápio!`
-          : `"${saved.name}" adicionado ao cardápio!`
+          : `"${saved.name}" adicionado ao cardápio!`,
       );
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Erro ao salvar item.", true);
@@ -284,9 +282,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
         ...prev,
         crusts: prev.crusts.map((c) => (c.id === crust.id ? { ...c, available: next } : c)),
       }));
-      showToast(
-        next ? `"${crust.name}" ativada.` : `"${crust.name}" marcada como esgotada.`
-      );
+      showToast(next ? `"${crust.name}" ativada.` : `"${crust.name}" marcada como esgotada.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Erro ao atualizar borda.", true);
     } finally {
@@ -332,7 +328,9 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
           : [...prev.crusts, saved],
       }));
       setCrustModalOpen(false);
-      showToast(editingCrust ? `Borda "${saved.name}" atualizada!` : `Borda "${saved.name}" criada!`);
+      showToast(
+        editingCrust ? `Borda "${saved.name}" atualizada!` : `Borda "${saved.name}" criada!`,
+      );
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Erro ao salvar borda.", true);
     } finally {
@@ -486,9 +484,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
                   ? priceDrafts[item.id]
                   : item.price.toFixed(2).replace(".", ",");
               const badgeDraftVal =
-                badgeDrafts[item.id] !== undefined
-                  ? badgeDrafts[item.id]
-                  : item.badge || "";
+                badgeDrafts[item.id] !== undefined ? badgeDrafts[item.id] : item.badge || "";
               const hasPendingDraft =
                 priceDrafts[item.id] !== undefined || badgeDrafts[item.id] !== undefined;
               const isSaving = savingId === item.id;
@@ -643,9 +639,7 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-serif text-base font-bold text-foreground">
-                      {crust.name}
-                    </h3>
+                    <h3 className="font-serif text-base font-bold text-foreground">{crust.name}</h3>
                     <p className="mt-0.5 text-sm font-bold text-gold">
                       {crust.price === 0 ? "Grátis (Padrão)" : `+${formatBRL(crust.price)}`}
                     </p>

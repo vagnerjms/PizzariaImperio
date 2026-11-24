@@ -16,7 +16,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: DEFAULT_OPENING_HOURS,
       },
-      new Date("2026-11-24T23:00:00Z")
+      new Date("2026-11-24T23:00:00Z"),
     );
     assert.equal(openRes.isOpen, true);
 
@@ -27,7 +27,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: DEFAULT_OPENING_HOURS,
       },
-      new Date("2026-11-24T17:00:00Z")
+      new Date("2026-11-24T17:00:00Z"),
     );
     assert.equal(closedEarly.isOpen, false);
     assert.equal(closedEarly.nextOpenLabel, "Hoje às 18:00");
@@ -39,7 +39,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: DEFAULT_OPENING_HOURS,
       },
-      new Date("2026-11-23T23:00:00Z")
+      new Date("2026-11-23T23:00:00Z"),
     );
     assert.equal(closedMonday.isOpen, false);
     assert.equal(closedMonday.nextOpenLabel, "Amanhã (Terça) às 18:00");
@@ -58,7 +58,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: overnightHours,
       },
-      new Date("2026-11-28T03:30:00Z")
+      new Date("2026-11-28T03:30:00Z"),
     );
     assert.equal(afterMidnight.isOpen, true);
 
@@ -69,7 +69,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: overnightHours,
       },
-      new Date("2026-11-28T04:15:00Z")
+      new Date("2026-11-28T04:15:00Z"),
     );
     assert.equal(afterClose.isOpen, false);
   });
@@ -82,7 +82,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "",
         opening_hours: DEFAULT_OPENING_HOURS,
       },
-      new Date("2026-11-23T15:00:00Z")
+      new Date("2026-11-23T15:00:00Z"),
     );
     assert.equal(forcedOpen.isOpen, true);
 
@@ -93,7 +93,7 @@ describe("evaluateStoreOpenStatus (America/Sao_Paulo & Overrides)", () => {
         pause_reason: "Forno lotado — voltamos em 20 min",
         opening_hours: DEFAULT_OPENING_HOURS,
       },
-      new Date("2026-11-24T23:00:00Z")
+      new Date("2026-11-24T23:00:00Z"),
     );
     assert.equal(forcedClosed.isOpen, false);
     assert.equal(forcedClosed.reason, "Forno lotado — voltamos em 20 min");

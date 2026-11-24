@@ -46,7 +46,8 @@ export function OrderStatusView({
     !!order.payment_details?.qr_code;
   const isCardOnline =
     (order.payment_method === "Cartão de crédito" || order.payment_method === "Cartão") &&
-    (order.payment_details?.type === "mercadopago_preference" || !!order.payment_details?.init_point);
+    (order.payment_details?.type === "mercadopago_preference" ||
+      !!order.payment_details?.init_point);
   const isPaid = order.payment_status === "paid";
   const isFailed = order.payment_status === "failed" || order.status === "cancelado";
   const isPending = order.payment_status === "pending";
@@ -59,27 +60,27 @@ export function OrderStatusView({
   const step3Title = isPickup
     ? "Pronto para Retirada"
     : isDineIn
-    ? "Pronto para Servir"
-    : "Saiu para Entrega";
+      ? "Pronto para Servir"
+      : "Saiu para Entrega";
 
   const step3Desc =
     order.status === "entregue"
       ? isPickup
         ? "Pedido retirado no balcão!"
         : isDineIn
-        ? "Servido na mesa!"
-        : "Pedido entregue!"
+          ? "Servido na mesa!"
+          : "Pedido entregue!"
       : order.status === "saiu"
-      ? isPickup
-        ? "Seu pedido está pronto no balcão!"
-        : isDineIn
-        ? "Sendo levado à sua mesa!"
-        : "A caminho do seu endereço!"
-      : isPickup
-      ? "Avisaremos quando estiver pronto no balcão"
-      : isDineIn
-      ? "Avisaremos quando sair do forno"
-      : "Aguardando motoboy";
+        ? isPickup
+          ? "Seu pedido está pronto no balcão!"
+          : isDineIn
+            ? "Sendo levado à sua mesa!"
+            : "A caminho do seu endereço!"
+        : isPickup
+          ? "Avisaremos quando estiver pronto no balcão"
+          : isDineIn
+            ? "Avisaremos quando sair do forno"
+            : "Aguardando motoboy";
 
   const Step3Icon = isPickup ? Store : isDineIn ? UtensilsCrossed : Bike;
 
@@ -111,8 +112,8 @@ export function OrderStatusView({
             {order.status === "preparando"
               ? "Em preparação agora..."
               : order.status === "saiu" || order.status === "entregue"
-              ? "Finalizado no forno"
-              : "Aguardando entrada no forno"}
+                ? "Finalizado no forno"
+                : "Aguardando entrada no forno"}
           </p>
         </div>
       </div>
@@ -152,7 +153,8 @@ export function OrderStatusView({
               Pague com Pix para Iniciar
             </h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Escaneie o QR Code abaixo no seu aplicativo do banco ou copie o código Pix para liberar seu pedido na cozinha.
+              Escaneie o QR Code abaixo no seu aplicativo do banco ou copie o código Pix para
+              liberar seu pedido na cozinha.
             </p>
           </div>
 
@@ -224,7 +226,8 @@ export function OrderStatusView({
           )}
 
           <div className="rounded-xl bg-secondary/40 p-3 border border-border/50 text-xs text-muted-foreground">
-            O pedido entrará automaticamente em preparação na cozinha assim que o pagamento for aprovado.
+            O pedido entrará automaticamente em preparação na cozinha assim que o pagamento for
+            aprovado.
           </div>
         </div>
       ) : isPaid && !isFailed ? (
@@ -241,7 +244,8 @@ export function OrderStatusView({
               Pagamento Confirmado!
             </h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              Seu pedido foi liberado e o pizzaiolo já está preparando a sua pizza no forno a lenha! 🍕🔥
+              Seu pedido foi liberado e o pizzaiolo já está preparando a sua pizza no forno a lenha!
+              🍕🔥
             </p>
           </div>
 
@@ -273,20 +277,18 @@ export function OrderStatusView({
               {isPickup
                 ? "Pagamento na Retirada"
                 : isDineIn
-                ? "Pagamento no Local"
-                : "Pagamento na Entrega"}
+                  ? "Pagamento no Local"
+                  : "Pagamento na Entrega"}
             </span>
-            <h3 className="mt-2 font-serif text-xl font-bold text-foreground">
-              Pedido Recebido!
-            </h3>
+            <h3 className="mt-2 font-serif text-xl font-bold text-foreground">Pedido Recebido!</h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
               Seu pedido foi enviado para a cozinha. O pagamento de{" "}
               <strong className="text-gold">{formatBRL(order.total || 0)}</strong> será realizado{" "}
               {isPickup
                 ? "na retirada no balcão"
                 : isDineIn
-                ? "no local"
-                : "diretamente na entrega"}{" "}
+                  ? "no local"
+                  : "diretamente na entrega"}{" "}
               ({order.payment_method}).
             </p>
           </div>

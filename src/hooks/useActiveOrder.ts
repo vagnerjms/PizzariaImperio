@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
 import { trackPurchase } from "@/lib/analytics";
+import { sanitizeText } from "@/lib/formatters";
 import { queryKeys } from "@/lib/query-keys";
 import { CartItem } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
@@ -10,9 +11,7 @@ import { DeliveryAddressForm } from "./useDeliveryAddress";
 
 const ACTIVE_ORDER_STORAGE_KEY = "active_order";
 
-function sanitize(str: string, max: number): string {
-  return str.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
-}
+const sanitize = sanitizeText;
 
 export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } = {}) {
   const [activeOrder, setActiveOrder] = useState<any>(null);
@@ -110,7 +109,9 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
   const dismissOrder = useCallback(() => {
     try {
       localStorage.removeItem(ACTIVE_ORDER_STORAGE_KEY);
-    } catch {}
+    } catch {
+      // Ignora erro quando storage está bloqueado
+    }
     setActiveOrder(null);
     setSubmitError(null);
   }, []);
@@ -122,7 +123,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
       appliedPromotion: AppliedPromotionResult | null,
       form: DeliveryAddressForm,
       onSuccessCallback?: () => void,
-      couponCode?: string | null
+      couponCode?: string | null,
     ) => {
       setSubmitting(true);
       setSubmitError(null);
@@ -132,12 +133,12 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
           form.deliveryMode === "pickup"
             ? "Retirada no Balcão (Buscar o pedido)"
             : form.deliveryMode === "dine_in"
-            ? tableClean
-              ? `Consumir no Local — Mesa ${tableClean} (Salão Pizzaria Império)`
-              : "Consumir no Local (Salão Pizzaria Império)"
-            : `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${
-                form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""
-              }`;
+              ? tableClean
+                ? `Consumir no Local — Mesa ${tableClean} (Salão Pizzaria Império)`
+                : "Consumir no Local (Salão Pizzaria Império)"
+              : `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${
+                  form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""
+                }`;
 
         const orderItems = cart.map((i) => {
           let fullName = i.isHalf
@@ -215,7 +216,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
           },
         });
 
-        const createdOrder = (res && (res as any).order) ? (res as any).order : res;
+        const createdOrder = res && (res as any).order ? (res as any).order : res;
         if (createdOrder && (createdOrder.id || createdOrder._id)) {
           setActiveOrder(createdOrder);
           trackPurchase({
@@ -240,7 +241,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
         setSubmitting(false);
       }
     },
-    [submitOrderRpc]
+    [submitOrderRpc],
   );
 
   return {
@@ -252,4 +253,3 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
     dismissOrder,
   };
 }
-

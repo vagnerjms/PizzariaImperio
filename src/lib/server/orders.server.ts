@@ -116,7 +116,7 @@ export async function cancelExpiredPixOrders(): Promise<void> {
         cancel_reason: "Pix expirado automaticamente após 30 minutos",
         updated_at: new Date(),
       },
-    }
+    },
   );
 }
 
@@ -128,7 +128,7 @@ export async function findRecentOrdersForKds(limit = 200) {
 
 export async function buildFinancialReportFromDb(
   period: FinancialReportPeriod,
-  isAdmin: boolean
+  isAdmin: boolean,
 ): Promise<FinancialReportResponse> {
   const effectivePeriod: FinancialReportPeriod = isAdmin ? period : "today";
   const matchStage = buildPeriodMatchStage(effectivePeriod);
@@ -216,9 +216,7 @@ export async function buildFinancialReportFromDb(
   }
 
   const avgMin = (arr: number[]): number | null =>
-    arr.length === 0
-      ? null
-      : Math.round(arr.reduce((sum, ms) => sum + ms / 60000, 0) / arr.length);
+    arr.length === 0 ? null : Math.round(arr.reduce((sum, ms) => sum + ms / 60000, 0) / arr.length);
 
   const topItems = Object.entries(itemSales)
     .sort((a, b) => b[1] - a[1])

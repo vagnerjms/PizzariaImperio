@@ -45,7 +45,10 @@ export function SettingsTab({
   onConnectPrinter: () => void;
   onDisconnectPrinter: () => void;
   onTestPrint: () => void;
-  onUpdatePrinterSetting: <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => void;
+  onUpdatePrinterSetting: <K extends keyof PrinterSettings>(
+    key: K,
+    value: PrinterSettings[K],
+  ) => void;
 }) {
   const queryClient = useQueryClient();
   const fetchSettings = useServerFn(getAdminSettings);
@@ -116,10 +119,12 @@ export function SettingsTab({
       store_status_override: remoteSettings.store_status_override || "auto",
       pause_reason: remoteSettings.pause_reason || "",
       opening_hours: remoteSettings.opening_hours || { ...DEFAULT_OPENING_HOURS },
-      enabled_payment_methods:
-        remoteSettings.enabled_payment_methods || { ...DEFAULT_ENABLED_PAYMENT_METHODS },
-      enabled_delivery_modes:
-        remoteSettings.enabled_delivery_modes || { ...DEFAULT_ENABLED_DELIVERY_MODES },
+      enabled_payment_methods: remoteSettings.enabled_payment_methods || {
+        ...DEFAULT_ENABLED_PAYMENT_METHODS,
+      },
+      enabled_delivery_modes: remoteSettings.enabled_delivery_modes || {
+        ...DEFAULT_ENABLED_DELIVERY_MODES,
+      },
       meta_pixel_id: remoteSettings.meta_pixel_id || "",
       ga4_measurement_id: remoteSettings.ga4_measurement_id || "",
     });
@@ -132,8 +137,7 @@ export function SettingsTab({
   }, []);
 
   const displayedError =
-    settingsErrorMsg ||
-    (settingsQueryError instanceof Error ? settingsQueryError.message : null);
+    settingsErrorMsg || (settingsQueryError instanceof Error ? settingsQueryError.message : null);
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +169,9 @@ export function SettingsTab({
           </div>
           <div>
             <h2 className="font-serif text-lg leading-tight">Configurações do Sistema</h2>
-            <p className="text-xs text-muted-foreground">Painel de gerenciamento de APIs (Salvo no banco de dados MongoDB)</p>
+            <p className="text-xs text-muted-foreground">
+              Painel de gerenciamento de APIs (Salvo no banco de dados MongoDB)
+            </p>
           </div>
         </header>
 
@@ -200,7 +206,9 @@ export function SettingsTab({
                   <input
                     type="text"
                     value={settingsForm.evolution_api_url}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, evolution_api_url: e.target.value }))}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({ ...prev, evolution_api_url: e.target.value }))
+                    }
                     className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   />
                 </div>
@@ -212,7 +220,12 @@ export function SettingsTab({
                     type="text"
                     required
                     value={settingsForm.whatsapp_instance_name}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, whatsapp_instance_name: e.target.value }))}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        whatsapp_instance_name: e.target.value,
+                      }))
+                    }
                     className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   />
                 </div>
@@ -225,7 +238,9 @@ export function SettingsTab({
                 <input
                   type="password"
                   value={settingsForm.evolution_api_key}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, evolution_api_key: e.target.value }))}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({ ...prev, evolution_api_key: e.target.value }))
+                  }
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
               </div>
@@ -243,7 +258,12 @@ export function SettingsTab({
                 <input
                   type="password"
                   value={settingsForm.mercado_pago_access_token}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, mercado_pago_access_token: e.target.value }))}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      mercado_pago_access_token: e.target.value,
+                    }))
+                  }
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
               </div>
@@ -255,7 +275,12 @@ export function SettingsTab({
                 <input
                   type="text"
                   value={settingsForm.mercado_pago_public_key}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, mercado_pago_public_key: e.target.value }))}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      mercado_pago_public_key: e.target.value,
+                    }))
+                  }
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
               </div>
@@ -273,7 +298,9 @@ export function SettingsTab({
                 <input
                   type="text"
                   value={settingsForm.n8n_webhook_url}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, n8n_webhook_url: e.target.value }))}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({ ...prev, n8n_webhook_url: e.target.value }))
+                  }
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
               </div>
@@ -308,11 +335,17 @@ export function SettingsTab({
                 <input
                   type="text"
                   readOnly
-                  value={typeof window !== "undefined" ? `${window.location.origin}/api/webhook` : "/api/webhook"}
+                  value={
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/api/webhook`
+                      : "/api/webhook"
+                  }
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-sm text-foreground font-mono focus:outline-none select-all"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Cole esta URL completa no seu painel de <strong>Webhooks / Notificações IPN</strong> do Mercado Pago Developers para receber avisos automáticos de Pix e Cartão.
+                  Cole esta URL completa no seu painel de{" "}
+                  <strong>Webhooks / Notificações IPN</strong> do Mercado Pago Developers para
+                  receber avisos automáticos de Pix e Cartão.
                 </p>
               </div>
             </div>
@@ -329,12 +362,17 @@ export function SettingsTab({
                 <input
                   type="password"
                   value={settingsForm.google_maps_api_key}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, google_maps_api_key: e.target.value }))}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({ ...prev, google_maps_api_key: e.target.value }))
+                  }
                   placeholder="AIzaSy... (deixe como está para manter a chave atual ou apague para remover)"
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  🛡️ <strong>Economia & Segurança:</strong> Esta chave da Google Maps API <strong>só é consumida como último recurso</strong> caso nenhuma das 4 APIs gratuitas (ViaCEP, Photon OSM, Nominatim e Catálogo do MongoDB) localize o endereço do cliente.
+                  🛡️ <strong>Economia & Segurança:</strong> Esta chave da Google Maps API{" "}
+                  <strong>só é consumida como último recurso</strong> caso nenhuma das 4 APIs
+                  gratuitas (ViaCEP, Photon OSM, Nominatim e Catálogo do MongoDB) localize o
+                  endereço do cliente.
                 </p>
               </div>
             </div>

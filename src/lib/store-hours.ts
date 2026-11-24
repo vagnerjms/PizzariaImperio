@@ -113,7 +113,11 @@ function getSaoPauloParts(now: Date): { dayOfWeek: number; minutes: number } {
   };
 }
 
-function findNextOpenLabel(hours: OpeningHoursMap, currentDay: number, currentMinutes: number): string | null {
+function findNextOpenLabel(
+  hours: OpeningHoursMap,
+  currentDay: number,
+  currentMinutes: number,
+): string | null {
   for (let offset = 0; offset < 7; offset++) {
     const dayIdx = ((currentDay + offset) % 7).toString() as DayOfWeekKey;
     const cfg = hours[dayIdx];
@@ -139,7 +143,7 @@ function findNextOpenLabel(hours: OpeningHoursMap, currentDay: number, currentMi
  */
 export function evaluateStoreOpenStatus(
   config: Pick<StoreOperationalConfig, "store_status_override" | "pause_reason" | "opening_hours">,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): StoreOpenEvaluation {
   const mode: StoreStatusOverride = config.store_status_override || "auto";
   const hours: OpeningHoursMap = { ...DEFAULT_OPENING_HOURS, ...(config.opening_hours || {}) };
@@ -166,7 +170,7 @@ export function evaluateStoreOpenStatus(
   }
 
   // Check if we are within an overnight spillover from yesterday's shift (e.g. 18:00 -> 01:00)
-  const prevDayKey = (((dayOfWeek + 6) % 7).toString()) as DayOfWeekKey;
+  const prevDayKey = ((dayOfWeek + 6) % 7).toString() as DayOfWeekKey;
   const prevCfg = hours[prevDayKey];
   if (prevCfg?.enabled) {
     const prevOpen = parseMinutes(prevCfg.open);
@@ -189,9 +193,7 @@ export function evaluateStoreOpenStatus(
     const closeMin = parseMinutes(todayCfg.close);
     if (openMin !== null && closeMin !== null) {
       const isOvernight = closeMin <= openMin;
-      const inWindow = isOvernight
-        ? minutes >= openMin
-        : minutes >= openMin && minutes < closeMin;
+      const inWindow = isOvernight ? minutes >= openMin : minutes >= openMin && minutes < closeMin;
       if (inWindow) {
         return {
           isOpen: true,
@@ -214,10 +216,7 @@ export function evaluateStoreOpenStatus(
   };
 }
 
-export function isPaymentMethodEnabled(
-  method: string,
-  enabled: EnabledPaymentMethods
-): boolean {
+export function isPaymentMethodEnabled(method: string, enabled: EnabledPaymentMethods): boolean {
   switch (method) {
     case "Pix":
       return enabled.pix !== false;
@@ -234,7 +233,7 @@ export function isPaymentMethodEnabled(
 
 export function isDeliveryModeEnabled(
   mode: "delivery" | "pickup" | "dine_in",
-  enabled: EnabledDeliveryModes
+  enabled: EnabledDeliveryModes,
 ): boolean {
   return enabled[mode] !== false;
 }
@@ -246,11 +245,65 @@ export function normalizeOpeningHours(raw?: Partial<OpeningHoursMap> | null): Op
     const entry = raw[key];
     if (entry && typeof entry === "object") {
       result[key] = {
-        enabled: typeof entry.enabled === "boolean" ? entry.enabled : DEFAULT_OPENING_HOURS[key].enabled,
-        open: typeof entry.open === "string" && parseMinutes(entry.open) !== null ? entry.open : DEFAULT_OPENING_HOURS[key].open,
-        close: typeof entry.close === "string" && parseMinutes(entry.close) !== null ? entry.close : DEFAULT_OPENING_HOURS[key].close,
+        enabled:
+          typeof entry.enabled === "boolean" ? entry.enabled : DEFAULT_OPENING_HOURS[key].enabled,
+        open:
+          typeof entry.open === "string" && parseMinutes(entry.open) !== null
+            ? entry.open
+            : DEFAULT_OPENING_HOURS[key].open,
+        close:
+          typeof entry.close === "string" && parseMinutes(entry.close) !== null
+            ? entry.close
+            : DEFAULT_OPENING_HOURS[key].close,
       };
     }
   }
   return result;
+}
+
+function formatHourPt(hhmm: string): string {
+  const [h, m] = hhmm.split(":");
+  const hourNum = Number(h);
+  if (!Number.isFinite(hourNum)) return hhmm;
+  return m === "00" ? `${hourNum}h` : `${hourNum}h${m}`;
+}
+
+const WEEK_ORDER_PT: DayOfWeekKey[] = ["1", "2", "3", "4", "5", "6", "0"];
+
+/**
+ * Generates a concise Portuguese summary of the configured weekly opening hours
+ * (e.g., "terça a domingo das 18h às 23h30").
+ */
+export function formatOpeningHoursSummary(raw?: Partial<OpeningHoursMap> | null): string {
+  const hours = normalizeOpeningHours(raw);
+  const groups: Array<{ days: DayOfWeekKey[]; open: string; close: string }> = [];
+
+  for (const dayKey of WEEK_ORDER_PT) {
+    const cfg = hours[dayKey];
+    if (!cfg?.enabled) continue;
+    const prev = groups[groups.length - 1];
+    if (prev && prev.open === cfg.open && prev.close === cfg.close) {
+      prev.days.push(dayKey);
+    } else {
+      groups.push({ days: [dayKey], open: cfg.open, close: cfg.close });
+    }
+  }
+
+  if (groups.length === 0) {
+    return "consulte nossos horários pelo WhatsApp";
+  }
+
+  return groups
+    .map((g) => {
+      const first = DAY_LABELS_PT[g.days[0]].toLowerCase();
+      const last = DAY_LABELS_PT[g.days[g.days.length - 1]].toLowerCase();
+      const dayRange =
+        g.days.length === 1
+          ? first
+          : g.days.length === 2
+            ? `${first} e ${last}`
+            : `de ${first} a ${last}`;
+      return `${dayRange} das ${formatHourPt(g.open)} às ${formatHourPt(g.close)}`;
+    })
+    .join(" · ");
 }

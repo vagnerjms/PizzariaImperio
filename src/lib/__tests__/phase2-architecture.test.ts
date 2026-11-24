@@ -71,7 +71,7 @@ describe("Phase 2 Modular Backend & Printer Primitives", () => {
         by_payment: { pix: 100, dinheiro: 50, credito: 50, debito: 0 },
         movements: [],
       },
-      DEFAULT_PRINTER_SETTINGS
+      DEFAULT_PRINTER_SETTINGS,
     );
     assert.deepEqual(Array.from(shiftBuf.slice(-6)), [0x1d, 0x56, 0x42, 0x00, 0x1b, 0x77]);
   });

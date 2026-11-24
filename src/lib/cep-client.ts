@@ -43,9 +43,7 @@ export async function lookupAddressByCep(cleanCEP: string): Promise<CepLookupRes
         return {
           rua: data.street || "",
           bairro: data.neighborhood || "",
-          cidadeUf: data.city
-            ? `${data.city} - ${data.state || "SP"}`
-            : "Bragança Paulista - SP",
+          cidadeUf: data.city ? `${data.city} - ${data.state || "SP"}` : "Bragança Paulista - SP",
         };
       }
     }
@@ -64,9 +62,7 @@ export async function lookupAddressByCep(cleanCEP: string): Promise<CepLookupRes
         return {
           rua: data.address || "",
           bairro: data.district || "",
-          cidadeUf: data.city
-            ? `${data.city} - ${data.state || "SP"}`
-            : "Bragança Paulista - SP",
+          cidadeUf: data.city ? `${data.city} - ${data.state || "SP"}` : "Bragança Paulista - SP",
         };
       }
     }

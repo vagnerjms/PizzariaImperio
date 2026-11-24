@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle, QrCode, Timer, Bike } from "lucide-react";
+import {
+  Clock,
+  Phone,
+  MapPin,
+  Printer,
+  CheckCircle2,
+  XCircle,
+  QrCode,
+  Timer,
+  Bike,
+} from "lucide-react";
 import { formatBRL } from "@/data/catalog";
 import { OrderRow } from "@/types/orders";
 import { CourierRow } from "@/lib/couriers-domain";
@@ -68,13 +78,22 @@ function getElapsedBadge(createdAtIso: string) {
   const diffMs = Math.max(0, Date.now() - new Date(createdAtIso).getTime());
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) {
-    return { text: "Agora mesmo", className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
+    return {
+      text: "Agora mesmo",
+      className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+    };
   }
   if (mins < 20) {
-    return { text: `há ${mins} min`, className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
+    return {
+      text: `há ${mins} min`,
+      className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+    };
   }
   if (mins < 40) {
-    return { text: `há ${mins} min`, className: "border-amber-500/30 bg-amber-500/10 text-amber-400" };
+    return {
+      text: `há ${mins} min`,
+      className: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+    };
   }
   const hours = Math.floor(mins / 60);
   const remMins = mins % 60;
@@ -191,7 +210,9 @@ function OrderCard({
             )}
           </div>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}>
+        <span
+          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}
+        >
           {meta.label}
         </span>
       </header>
@@ -207,23 +228,24 @@ function OrderCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 flex-none text-gold" />
           <span className="whitespace-pre-wrap">{order.customer_address}</span>
         </div>
-        {isDelivery && (order.courier_name || (order.status === "saiu" && activeCouriers.length > 0)) && (
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-purple-300">
-              <Bike className="h-3.5 w-3.5" />
-              {order.courier_name || "Sem motoboy atribuído"}
-            </span>
-            {order.status === "saiu" && activeCouriers.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setPickingCourier((v) => !v)}
-                className="text-[11px] font-semibold text-gold hover:underline"
-              >
-                {pickingCourier ? "Fechar" : "Trocar"}
-              </button>
-            )}
-          </div>
-        )}
+        {isDelivery &&
+          (order.courier_name || (order.status === "saiu" && activeCouriers.length > 0)) && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs">
+              <span className="inline-flex items-center gap-1.5 font-semibold text-purple-300">
+                <Bike className="h-3.5 w-3.5" />
+                {order.courier_name || "Sem motoboy atribuído"}
+              </span>
+              {order.status === "saiu" && activeCouriers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPickingCourier((v) => !v)}
+                  className="text-[11px] font-semibold text-gold hover:underline"
+                >
+                  {pickingCourier ? "Fechar" : "Trocar"}
+                </button>
+              )}
+            </div>
+          )}
       </div>
 
       <ul className="mt-4 space-y-1 border-t border-border/60 pt-3 text-sm">
@@ -364,7 +386,15 @@ function OrderCard({
           {order.status !== "entregue" && order.status !== "cancelado" && (
             <button
               type="button"
-              onClick={() => onStatus(order.id, "cancelado")}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Confirmar cancelamento do pedido #${order.id.slice(0, 6).toUpperCase()} (${order.customer_name})?`,
+                  )
+                ) {
+                  onStatus(order.id, "cancelado");
+                }
+              }}
               className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-destructive hover:text-destructive"
             >
               <XCircle className="h-3.5 w-3.5" /> Cancelar

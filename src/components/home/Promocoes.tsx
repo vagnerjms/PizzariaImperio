@@ -21,9 +21,7 @@ export function Promocoes({
           <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-[0.3em] text-gold">
             <Tag className="h-3.5 w-3.5 text-gold" /> OFERTAS ESPECIAIS
           </div>
-          <h2 className="mt-3 font-serif text-3xl md:text-4xl">
-            Promoções do Império
-          </h2>
+          <h2 className="mt-3 font-serif text-3xl md:text-4xl">Promoções do Império</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Aproveite nossos combos, cupons e descontos calculados direto no carrinho.
           </p>
@@ -42,17 +40,15 @@ export function Promocoes({
                       (promo.trigger_type === "all"
                         ? "Todos os Pedidos"
                         : promo.trigger_type === "min_total"
-                        ? `Acima de ${formatBRL(promo.trigger_min_total || 0)}`
-                        : promo.trigger_type === "category"
-                        ? `Categoria: ${promo.trigger_category}`
-                        : "Itens Selecionados")}
+                          ? `Acima de ${formatBRL(promo.trigger_min_total || 0)}`
+                          : promo.trigger_type === "category"
+                            ? `Categoria: ${promo.trigger_category}`
+                            : "Itens Selecionados")}
                   </span>
                   <Sparkles className="h-4 w-4 text-gold" />
                 </div>
 
-                <h3 className="mt-4 font-serif text-xl font-bold text-foreground">
-                  {promo.title}
-                </h3>
+                <h3 className="mt-4 font-serif text-xl font-bold text-foreground">{promo.title}</h3>
                 <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                   {promo.description}
                 </p>
@@ -80,8 +76,10 @@ export function Promocoes({
                     </span>
                     <span className="font-serif text-lg font-bold text-gold">
                       {promo.type === "PERCENTAGE_DISCOUNT" && `${promo.discount_value}% OFF`}
-                      {promo.type === "FIXED_DISCOUNT" && `R$ ${promo.discount_value?.toFixed(2).replace('.', ',')} OFF`}
-                      {promo.type === "BUY_X_GET_Y" && `Brinde: ${promo.reward_item_name || "Grátis"}`}
+                      {promo.type === "FIXED_DISCOUNT" &&
+                        `R$ ${promo.discount_value?.toFixed(2).replace(".", ",")} OFF`}
+                      {promo.type === "BUY_X_GET_Y" &&
+                        `Brinde: ${promo.reward_item_name || "Grátis"}`}
                     </span>
                   </div>
 

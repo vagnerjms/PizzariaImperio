@@ -22,11 +22,7 @@ import {
   deleteCourier,
   getCourierSettlementReport,
 } from "@/lib/couriers.functions";
-import {
-  CourierPayoutMode,
-  CourierRow,
-  UNASSIGNED_COURIER_ID,
-} from "@/lib/couriers-domain";
+import { CourierPayoutMode, CourierRow, UNASSIGNED_COURIER_ID } from "@/lib/couriers-domain";
 import { getCashDashboard } from "@/lib/cash.functions";
 
 export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean }) {
@@ -165,7 +161,10 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
     }
   };
 
-  const settlements = settlementReport?.settlements ?? [];
+  const settlements = useMemo(
+    () => settlementReport?.settlements ?? [],
+    [settlementReport?.settlements],
+  );
 
   const totals = useMemo(() => {
     return settlements.reduce(

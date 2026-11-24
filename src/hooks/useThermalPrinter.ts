@@ -22,7 +22,7 @@ export interface PrinterToastMessage {
 export function useThermalPrinter() {
   const [printerConnected, setPrinterConnected] = useState(false);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
-    getStoredPrinterSettings()
+    getStoredPrinterSettings(),
   );
   const [printerMsg, setPrinterMsg] = useState<PrinterToastMessage | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,7 +67,7 @@ export function useThermalPrinter() {
         showPrinterMessage(`Comanda #${order.id.slice(0, 6)} impressa na térmica!`, false, 3000);
       }
     },
-    [printerSettings, showPrinterMessage]
+    [printerSettings, showPrinterMessage],
   );
 
   const updatePrinterSetting = useCallback(
@@ -75,7 +75,7 @@ export function useThermalPrinter() {
       const updated = savePrinterSettings({ [key]: value });
       setPrinterSettings(updated);
     },
-    []
+    [],
   );
 
   return {

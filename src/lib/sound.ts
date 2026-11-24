@@ -28,4 +28,3 @@ export function playNewOrderChime(): void {
     // Silencia restrições de autoplay do navegador
   }
 }
-

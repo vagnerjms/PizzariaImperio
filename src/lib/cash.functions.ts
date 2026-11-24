@@ -98,7 +98,7 @@ async function aggregateShiftSummaryFromDb(
   openingBalance: number,
   movements: Array<{ type: "sangria" | "suprimento"; amount: number }>,
   openedAt: Date,
-  closedAt?: Date
+  closedAt?: Date,
 ): Promise<CashShiftSummary> {
   const dateFilter: Record<string, Date> = { $gte: openedAt };
   if (closedAt) dateFilter.$lte = closedAt;
@@ -337,7 +337,6 @@ export const closeCashShift = createServerFn({ method: "POST" })
   .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => closeShiftSchema.parse(raw))
   .handler(async ({ data, context }): Promise<CloseCashShiftResponse> => {
-
     const { getDb } = await import("./db");
     const db = await getDb();
     const shiftsCol = db.collection<CashShiftDoc>("cash_shifts");

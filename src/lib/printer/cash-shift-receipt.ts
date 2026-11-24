@@ -46,7 +46,7 @@ export function toPrintableShift(
 
 export function buildCashShiftEscPosBuffer(
   shift: PrintableCashShift,
-  settings: PrinterSettings
+  settings: PrinterSettings,
 ): Uint8Array {
   const b = new EscPosBuilder(settings.paperWidth);
 
@@ -65,11 +65,11 @@ export function buildCashShiftEscPosBuffer(
   const closeDt = shift.closed_at ? new Date(shift.closed_at) : new Date();
   b.twoColumns("TURNO:", `#${shift.id.slice(0, 8).toUpperCase()}`)
     .line(
-      `ABERTURA: ${openDt.toLocaleDateString("pt-BR")} ${openDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      `ABERTURA: ${openDt.toLocaleDateString("pt-BR")} ${openDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
     )
     .line(`ABERTO POR: ${shift.opened_by}`)
     .line(
-      `FECHAMENTO: ${closeDt.toLocaleDateString("pt-BR")} ${closeDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      `FECHAMENTO: ${closeDt.toLocaleDateString("pt-BR")} ${closeDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
     );
   if (shift.closed_by) b.line(`FECHADO POR: ${shift.closed_by}`);
   b.divider("-");
@@ -84,9 +84,10 @@ export function buildCashShiftEscPosBuffer(
   if ((shift.by_payment.outros || 0) > 0) {
     b.twoColumns("Outros:", formatBRLReceipt(shift.by_payment.outros || 0));
   }
-  b.twoColumns(`Total Vendas (${shift.total_orders} ped):`, formatBRLReceipt(shift.gross_sales)).divider(
-    "-"
-  );
+  b.twoColumns(
+    `Total Vendas (${shift.total_orders} ped):`,
+    formatBRLReceipt(shift.gross_sales),
+  ).divider("-");
 
   const totalSuprimentos = shift.movements
     .filter((m) => m.type === "suprimento")
@@ -112,7 +113,7 @@ export function buildCashShiftEscPosBuffer(
     const diffLabel = diff === 0 ? "BATIDO" : diff > 0 ? "SOBRA" : "FALTA";
     b.twoColumns(
       `DIFERENCA (${diffLabel}):`,
-      `${diff >= 0 ? "+" : "-"}${formatBRLReceipt(Math.abs(diff))}`
+      `${diff >= 0 ? "+" : "-"}${formatBRLReceipt(Math.abs(diff))}`,
     );
   }
   b.bold(false);
@@ -139,7 +140,7 @@ export function buildCashShiftEscPosBuffer(
 
 export function buildCashShiftReceiptHtml(
   shift: PrintableCashShift,
-  settings: PrinterSettings
+  settings: PrinterSettings,
 ): string {
   const widthCss = settings.paperWidth === "80mm" ? "76mm" : "54mm";
   const openDt = new Date(shift.opened_at);
@@ -207,7 +208,7 @@ export function buildCashShiftReceiptHtml(
             shift.movements
               .map(
                 (m) =>
-                  `<div class="row"><span>${m.type === "suprimento" ? "[+]" : "[-]"} ${escapeHtml(m.reason)}</span><span>${escapeHtml(formatBRLReceipt(m.amount))}</span></div>`
+                  `<div class="row"><span>${m.type === "suprimento" ? "[+]" : "[-]"} ${escapeHtml(m.reason)}</span><span>${escapeHtml(formatBRLReceipt(m.amount))}</span></div>`,
               )
               .join("")
           : ""
@@ -227,7 +228,7 @@ export function buildCashShiftReceiptHtml(
 
 export async function printCashShiftThermal(
   shift: PrintableCashShift,
-  customSettings?: Partial<PrinterSettings>
+  customSettings?: Partial<PrinterSettings>,
 ): Promise<{ success: boolean; method: "serial" | "browser" }> {
   const settings = { ...getStoredPrinterSettings(), ...customSettings };
 

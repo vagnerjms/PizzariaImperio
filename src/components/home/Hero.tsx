@@ -24,7 +24,8 @@ export function Hero() {
           </h1>
 
           <p className="mt-4 sm:mt-6 text-sm sm:text-lg leading-relaxed text-muted-foreground">
-            Massa de fermentação lenta de 48 horas, molho artesanal de tomates selecionados e ingredientes da mais alta qualidade. Assadas no calor perfeito do forno a lenha.
+            Massa de fermentação lenta de 48 horas, molho artesanal de tomates selecionados e
+            ingredientes da mais alta qualidade. Assadas no calor perfeito do forno a lenha.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-4">
@@ -48,7 +49,9 @@ export function Hero() {
                 <Clock className="h-4 w-4" />
                 <span className="font-serif text-base sm:text-xl font-bold">40-50m</span>
               </div>
-              <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground">Entrega rápida</div>
+              <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground">
+                Entrega rápida
+              </div>
             </div>
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2 text-gold">

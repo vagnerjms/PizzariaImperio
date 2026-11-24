@@ -40,16 +40,12 @@ export const createOrder = createServerFn({ method: "POST" })
     const { randomUUID } = await import("node:crypto");
     const { getEffectiveServerCatalogPricing } = await import("./menu.server");
     const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
-    const { listPublicPromotionsFromDb, consumePromotionUse, releasePromotionUse } = await import(
-      "./promotions.server"
-    );
+    const { listPublicPromotionsFromDb, consumePromotionUse, releasePromotionUse } =
+      await import("./promotions.server");
     const { calculateVerifiedOrderPricing } = await import("./order-pricing");
     const { getSystemSettings } = await import("./settings.server");
-    const {
-      evaluateStoreOpenStatus,
-      isDeliveryModeEnabled,
-      isPaymentMethodEnabled,
-    } = await import("./store-hours");
+    const { evaluateStoreOpenStatus, isDeliveryModeEnabled, isPaymentMethodEnabled } =
+      await import("./store-hours");
     const { createOnlinePixPayment } = await import("./server/payments.server");
     const { dispatchN8nEvent } = await import("./server/n8n.server");
 
@@ -76,7 +72,7 @@ export const createOrder = createServerFn({ method: "POST" })
     }
     if (!isPaymentMethodEnabled(data.payment_method, settings.enabled_payment_methods)) {
       throw new Error(
-        `A forma de pagamento "${data.payment_method}" está temporariamente indisponível.`
+        `A forma de pagamento "${data.payment_method}" está temporariamente indisponível.`,
       );
     }
 
@@ -135,7 +131,7 @@ export const createOrder = createServerFn({ method: "POST" })
         throw new Error(
           appliedCouponCode
             ? `O cupom "${appliedCouponCode}" atingiu o limite máximo de usos.`
-            : "A promoção aplicada atingiu o limite máximo de usos. Atualize o carrinho e tente novamente."
+            : "A promoção aplicada atingiu o limite máximo de usos. Atualize o carrinho e tente novamente.",
         );
       }
       promotionReserved = true;
@@ -148,7 +144,7 @@ export const createOrder = createServerFn({ method: "POST" })
       customer_phone: data.customer_phone,
       customer_address: data.customer_address,
       delivery_mode: deliveryMode,
-      table_number: deliveryMode === "dine_in" ? data.table_number ?? null : null,
+      table_number: deliveryMode === "dine_in" ? (data.table_number ?? null) : null,
       payment_method: data.payment_method,
       troco: data.troco ?? null,
       notes: data.notes ?? null,
@@ -180,7 +176,7 @@ export const createOrder = createServerFn({ method: "POST" })
     } catch (insertErr) {
       if (promotionReserved && promotionId) {
         await releasePromotionUse(promotionId).catch((relErr) =>
-          console.error("Failed to rollback reserved promotion use:", relErr)
+          console.error("Failed to rollback reserved promotion use:", relErr),
         );
       }
       throw insertErr;
@@ -225,13 +221,12 @@ export const createOrder = createServerFn({ method: "POST" })
 export const listOrders = createServerFn({ method: "GET" })
   .middleware([requireStaff])
   .handler(async () => {
-    const { cancelExpiredPixOrders, findRecentOrdersForKds } = await import(
-      "./server/orders.server"
-    );
+    const { cancelExpiredPixOrders, findRecentOrdersForKds } =
+      await import("./server/orders.server");
 
     // Non-blocking cleanup of Pix orders older than 30 minutes
     cancelExpiredPixOrders().catch((err) =>
-      console.error("Error auto-canceling abandoned Pix orders:", err)
+      console.error("Error auto-canceling abandoned Pix orders:", err),
     );
 
     return findRecentOrdersForKds(200);
@@ -303,21 +298,23 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
             fixed_fee: Number(courier.fixed_fee || 0),
             fee_share_percent:
               typeof courier.fee_share_percent === "number" ? courier.fee_share_percent : 100,
-          }
+          },
         );
         resolvedCourierName = courier.name;
       }
     }
 
     const shouldReleasePromo =
-      data.status === "cancelado" && Boolean(orderBefore.promotion_id) && !orderBefore.promotion_released;
+      data.status === "cancelado" &&
+      Boolean(orderBefore.promotion_id) &&
+      !orderBefore.promotion_released;
     if (shouldReleasePromo) {
       updateDoc.promotion_released = true;
     }
 
     const result = await ordersCol.updateOne(
       shouldReleasePromo ? { _id: data.id, promotion_released: { $ne: true } } : { _id: data.id },
-      { $set: updateDoc }
+      { $set: updateDoc },
     );
 
     if (result.matchedCount === 0) {
@@ -327,12 +324,12 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       }
       await ordersCol.updateOne(
         { _id: data.id },
-        { $set: { ...updateDoc, promotion_released: true } }
+        { $set: { ...updateDoc, promotion_released: true } },
       );
     } else if (shouldReleasePromo) {
       const { releasePromotionUse } = await import("./promotions.server");
       await releasePromotionUse(String(orderBefore.promotion_id)).catch((err) =>
-        console.error("Failed to release promotion use on cancellation:", err)
+        console.error("Failed to release promotion use on cancellation:", err),
       );
     }
 
@@ -372,7 +369,7 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
           updated_at: new Date(),
         },
       },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     );
 
     if (!updatedOrder) {
@@ -398,12 +395,11 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-const orderStatusQuerySchema = z
-  .union([
-    z.string().trim().min(1).max(80),
-    z.object({ id: z.string().trim().min(1).max(80) }).transform((o) => o.id),
-    z.object({ data: z.string().trim().min(1).max(80) }).transform((o) => o.data),
-  ]);
+const orderStatusQuerySchema = z.union([
+  z.string().trim().min(1).max(80),
+  z.object({ id: z.string().trim().min(1).max(80) }).transform((o) => o.id),
+  z.object({ data: z.string().trim().min(1).max(80) }).transform((o) => o.data),
+]);
 
 // Lightweight public order status lookup for customer tracking
 export const getOrderStatus = createServerFn({ method: "GET" })

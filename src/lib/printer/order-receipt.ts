@@ -58,11 +58,7 @@ export function buildEscPosBuffer(order: PrintableOrder, settings: PrinterSettin
     b.divider(".").bold(true).line(`OBS: ${order.notes}`).bold(false);
   }
 
-  b.divider("=")
-    .bold(true)
-    .twoColumns("QTD  ITEM", "VALOR")
-    .bold(false)
-    .divider("-");
+  b.divider("=").bold(true).twoColumns("QTD  ITEM", "VALOR").bold(false).divider("-");
 
   // Items
   const items = order.order_items || [];
@@ -81,14 +77,14 @@ export function buildEscPosBuffer(order: PrintableOrder, settings: PrinterSettin
   if (order.discount && order.discount > 0) {
     b.twoColumns(
       `Desconto (${order.promotion_title || "Promo"}):`,
-      `-${formatBRLReceipt(order.discount)}`
+      `-${formatBRLReceipt(order.discount)}`,
     );
   }
 
   if (order.delivery_fee !== undefined && order.delivery_fee !== null) {
     b.twoColumns(
       "Taxa de Entrega:",
-      order.delivery_fee === 0 ? "GRATIS" : formatBRLReceipt(order.delivery_fee)
+      order.delivery_fee === 0 ? "GRATIS" : formatBRLReceipt(order.delivery_fee),
     );
   }
 
@@ -122,7 +118,7 @@ export function buildOrderReceiptHtml(order: PrintableOrder, settings: PrinterSe
   const createdDate = new Date(order.created_at || Date.now());
   const dateFormatted = escapeHtml(createdDate.toLocaleDateString("pt-BR"));
   const timeFormatted = escapeHtml(
-    createdDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    createdDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
   );
   const shortId = escapeHtml((order.id || "").slice(0, 8).toUpperCase());
   const isPaid = order.payment_status === "paid";
@@ -134,7 +130,7 @@ export function buildOrderReceiptHtml(order: PrintableOrder, settings: PrinterSe
         <span>${escapeHtml(item.quantity)}x ${escapeHtml(item.pizza_name)}</span>
         <span>${item.subtotal === 0 ? "GRÁTIS" : escapeHtml(formatBRLReceipt(item.subtotal))}</span>
       </div>
-    `
+    `,
     )
     .join("");
 
@@ -258,7 +254,7 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
 
 export async function printOrderThermal(
   order: PrintableOrder,
-  customSettings?: Partial<PrinterSettings>
+  customSettings?: Partial<PrinterSettings>,
 ): Promise<{ success: boolean; method: "serial" | "browser"; error?: string }> {
   const settings = { ...getStoredPrinterSettings(), ...customSettings };
 
@@ -275,7 +271,7 @@ export async function printOrderThermal(
 }
 
 export async function printTestReceipt(
-  customSettings?: Partial<PrinterSettings>
+  customSettings?: Partial<PrinterSettings>,
 ): Promise<{ success: boolean; message: string }> {
   const dummyOrder: PrintableOrder = {
     id: "TEST-001",

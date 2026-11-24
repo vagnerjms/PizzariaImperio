@@ -1,7 +1,7 @@
 /**
  * Script de Teste de Carga e Capacidade de Pedidos (Stress Test)
  * Pizzaria Império v2.0.0
- * 
+ *
  * Execução dentro do container Docker:
  *   docker compose exec web bun scripts/stress-test.ts --total 30 --concurrency 5
  *   docker compose exec web bun scripts/stress-test.ts --total 100 --concurrency 10 --clean
@@ -51,22 +51,37 @@ const CONCURRENCY = parseInt(getArg("--concurrency", "5"), 10);
 const SHOULD_CLEAN = args.includes("--clean");
 
 const SAMPLE_NAMES = [
-  "Carlos Eduardo", "Mariana Silva", "Lucas Santos", "Beatriz Lima", 
-  "Fernando Souza", "Camila Oliveira", "Rodrigo Costa", "Juliana Pereira",
-  "Gabriel Almeida", "Larissa Ferreira", "Rafael Barbosa", "Patricia Ribeiro"
+  "Carlos Eduardo",
+  "Mariana Silva",
+  "Lucas Santos",
+  "Beatriz Lima",
+  "Fernando Souza",
+  "Camila Oliveira",
+  "Rodrigo Costa",
+  "Juliana Pereira",
+  "Gabriel Almeida",
+  "Larissa Ferreira",
+  "Rafael Barbosa",
+  "Patricia Ribeiro",
 ];
 
 const SAMPLE_PIZZAS = [
-  { id: "1", name: "Calabresa Especial", price: 45.00 },
-  { id: "2", name: "Mussarela Tradicional", price: 42.00 },
-  { id: "3", name: "Frango com Catupiry", price: 48.00 },
-  { id: "4", name: "Portuguesa", price: 50.00 },
-  { id: "5", name: "Quatro Queijos", price: 52.00 }
+  { id: "1", name: "Calabresa Especial", price: 45.0 },
+  { id: "2", name: "Mussarela Tradicional", price: 42.0 },
+  { id: "3", name: "Frango com Catupiry", price: 48.0 },
+  { id: "4", name: "Portuguesa", price: 50.0 },
+  { id: "5", name: "Quatro Queijos", price: 52.0 },
 ];
 
 const SAMPLE_BAIRROS = [
-  "Centro", "Lavapés", "Jardim América", "Jardim Europa", 
-  "Jardim do Lago", "Cidade Planejada I", "Henedina Cortez", "Taboão"
+  "Centro",
+  "Lavapés",
+  "Jardim América",
+  "Jardim Europa",
+  "Jardim do Lago",
+  "Cidade Planejada I",
+  "Henedina Cortez",
+  "Taboão",
 ];
 
 function generateRandomOrder(index: number) {
@@ -82,15 +97,15 @@ function generateRandomOrder(index: number) {
     payment_method: "Dinheiro" as const,
     troco: 100,
     notes: `[TESTE DE CARGA AUTOMATIZADO #${index + 1}]`,
-    delivery_fee: 5.00,
+    delivery_fee: 5.0,
     items: [
       {
         pizza_id: pizza.id,
         pizza_name: pizza.name,
         quantity: qty,
-        unit_price: pizza.price
-      }
-    ]
+        unit_price: pizza.price,
+      },
+    ],
   };
 }
 
@@ -104,7 +119,10 @@ async function processSingleOrder(index: number, ordersCol: any): Promise<TestRe
 
     // 2. Cálculo seguro de Subtotais e Frete
     const orderId = `test-order-${crypto.randomUUID()}`;
-    const subtotal = validData.items.reduce((acc, i) => acc + (Math.max(0, i.unit_price) * Math.max(1, i.quantity)), 0);
+    const subtotal = validData.items.reduce(
+      (acc, i) => acc + Math.max(0, i.unit_price) * Math.max(1, i.quantity),
+      0,
+    );
     const verifiedDeliveryFee = Math.max(0, validData.delivery_fee || 0);
     const total = Number((subtotal + verifiedDeliveryFee).toFixed(2));
 
@@ -184,7 +202,7 @@ async function runStressTest() {
 
       const icon = result.success ? "✅" : "❌";
       process.stdout.write(
-        `\r[Progresso: ${completedCount}/${TOTAL_ORDERS}] ${icon} Pedido #${index + 1} (${result.durationMs}ms)`
+        `\r[Progresso: ${completedCount}/${TOTAL_ORDERS}] ${icon} Pedido #${index + 1} (${result.durationMs}ms)`,
       );
     }
   }
@@ -194,13 +212,14 @@ async function runStressTest() {
   await Promise.all(workers);
 
   const totalTimeSeconds = ((performance.now() - testStartTime) / 1000).toFixed(2);
-  const successful = results.filter(r => r.success);
-  const failed = results.filter(r => !r.success);
+  const successful = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
 
-  const durations = results.map(r => r.durationMs).sort((a, b) => a - b);
+  const durations = results.map((r) => r.durationMs).sort((a, b) => a - b);
   const minLatency = durations[0] || 0;
   const maxLatency = durations[durations.length - 1] || 0;
-  const avgLatency = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+  const avgLatency =
+    durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
   const p50 = durations[Math.floor(durations.length * 0.5)] || 0;
   const p95 = durations[Math.floor(durations.length * 0.95)] || 0;
   const throughput = (TOTAL_ORDERS / parseFloat(totalTimeSeconds)).toFixed(1);
@@ -210,7 +229,9 @@ async function runStressTest() {
   console.log("=======================================================");
   console.log(`⏱️ Tempo Total do Teste:     ${totalTimeSeconds}s`);
   console.log(`🚀 Taxa de Processamento:    ${throughput} pedidos/segundo`);
-  console.log(`✅ Pedidos Bem-Sucedidos:    ${successful.length} / ${TOTAL_ORDERS} (${((successful.length / TOTAL_ORDERS) * 100).toFixed(1)}%)`);
+  console.log(
+    `✅ Pedidos Bem-Sucedidos:    ${successful.length} / ${TOTAL_ORDERS} (${((successful.length / TOTAL_ORDERS) * 100).toFixed(1)}%)`,
+  );
   console.log(`❌ Pedidos com Falha:        ${failed.length} / ${TOTAL_ORDERS}`);
   console.log("-------------------------------------------------------");
   console.log("📈 Latências de Gravação no MongoDB:");
@@ -226,11 +247,13 @@ async function runStressTest() {
     await ordersCol.deleteMany({ _id: { $in: createdOrderIds } });
     console.log("✨ Banco de dados limpo com sucesso!");
   } else {
-    console.log(`\n📌 Os pedidos foram mantidos no banco para você visualizar no Painel Administrativo.`);
+    console.log(
+      `\n📌 Os pedidos foram mantidos no banco para você visualizar no Painel Administrativo.`,
+    );
   }
 
   console.log("=======================================================\n");
-  
+
   if (client) {
     await client.close();
   }

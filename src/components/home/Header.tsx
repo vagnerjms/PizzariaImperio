@@ -19,13 +19,17 @@ export function Header({
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
         <a href="#top" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary ring-1 ring-gold/30">
-            <img src={logo} alt="Pizzaria Império" className="h-9 w-9 object-contain" width={36} height={36} />
+            <img
+              src={logo}
+              alt="Pizzaria Império"
+              className="h-9 w-9 object-contain"
+              width={36}
+              height={36}
+            />
           </div>
           <div className="leading-tight">
             <div className="flex items-center gap-2">
-              <span className="font-serif text-lg font-bold tracking-wide">
-                PIZZARIA IMPÉRIO
-              </span>
+              <span className="font-serif text-lg font-bold tracking-wide">PIZZARIA IMPÉRIO</span>
               <span
                 title={storeStatusReason}
                 className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
@@ -50,10 +54,18 @@ export function Header({
         </a>
 
         <nav className="hidden items-center gap-10 text-sm font-medium tracking-wider md:flex">
-          <a href="#cardapio" className="transition hover:text-gold">CARDÁPIO</a>
-          <a href="#promocoes" className="transition hover:text-gold">PROMOÇÕES</a>
-          <a href="#historia" className="transition hover:text-gold">NOSSA HISTÓRIA</a>
-          <a href="#contato" className="transition hover:text-gold">CONTATO</a>
+          <a href="#cardapio" className="transition hover:text-gold">
+            CARDÁPIO
+          </a>
+          <a href="#promocoes" className="transition hover:text-gold">
+            PROMOÇÕES
+          </a>
+          <a href="#historia" className="transition hover:text-gold">
+            NOSSA HISTÓRIA
+          </a>
+          <a href="#contato" className="transition hover:text-gold">
+            CONTATO
+          </a>
         </nav>
 
         <button

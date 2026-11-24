@@ -38,11 +38,7 @@ export function ClosedShiftsAuditTable({
               {history.map((shift) => {
                 const diff = shift.cash_difference ?? 0;
                 const diffClass =
-                  diff === 0
-                    ? "text-emerald-400"
-                    : diff > 0
-                      ? "text-amber-300"
-                      : "text-red-400";
+                  diff === 0 ? "text-emerald-400" : diff > 0 ? "text-amber-300" : "text-red-400";
                 return (
                   <tr key={shift.id} className="hover:bg-secondary/20">
                     <td className="py-2.5 pr-3">

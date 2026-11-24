@@ -48,7 +48,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           Ops, algo deu errado
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Houve uma oscilação temporária. Você pode tentar atualizar a página ou voltar para o início.
+          Houve uma oscilação temporária. Você pode tentar atualizar a página ou voltar para o
+          início.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button

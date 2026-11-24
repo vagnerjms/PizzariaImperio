@@ -32,10 +32,10 @@ export function CheckoutPaymentStep({
     form.deliveryMode === "pickup"
       ? "Retirada no balcão (Buscar o pedido)"
       : form.deliveryMode === "dine_in"
-      ? form.tableNumber?.trim()
-        ? `Consumir no local — Mesa ${form.tableNumber.trim()}`
-        : "Consumir no local (Salão)"
-      : `${form.rua}, ${form.numero} — ${form.bairro}`;
+        ? form.tableNumber?.trim()
+          ? `Consumir no local — Mesa ${form.tableNumber.trim()}`
+          : "Consumir no local (Salão)"
+        : `${form.rua}, ${form.numero} — ${form.bairro}`;
 
   const timeEstimate =
     form.deliveryMode === "pickup" || form.deliveryMode === "dine_in"
@@ -110,9 +110,7 @@ export function CheckoutPaymentStep({
 
                 <div
                   className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 transition ${
-                    form.payment === "Pix"
-                      ? "border-gold bg-gold"
-                      : "border-muted-foreground/50"
+                    form.payment === "Pix" ? "border-gold bg-gold" : "border-muted-foreground/50"
                   }`}
                 >
                   {form.payment === "Pix" && (
@@ -136,8 +134,8 @@ export function CheckoutPaymentStep({
                     {form.deliveryMode === "pickup"
                       ? "Pagar na retirada"
                       : form.deliveryMode === "dine_in"
-                      ? "Pagar no local"
-                      : "Pagar na entrega"}
+                        ? "Pagar no local"
+                        : "Pagar na entrega"}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     Cartão (maquininha) ou Dinheiro
@@ -278,9 +276,7 @@ export function CheckoutPaymentStep({
         </div>
       </div>
 
-      {errors.payment && (
-        <p className="text-xs font-semibold text-destructive">{errors.payment}</p>
-      )}
+      {errors.payment && <p className="text-xs font-semibold text-destructive">{errors.payment}</p>}
 
       {/* Observações gerais */}
       <div className="rounded-2xl border border-border bg-card p-4">
@@ -305,4 +301,3 @@ export function CheckoutPaymentStep({
     </div>
   );
 }
-

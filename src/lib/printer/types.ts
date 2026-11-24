@@ -84,5 +84,7 @@ export function savePrinterSettings(settings: Partial<PrinterSettings>): Printer
 }
 
 export function formatBRLReceipt(val: number): string {
-  return `R$ ${Number(val || 0).toFixed(2).replace(".", ",")}`;
+  return `R$ ${Number(val || 0)
+    .toFixed(2)
+    .replace(".", ",")}`;
 }

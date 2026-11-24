@@ -251,7 +251,10 @@ describe("Dynamic Catalog Seed Migration & Tracking Pixels (Pacote 3)", () => {
     const healed = resolveMenuImage("/home/other-machine/src/assets/menu/calabresa.jpg");
     assert.equal(healed, MENU_IMAGES.calabresa);
     assert.equal(resolveMenuImage("vegetariana"), MENU_IMAGES.vegetariana);
-    assert.equal(resolveMenuImage("https://cdn.example.com/custom.png"), "https://cdn.example.com/custom.png");
+    assert.equal(
+      resolveMenuImage("https://cdn.example.com/custom.png"),
+      "https://cdn.example.com/custom.png",
+    );
   });
 
   test("validates Meta Pixel and GA4 Measurement IDs strictly against injection", () => {

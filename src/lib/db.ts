@@ -53,7 +53,7 @@ export function ensureIndexes(db: Db): Promise<void> {
             name: "uniq_promotions_coupon_code",
             unique: true,
             partialFilterExpression: { coupon_code: { $type: "string", $gt: "" } },
-          }
+          },
         ),
         addressCache.createIndex({ updated_at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }),
         cashShifts.createIndex({ status: 1, opened_at: -1 }),
@@ -63,7 +63,7 @@ export function ensureIndexes(db: Db): Promise<void> {
             name: "uniq_open_cash_shift",
             unique: true,
             partialFilterExpression: { status: "open" },
-          }
+          },
         ),
         couriers.createIndex({ active: 1, name: 1 }),
         menuItems.createIndex({ sort_order: 1, name: 1 }),
@@ -98,7 +98,9 @@ export async function getDb(): Promise<Db> {
   return db;
 }
 
-export async function getCollection<T extends Document = any>(name: string): Promise<Collection<T>> {
+export async function getCollection<T extends Document = any>(
+  name: string,
+): Promise<Collection<T>> {
   const db = await getDb();
   return db.collection<T>(name);
 }

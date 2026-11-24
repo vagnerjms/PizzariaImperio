@@ -11,7 +11,7 @@ import { initTrackingPixels } from "@/lib/analytics";
 import { queryKeys } from "@/lib/query-keys";
 import { Promotion } from "@/lib/promotions.types";
 import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS } from "@/data/catalog";
-import { formatBRL } from "@/lib/formatters";
+import { formatBRL, isPizzaCategory } from "@/lib/formatters";
 import { useCart } from "@/hooks/useCart";
 import { Header } from "@/components/home/Header";
 import { Hero } from "@/components/home/Hero";
@@ -130,7 +130,7 @@ function Home() {
 
   const effectiveMenuById = useMemo(
     () => Object.fromEntries(effectiveMenu.map((p) => [p.id, p])),
-    [effectiveMenu]
+    [effectiveMenu],
   );
 
   const {
@@ -156,19 +156,14 @@ function Home() {
 
   const filtered = useMemo(
     () => (cat === "todas" ? effectiveMenu : effectiveMenu.filter((p) => p.category === cat)),
-    [cat, effectiveMenu]
+    [cat, effectiveMenu],
   );
 
   // 1. Clique em Pizza Individual (1 Sabor Inteira ou Bebida)
   const handleAddSingle = (p: Pizza) => {
     if (!p) return;
 
-    if (
-      p.category === "tradicionais" ||
-      p.category === "especiais" ||
-      p.category === "doces" ||
-      p.category === "doces-especiais"
-    ) {
+    if (isPizzaCategory(p.category)) {
       setSinglePizzaModal(p);
       return;
     }
@@ -232,7 +227,7 @@ function Home() {
         onOpenHalfAndHalf={() => handleOpenHalfAndHalf()}
       />
       <Story />
-      <Contact storePhone={storeConfig?.store_phone} />
+      <Contact storePhone={storeConfig?.store_phone} openingHours={storeConfig?.opening_hours} />
       <Footer />
 
       {cartCount > 0 && !cartOpen && (

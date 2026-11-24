@@ -1,13 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Users,
-  UserPlus,
-  Loader2,
-  KeyRound,
-  Trash2,
-} from "lucide-react";
+import { Users, UserPlus, Loader2, KeyRound, Trash2 } from "lucide-react";
 import {
   listUsers,
   createUser,
@@ -17,11 +11,7 @@ import {
 } from "@/lib/users.functions";
 import { queryKeys } from "@/lib/query-keys";
 
-export function UsersTab({
-  currentUser,
-}: {
-  currentUser: { email: string; roles: string[] };
-}) {
+export function UsersTab({ currentUser }: { currentUser: { email: string; roles: string[] } }) {
   const queryClient = useQueryClient();
   const fetchUsersFn = useServerFn(listUsers);
   const createUserFn = useServerFn(createUser);
@@ -51,7 +41,9 @@ export function UsersTab({
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState<"admin" | "supervisor" | "atendente">("atendente");
 
-  const [passwordModalUser, setPasswordModalUser] = useState<{ id: string; email: string } | null>(null);
+  const [passwordModalUser, setPasswordModalUser] = useState<{ id: string; email: string } | null>(
+    null,
+  );
   const [newPasswordValue, setNewPasswordValue] = useState("");
 
   useEffect(() => {
@@ -95,7 +87,10 @@ export function UsersTab({
     }
   };
 
-  const handleUpdateUserRole = async (userId: string, newRole: "admin" | "supervisor" | "atendente") => {
+  const handleUpdateUserRole = async (
+    userId: string,
+    newRole: "admin" | "supervisor" | "atendente",
+  ) => {
     setUsersActionLoading(true);
     setUsersErrorMsg(null);
     setUsersSuccessMsg(null);
@@ -163,7 +158,9 @@ export function UsersTab({
             </div>
             <div>
               <h2 className="font-serif text-lg leading-tight">Gestão de Usuários e Permissões</h2>
-              <p className="text-xs text-muted-foreground">Cadastre novos operadores, configure cargos e redefina senhas</p>
+              <p className="text-xs text-muted-foreground">
+                Cadastre novos operadores, configure cargos e redefina senhas
+              </p>
             </div>
           </div>
           <button
@@ -195,7 +192,10 @@ export function UsersTab({
 
             {/* Modal / Card para Cadastrar Novo Usuário */}
             {showCreateUserModal && (
-              <form onSubmit={handleCreateUser} className="rounded-2xl border border-gold/40 bg-gold/5 p-5 space-y-4">
+              <form
+                onSubmit={handleCreateUser}
+                className="rounded-2xl border border-gold/40 bg-gold/5 p-5 space-y-4"
+              >
                 <div className="flex items-center justify-between border-b border-border/60 pb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
                     <UserPlus className="h-4 w-4" /> Cadastrar Novo Usuário
@@ -211,7 +211,9 @@ export function UsersTab({
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">E-mail</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      E-mail
+                    </label>
                     <input
                       type="email"
                       required
@@ -223,7 +225,9 @@ export function UsersTab({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Senha Inicial</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Senha Inicial
+                    </label>
                     <input
                       type="password"
                       required
@@ -235,14 +239,18 @@ export function UsersTab({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nível / Cargo</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Nível / Cargo
+                    </label>
                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value as any)}
                       className="mt-1.5 w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
                     >
                       <option value="atendente">Atendente (Apenas Pedidos)</option>
-                      <option value="supervisor">Supervisor (WhatsApp + Taxas + Indicadores)</option>
+                      <option value="supervisor">
+                        Supervisor (WhatsApp + Taxas + Indicadores)
+                      </option>
                       <option value="admin">Administrador (Acesso Total)</option>
                     </select>
                   </div>
@@ -258,7 +266,9 @@ export function UsersTab({
                   </button>
                   <button
                     type="submit"
-                    disabled={usersActionLoading || !newUserEmail.trim() || newUserPassword.length < 6}
+                    disabled={
+                      usersActionLoading || !newUserEmail.trim() || newUserPassword.length < 6
+                    }
                     className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5"
                   >
                     {usersActionLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -270,7 +280,10 @@ export function UsersTab({
 
             {/* Modal de Alteração de Senha */}
             {passwordModalUser && (
-              <form onSubmit={handleChangePassword} className="rounded-2xl border border-blue-500/40 bg-blue-500/5 p-5 space-y-4">
+              <form
+                onSubmit={handleChangePassword}
+                className="rounded-2xl border border-blue-500/40 bg-blue-500/5 p-5 space-y-4"
+              >
                 <div className="flex items-center justify-between border-b border-border/60 pb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
                     <KeyRound className="h-4 w-4" /> Alterar Senha de {passwordModalUser.email}
@@ -285,7 +298,9 @@ export function UsersTab({
                 </div>
 
                 <div className="max-w-md">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nova Senha</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Nova Senha
+                  </label>
                   <input
                     type="password"
                     required
@@ -330,8 +345,13 @@ export function UsersTab({
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {usersList.map((u) => {
-                      const isSuperAdmin = u.email === "admin@pizzaria.com" || u.email === currentUser?.email;
-                      const role = u.roles?.includes("admin") ? "admin" : u.roles?.includes("supervisor") ? "supervisor" : "atendente";
+                      const isSuperAdmin =
+                        u.email === "admin@pizzaria.com" || u.email === currentUser?.email;
+                      const role = u.roles?.includes("admin")
+                        ? "admin"
+                        : u.roles?.includes("supervisor")
+                          ? "supervisor"
+                          : "atendente";
                       return (
                         <tr key={u.id} className="hover:bg-secondary/10 transition">
                           <td className="px-4 py-3 font-medium text-foreground">
@@ -351,8 +371,8 @@ export function UsersTab({
                                 role === "admin"
                                   ? "border-gold/50 bg-gold/10 text-gold"
                                   : role === "supervisor"
-                                  ? "border-blue-400/50 bg-blue-400/10 text-blue-400"
-                                  : "border-border bg-secondary text-muted-foreground"
+                                    ? "border-blue-400/50 bg-blue-400/10 text-blue-400"
+                                    : "border-border bg-secondary text-muted-foreground"
                               }`}
                             >
                               <option value="atendente">Atendente</option>

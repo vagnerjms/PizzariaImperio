@@ -1,10 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { CartItem, MENU_BY_ID } from "@/data/catalog";
-import {
-  Promotion,
-  AppliedPromotionResult,
-  normalizeCouponCode,
-} from "@/lib/promotions.types";
+import { Promotion, AppliedPromotionResult, normalizeCouponCode } from "@/lib/promotions.types";
 import {
   evaluateCartPromotions,
   MenuItemRef,
@@ -20,7 +16,7 @@ export interface CouponFeedbackState {
 
 export function useCart(
   promotions: Promotion[],
-  menuById: Record<string, MenuItemRef> = MENU_BY_ID
+  menuById: Record<string, MenuItemRef> = MENU_BY_ID,
 ) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const cartHydratedRef = useRef(false);
@@ -38,12 +34,14 @@ export function useCart(
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter(
-            (i) => i && typeof i === "object" && i.pizzaId && typeof i.totalPrice === "number"
+            (i) => i && typeof i === "object" && i.pizzaId && typeof i.totalPrice === "number",
           );
           if (valid.length > 0) setCart(valid);
         }
       }
-    } catch {}
+    } catch {
+      // Ignora erro de localStorage indisponível ou JSON inválido
+    }
     cartHydratedRef.current = true;
   }, []);
 
@@ -52,7 +50,9 @@ export function useCart(
     if (!cartHydratedRef.current) return;
     try {
       localStorage.setItem("imperio_cart_v2", JSON.stringify(cart));
-    } catch {}
+    } catch {
+      // Ignora erro de quota ou modo privado
+    }
   }, [cart]);
 
   const cartCount = useMemo(() => {
@@ -68,8 +68,7 @@ export function useCart(
       const cat1 = menuById[i.pizzaId]?.category || i.category;
       const cat2 = i.isHalf && i.flavor2?.id ? menuById[i.flavor2.id]?.category : undefined;
       const categories = cat2 ? Array.from(new Set([cat1, cat2])) : [cat1];
-      const flavorIds =
-        i.isHalf && i.flavor2?.id ? [i.pizzaId, i.flavor2.id] : [i.pizzaId];
+      const flavorIds = i.isHalf && i.flavor2?.id ? [i.pizzaId, i.flavor2.id] : [i.pizzaId];
       return {
         item: {
           id: i.pizzaId,
@@ -96,7 +95,7 @@ export function useCart(
       menuById,
       promotions,
       new Date(),
-      couponCode || null
+      couponCode || null,
     );
   }, [genericCartLines, menuById, promotions, couponCode]);
 
@@ -139,7 +138,7 @@ export function useCart(
       setCouponCode(normalized);
       return true;
     },
-    [genericCartLines, menuById, promotions]
+    [genericCartLines, menuById, promotions],
   );
 
   const handleClearCoupon = useCallback(() => {
@@ -162,7 +161,7 @@ export function useCart(
           (i.flavor1?.notes || "") === (item.flavor1?.notes || "") &&
           i.flavor2?.id === item.flavor2?.id &&
           (i.flavor2?.notes || "") === (item.flavor2?.notes || "") &&
-          (i.crust?.id || "nenhuma") === (item.crust?.id || "nenhuma")
+          (i.crust?.id || "nenhuma") === (item.crust?.id || "nenhuma"),
       );
 
       if (existingIdx >= 0) {
@@ -192,8 +191,8 @@ export function useCart(
       prev.map((i) =>
         i.id === itemId
           ? { ...i, quantity: i.quantity + 1, totalPrice: i.unitPrice * (i.quantity + 1) }
-          : i
-      )
+          : i,
+      ),
     );
   }, []);
 
@@ -209,7 +208,7 @@ export function useCart(
           }
           return i;
         })
-        .filter((i): i is CartItem => i !== null)
+        .filter((i): i is CartItem => i !== null),
     );
   }, []);
 
@@ -226,8 +225,7 @@ export function useCart(
   const handleOpenCart = useCallback(() => setCartOpen(true), []);
   const handleCloseCart = useCallback(() => setCartOpen(false), []);
 
-  const activeValidCouponCode =
-    couponCode && couponValidation?.valid ? couponCode : null;
+  const activeValidCouponCode = couponCode && couponValidation?.valid ? couponCode : null;
 
   return {
     cart,

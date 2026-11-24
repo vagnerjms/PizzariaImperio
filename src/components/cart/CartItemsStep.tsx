@@ -46,9 +46,7 @@ export function CartItemsStep({
               ? `Cupom Ativo: ${appliedPromotion.promotion.title}`
               : `Promoção Ativa: ${appliedPromotion.promotion.title}`}
           </div>
-          <p className="mt-1 font-medium text-emerald-300">
-            {appliedPromotion.reason}
-          </p>
+          <p className="mt-1 font-medium text-emerald-300">{appliedPromotion.reason}</p>
         </div>
       )}
 
@@ -78,9 +76,7 @@ export function CartItemsStep({
                 type="text"
                 maxLength={32}
                 value={couponInput}
-                onChange={(e) =>
-                  setCouponInput(e.target.value.toUpperCase().replace(/\s+/g, ""))
-                }
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase().replace(/\s+/g, ""))}
                 placeholder="Digite o código (ex: IMPERIO10)"
                 className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-mono uppercase text-foreground placeholder:font-sans placeholder:normal-case placeholder:text-muted-foreground/60 focus:border-gold focus:outline-none"
               />
@@ -180,7 +176,9 @@ export function CartItemsStep({
               <div className="text-right">
                 <div className="text-sm font-bold text-gold">{formatBRL(item.totalPrice)}</div>
                 {item.quantity > 1 && (
-                  <div className="text-[10px] text-muted-foreground">{formatBRL(item.unitPrice)} cada</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {formatBRL(item.unitPrice)} cada
+                  </div>
                 )}
               </div>
             </div>
@@ -201,9 +199,7 @@ export function CartItemsStep({
                       {appliedPromotion.rewardItem.is_gift ? "GRÁTIS" : "PROMO"}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    1x Brinde da promoção
-                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">1x Brinde da promoção</div>
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between">
@@ -223,4 +219,3 @@ export function CartItemsStep({
     </div>
   );
 }
-

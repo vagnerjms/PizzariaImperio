@@ -1,13 +1,7 @@
-import { useState, useCallback } from "react";
-import {
-  ShoppingBag,
-  X,
-  Loader2,
-  ChevronRight,
-  ChevronLeft,
-  ShieldCheck,
-} from "lucide-react";
-import { CartItem, formatBRL } from "@/data/catalog";
+import { useState, useCallback, useEffect } from "react";
+import { ShoppingBag, X, Loader2, ChevronRight, ChevronLeft, ShieldCheck } from "lucide-react";
+import { CartItem } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
 import { PublicStoreConfig } from "@/lib/store-hours";
 import { CouponFeedbackState } from "@/hooks/useCart";
@@ -63,14 +57,8 @@ export function CartDrawer({
     onOpen();
   }, [onOpen]);
 
-  const {
-    activeOrder,
-    loadingOrder,
-    submitting,
-    submitError,
-    placeOrder,
-    dismissOrder,
-  } = useActiveOrder({ onOpenDrawer: handleOpenOrderFromUrl });
+  const { activeOrder, loadingOrder, submitting, submitError, placeOrder, dismissOrder } =
+    useActiveOrder({ onOpenDrawer: handleOpenOrderFromUrl });
 
   const {
     form,
@@ -94,7 +82,16 @@ export function CartDrawer({
     validateDelivery,
     validate,
     resetForm,
-  } = useDeliveryAddress();
+  } = useDeliveryAddress({ enabled: open });
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
 
   const handleDismissOrder = () => {
     dismissOrder();
@@ -108,9 +105,7 @@ export function CartDrawer({
   const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
   const discount = appliedPromotion?.discountAmount || 0;
   const deliveryFee =
-    form.deliveryMode === "pickup" || form.deliveryMode === "dine_in"
-      ? 0
-      : form.deliveryFee || 0;
+    form.deliveryMode === "pickup" || form.deliveryMode === "dine_in" ? 0 : form.deliveryFee || 0;
   const total = Math.max(0, subtotal + rewardItemCost - discount) + deliveryFee;
 
   const handleStartCheckout = () => {
@@ -144,16 +139,26 @@ export function CartDrawer({
           onClear();
           setViewMode("order_status");
         },
-        couponCode
+        couponCode,
       );
     } catch {
       // Erro é capturado e exibido via submitError
     }
   };
 
-  if (loadingOrder && open) {
+  // Mantém useActiveOrder montado para deep-link /?order_id, mas evita elementos focáveis ocultos no DOM (WCAG)
+  if (!open) {
+    return null;
+  }
+
+  if (loadingOrder) {
     return (
-      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Carregando pedido"
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md"
+      >
         <div className="flex flex-col items-center gap-3 text-center px-4">
           <Loader2 className="h-10 w-10 text-gold animate-spin" />
           <h3 className="font-serif text-lg text-foreground mt-2">Carregando seu pedido...</h3>
@@ -169,30 +174,21 @@ export function CartDrawer({
     viewMode === "order_status" && activeOrder
       ? "Status do Pedido"
       : step === "cart"
-      ? "Seu Carrinho"
-      : step === "identity"
-      ? "Identifique-se"
-      : "Finalizar pedido";
+        ? "Seu Carrinho"
+        : step === "identity"
+          ? "Identifique-se"
+          : "Finalizar pedido";
 
   return (
     <div
-      className={`fixed inset-0 z-[60] transition ${
-        open ? "pointer-events-auto" : "pointer-events-none"
-      }`}
-      aria-hidden={!open}
+      role="dialog"
+      aria-modal="true"
+      aria-label={headerTitle}
+      className="fixed inset-0 z-[60] animate-in fade-in duration-200"
     >
-      <div
-        onClick={onClose}
-        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity ${
-          open ? "opacity-100" : "opacity-0"
-        }`}
-      />
+      <div onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      <div
-        className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-background shadow-2xl transition-transform duration-300 ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-background shadow-2xl">
         {/* Top Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -231,6 +227,7 @@ export function CartDrawer({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Fechar carrinho"
               className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
             >
               <X className="h-5 w-5" />
@@ -286,8 +283,15 @@ export function CartDrawer({
               {activeOrder && (
                 <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 flex items-center justify-between gap-2 text-xs">
                   <div>
-                    <span className="font-bold text-foreground">Pedido ativo: #{activeOrder.id?.slice(0, 6)}</span>
-                    <p className="text-[11px] text-muted-foreground">Status: <span className="capitalize text-gold font-semibold">{activeOrder.status}</span></p>
+                    <span className="font-bold text-foreground">
+                      Pedido ativo: #{activeOrder.id?.slice(0, 6)}
+                    </span>
+                    <p className="text-[11px] text-muted-foreground">
+                      Status:{" "}
+                      <span className="capitalize text-gold font-semibold">
+                        {activeOrder.status}
+                      </span>
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -382,8 +386,8 @@ export function CartDrawer({
                     {form.deliveryMode === "pickup" || form.deliveryMode === "dine_in"
                       ? "Grátis"
                       : form.deliveryFee !== null
-                      ? formatBRL(form.deliveryFee)
-                      : "A calcular"}
+                        ? formatBRL(form.deliveryFee)
+                        : "A calcular"}
                   </span>
                 </div>
               )}
@@ -420,9 +424,7 @@ export function CartDrawer({
                     : "bg-secondary text-muted-foreground"
                 }`}
               >
-                {form.deliveryMode
-                  ? "Avançar para pagamento"
-                  : "Escolha como receber o pedido"}
+                {form.deliveryMode ? "Avançar para pagamento" : "Escolha como receber o pedido"}
               </button>
             ) : (
               <button
@@ -439,10 +441,10 @@ export function CartDrawer({
                 {!isStoreOpen
                   ? "Loja Fechada no Momento"
                   : submitting
-                  ? "Enviando Pedido..."
-                  : form.payment
-                  ? `Finalizar pedido • ${formatBRL(total)}`
-                  : "Selecione a forma de pagamento"}
+                    ? "Enviando Pedido..."
+                    : form.payment
+                      ? `Finalizar pedido • ${formatBRL(total)}`
+                      : "Selecione a forma de pagamento"}
               </button>
             )}
           </div>

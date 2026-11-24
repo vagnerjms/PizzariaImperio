@@ -34,7 +34,7 @@ export function isPromotionExhausted(promo: Promotion): boolean {
 
 export function getPromotionAvailabilityError(
   promo: Promotion,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): string | null {
   if (!promo.active) return "Este cupom não está ativo no momento.";
 
@@ -66,7 +66,7 @@ export function getPromotionAvailabilityError(
 
 function normalizeCartLines(
   cartOrLines: Record<string, number> | GenericCartLine[],
-  menuById: Record<string, MenuItemRef>
+  menuById: Record<string, MenuItemRef>,
 ): GenericCartLine[] {
   if (Array.isArray(cartOrLines)) {
     return cartOrLines.filter((l) => l.qty > 0 && l.subtotal > 0);
@@ -86,7 +86,7 @@ function evaluateSinglePromotion(
   menuById: Record<string, MenuItemRef>,
   cartSubtotal: number,
   totalCartQty: number,
-  appliedViaCoupon: boolean
+  appliedViaCoupon: boolean,
 ): { result: AppliedPromotionResult | null; unmetReason?: string } {
   let isTriggered = false;
   let triggerSubtotal = 0;
@@ -108,13 +108,9 @@ function evaluateSinglePromotion(
     const matchingLines = cartLines.filter((l) => {
       if (cat === "todas") return true;
       const itemCats =
-        l.item.categories && l.item.categories.length > 0
-          ? l.item.categories
-          : [l.item.category];
+        l.item.categories && l.item.categories.length > 0 ? l.item.categories : [l.item.category];
       return itemCats.some(
-        (c) =>
-          c === cat ||
-          (cat === "salgadas" && (c === "tradicionais" || c === "especiais"))
+        (c) => c === cat || (cat === "salgadas" && (c === "tradicionais" || c === "especiais")),
       );
     });
     const catQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
@@ -133,8 +129,7 @@ function evaluateSinglePromotion(
   } else if (promo.trigger_type === "specific_items" && Array.isArray(promo.trigger_item_ids)) {
     const allowedIds = new Set(promo.trigger_item_ids);
     const matchingLines = cartLines.filter((l) => {
-      const ids =
-        l.item.flavorIds && l.item.flavorIds.length > 0 ? l.item.flavorIds : [l.item.id];
+      const ids = l.item.flavorIds && l.item.flavorIds.length > 0 ? l.item.flavorIds : [l.item.id];
       return ids.some((id) => allowedIds.has(id));
     });
     const specQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
@@ -174,11 +169,11 @@ function evaluateSinglePromotion(
         100,
         Math.max(
           0,
-          promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100
-        )
+          promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100,
+        ),
       );
       const unitPrice = Number(
-        Math.max(0, rewardPizza.price * (1 - rewardDiscPct / 100)).toFixed(2)
+        Math.max(0, rewardPizza.price * (1 - rewardDiscPct / 100)).toFixed(2),
       );
       const isGift = unitPrice === 0;
       rewardItem = {
@@ -220,7 +215,7 @@ export function validateCouponForCart(
   cartOrLines: Record<string, number> | GenericCartLine[],
   menuById: Record<string, MenuItemRef>,
   promotions: Promotion[],
-  now: Date = new Date()
+  now: Date = new Date(),
 ): CouponValidationResult {
   const code = normalizeCouponCode(rawCouponCode);
   if (!code) {
@@ -261,7 +256,7 @@ export function validateCouponForCart(
     menuById,
     cartSubtotal,
     totalCartQty,
-    true
+    true,
   );
 
   if (!result) {
@@ -286,7 +281,7 @@ export function evaluateCartPromotions(
   menuById: Record<string, MenuItemRef>,
   promotions: Promotion[],
   now: Date = new Date(),
-  couponCode?: string | null
+  couponCode?: string | null,
 ): AppliedPromotionResult | null {
   if (!promotions || promotions.length === 0) return null;
 
@@ -299,13 +294,7 @@ export function evaluateCartPromotions(
   // Non-stacking rule: if customer provided a valid qualifying coupon, apply it!
   const normalizedCode = normalizeCouponCode(couponCode);
   if (normalizedCode) {
-    const couponEval = validateCouponForCart(
-      normalizedCode,
-      cartLines,
-      menuById,
-      promotions,
-      now
-    );
+    const couponEval = validateCouponForCart(normalizedCode, cartLines, menuById, promotions, now);
     if (couponEval.valid && couponEval.result) {
       return couponEval.result;
     }
@@ -323,7 +312,7 @@ export function evaluateCartPromotions(
       menuById,
       cartSubtotal,
       totalCartQty,
-      false
+      false,
     );
     if (result) validResults.push(result);
   }
@@ -333,11 +322,9 @@ export function evaluateCartPromotions(
   // Prioritize automatic promotion offering the greatest financial benefit
   validResults.sort((a, b) => {
     const valA =
-      a.discountAmount +
-      (a.rewardItem ? a.rewardItem.original_price - a.rewardItem.unit_price : 0);
+      a.discountAmount + (a.rewardItem ? a.rewardItem.original_price - a.rewardItem.unit_price : 0);
     const valB =
-      b.discountAmount +
-      (b.rewardItem ? b.rewardItem.original_price - b.rewardItem.unit_price : 0);
+      b.discountAmount + (b.rewardItem ? b.rewardItem.original_price - b.rewardItem.unit_price : 0);
     return valB - valA;
   });
 

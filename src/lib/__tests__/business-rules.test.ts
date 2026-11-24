@@ -106,16 +106,14 @@ describe("calculateVerifiedOrderPricing (Anti-Tampering & Business Rules)", () =
     assert.throws(
       () =>
         calculateVerifiedOrderPricing({
-          items: [
-            { pizza_id: "item-falso", pizza_name: "Fake", quantity: 1, unit_price: 1 },
-          ],
+          items: [{ pizza_id: "item-falso", pizza_name: "Fake", quantity: 1, unit_price: 1 }],
           deliveryMode: "delivery",
           officialDeliveryFee: 5,
           effectiveMenuPrices: SAMPLE_MENU,
           crustPrices: SAMPLE_CRUSTS,
           activePromotions: [],
         }),
-      /Item inválido/
+      /Item inválido/,
     );
 
     assert.throws(
@@ -135,7 +133,7 @@ describe("calculateVerifiedOrderPricing (Anti-Tampering & Business Rules)", () =
           crustPrices: SAMPLE_CRUSTS,
           activePromotions: [],
         }),
-      /esgotado/
+      /esgotado/,
     );
 
     assert.throws(
@@ -156,15 +154,13 @@ describe("calculateVerifiedOrderPricing (Anti-Tampering & Business Rules)", () =
           crustPrices: SAMPLE_CRUSTS,
           activePromotions: [],
         }),
-      /Borda inválida/
+      /Borda inválida/,
     );
   });
 
   test("prevents 100% discount bypass when no promotion qualifies", () => {
     const res = calculateVerifiedOrderPricing({
-      items: [
-        { pizza_id: "calabresa", pizza_name: "Calabresa", quantity: 1, unit_price: 46 },
-      ],
+      items: [{ pizza_id: "calabresa", pizza_name: "Calabresa", quantity: 1, unit_price: 46 }],
       deliveryMode: "delivery",
       officialDeliveryFee: 7,
       effectiveMenuPrices: SAMPLE_MENU,
@@ -196,15 +192,13 @@ describe("calculateVerifiedOrderPricing (Anti-Tampering & Business Rules)", () =
           crustPrices: SAMPLE_CRUSTS,
           activePromotions: [PROMO_BUY2_GET_COKE],
         }),
-      /ao menos um item válido/
+      /ao menos um item válido/,
     );
   });
 
   test("automatically awards BUY_X_GET_Y gift only when trigger is legitimately met", () => {
     const res = calculateVerifiedOrderPricing({
-      items: [
-        { pizza_id: "calabresa", pizza_name: "Calabresa", quantity: 2, unit_price: 46 },
-      ],
+      items: [{ pizza_id: "calabresa", pizza_name: "Calabresa", quantity: 2, unit_price: 46 }],
       deliveryMode: "dine_in",
       officialDeliveryFee: 7,
       effectiveMenuPrices: SAMPLE_MENU,
@@ -263,7 +257,7 @@ describe("evaluateCartPromotions (Timezone & Best Benefit Selection)", () => {
       { pepperoni: 1 },
       menuRef,
       [datedPromo],
-      new Date("2026-11-24T01:00:00Z")
+      new Date("2026-11-24T01:00:00Z"),
     );
     assert.equal(beforeStart, null);
 
@@ -272,7 +266,7 @@ describe("evaluateCartPromotions (Timezone & Best Benefit Selection)", () => {
       { pepperoni: 1 },
       menuRef,
       [datedPromo],
-      new Date("2026-11-24T15:00:00Z")
+      new Date("2026-11-24T15:00:00Z"),
     );
     assert.equal(duringWindow?.discountAmount, 6.2);
   });
@@ -317,7 +311,7 @@ describe("Delivery Fee Matching & Thermal Printer HTML Escaping", () => {
     const escaped = escapeHtml(payload);
     assert.equal(
       escaped,
-      "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; &#39;test&#39;"
+      "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; &#39;test&#39;",
     );
     assert.equal(escaped.includes("<script>"), false);
   });

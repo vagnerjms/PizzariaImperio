@@ -27,22 +27,14 @@ export async function createOnlinePixPayment(params: {
 
   if (!accessToken && !staticPixKey) {
     console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment/database settings.");
-    throw new Error(
-      "Erro na configuração de pagamentos online. Entre em contato com a pizzaria."
-    );
+    throw new Error("Erro na configuração de pagamentos online. Entre em contato com a pizzaria.");
   }
 
   try {
     if (staticPixKey) {
       const name = process.env.STATIC_PIX_NAME || "Pizzaria Imperio";
       const city = process.env.STATIC_PIX_CITY || "Braganca Paulista";
-      const pixPayload = generateStaticPix(
-        staticPixKey,
-        name,
-        city,
-        total,
-        orderId.slice(0, 8)
-      );
+      const pixPayload = generateStaticPix(staticPixKey, name, city, total, orderId.slice(0, 8));
 
       let qrCodeBase64: string | null = null;
       try {
@@ -57,7 +49,7 @@ export async function createOnlinePixPayment(params: {
       } catch (qrErr) {
         console.warn(
           "Static Pix QR image generation timed out, falling back to copy-paste code:",
-          qrErr
+          qrErr,
         );
       }
 
@@ -126,7 +118,7 @@ export async function createOnlinePixPayment(params: {
     throw new Error(
       err instanceof Error
         ? err.message
-        : "Não foi possível gerar a cobrança Pix. Tente novamente."
+        : "Não foi possível gerar a cobrança Pix. Tente novamente.",
     );
   }
 }

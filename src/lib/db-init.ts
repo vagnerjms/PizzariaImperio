@@ -10,18 +10,19 @@ async function ensureSeedUser(
     email: string;
     envPassword: string | undefined;
     devFallbackPassword: string;
-  }
+  },
 ) {
   const existing = await usersCol.findOne({ email: opts.email });
   if (existing) return;
 
   const isProd = process.env.NODE_ENV === "production";
   const allowWeakDefaults = process.env.ALLOW_DEFAULT_SEED_PASSWORDS === "true";
-  const password = opts.envPassword?.trim() || (!isProd || allowWeakDefaults ? opts.devFallbackPassword : "");
+  const password =
+    opts.envPassword?.trim() || (!isProd || allowWeakDefaults ? opts.devFallbackPassword : "");
 
   if (!password) {
     console.warn(
-      `[DB Init] Skipping default ${opts.label} seed (${opts.email}) in production because its password env var is not configured.`
+      `[DB Init] Skipping default ${opts.label} seed (${opts.email}) in production because its password env var is not configured.`,
     );
     return;
   }

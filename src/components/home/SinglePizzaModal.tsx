@@ -58,7 +58,6 @@ export function SinglePizzaModal({
     >
       {/* Container Responsivo: Bottom Sheet no Mobile / Dialog no Desktop */}
       <div className="relative flex flex-col w-full max-w-lg max-h-[92vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl border border-gold/40 bg-card shadow-2xl overflow-hidden text-foreground">
-        
         {/* Header com Imagem e Fechar */}
         <div className="relative flex-none h-40 sm:h-48 w-full overflow-hidden bg-secondary">
           <img
@@ -67,7 +66,7 @@ export function SinglePizzaModal({
             className="w-full h-full object-cover brightness-90"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
-          
+
           {/* Barra superior de arrasto no Mobile */}
           <div className="sm:hidden absolute top-2.5 left-1/2 -translate-x-1/2 w-12 h-1.5 rounded-full bg-white/40" />
 
@@ -97,7 +96,6 @@ export function SinglePizzaModal({
 
         {/* Corpo com Scroll */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
-          
           {/* 1. Descrição e Ingredientes */}
           <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -133,7 +131,8 @@ export function SinglePizzaModal({
               </label>
               {selectedCrust && (
                 <span className="text-[11px] font-bold text-gold">
-                  {selectedCrust.name} {selectedCrust.price > 0 ? `(+${formatBRL(selectedCrust.price)})` : "(Grátis)"}
+                  {selectedCrust.name}{" "}
+                  {selectedCrust.price > 0 ? `(+${formatBRL(selectedCrust.price)})` : "(Grátis)"}
                 </span>
               )}
             </div>
@@ -157,7 +156,9 @@ export function SinglePizzaModal({
             className="flex-1 rounded-full bg-gold px-4 py-3 text-xs sm:text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95 flex items-center justify-between gap-2"
           >
             <span>Adicionar ao Pedido</span>
-            <span className="font-serif font-bold text-sm sm:text-base">{formatBRL(totalPrice)}</span>
+            <span className="font-serif font-bold text-sm sm:text-base">
+              {formatBRL(totalPrice)}
+            </span>
           </button>
         </div>
       </div>

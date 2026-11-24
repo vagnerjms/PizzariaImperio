@@ -61,9 +61,13 @@ export function PromotionModal({
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDescription, setPromoDescription] = useState("");
   const [promoBadgeText, setPromoBadgeText] = useState("OFERTA RELÂMPAGO");
-  const [promoType, setPromoType] = useState<"PERCENTAGE_DISCOUNT" | "FIXED_DISCOUNT" | "BUY_X_GET_Y">("PERCENTAGE_DISCOUNT");
+  const [promoType, setPromoType] = useState<
+    "PERCENTAGE_DISCOUNT" | "FIXED_DISCOUNT" | "BUY_X_GET_Y"
+  >("PERCENTAGE_DISCOUNT");
   const [promoDiscountValue, setPromoDiscountValue] = useState<number>(10);
-  const [promoTriggerType, setPromoTriggerType] = useState<"all" | "category" | "specific_items" | "min_total">("all");
+  const [promoTriggerType, setPromoTriggerType] = useState<
+    "all" | "category" | "specific_items" | "min_total"
+  >("all");
   const [promoTriggerCategory, setPromoTriggerCategory] = useState("todas");
   const [promoTriggerItemIds, setPromoTriggerItemIds] = useState<string[]>([]);
   const [promoTriggerMinQty, setPromoTriggerMinQty] = useState<number>(1);
@@ -92,7 +96,9 @@ export function PromotionModal({
       setPromoTriggerMinTotal(initialPromo.trigger_min_total || 0);
       setPromoRewardItemId(initialPromo.reward_item_id || "coca-2l");
       setPromoRewardDiscountPercent(
-        initialPromo.reward_discount_percent !== undefined ? initialPromo.reward_discount_percent : 100
+        initialPromo.reward_discount_percent !== undefined
+          ? initialPromo.reward_discount_percent
+          : 100,
       );
       setPromoCouponCode(initialPromo.coupon_code || "");
       setPromoDaysOfWeek(initialPromo.days_of_week || []);
@@ -127,7 +133,7 @@ export function PromotionModal({
 
   const toggleWeekday = (day: number) => {
     setPromoDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort(),
     );
   };
 
@@ -160,7 +166,8 @@ export function PromotionModal({
       trigger_min_total: Number(promoTriggerMinTotal) || 0,
       reward_item_id: promoType === "BUY_X_GET_Y" ? promoRewardItemId : null,
       reward_item_name: promoType === "BUY_X_GET_Y" ? rewardItem?.name || null : null,
-      reward_discount_percent: promoType === "BUY_X_GET_Y" ? Number(promoRewardDiscountPercent) : null,
+      reward_discount_percent:
+        promoType === "BUY_X_GET_Y" ? Number(promoRewardDiscountPercent) : null,
       coupon_code: normalizedCoupon,
       days_of_week: promoDaysOfWeek.length > 0 ? promoDaysOfWeek : null,
       max_uses: parsedMaxUses,
@@ -192,7 +199,9 @@ export function PromotionModal({
               <h3 className="font-serif text-lg leading-tight">
                 {initialPromo ? "Editar Promoção" : "Nova Promoção ou Combo"}
               </h3>
-              <p className="text-xs text-muted-foreground">Configure as regras de ativação e visualize em tempo real</p>
+              <p className="text-xs text-muted-foreground">
+                Configure as regras de ativação e visualize em tempo real
+              </p>
             </div>
           </div>
           <button
@@ -417,13 +426,17 @@ export function PromotionModal({
                               if (e.target.checked) {
                                 setPromoTriggerItemIds([...promoTriggerItemIds, item.id]);
                               } else {
-                                setPromoTriggerItemIds(promoTriggerItemIds.filter((id) => id !== item.id));
+                                setPromoTriggerItemIds(
+                                  promoTriggerItemIds.filter((id) => id !== item.id),
+                                );
                               }
                             }}
                             className="rounded border-border text-gold focus:ring-gold"
                           />
                           <span>{item.name}</span>
-                          <span className="text-[10px] text-muted-foreground">({item.category})</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            ({item.category})
+                          </span>
                         </label>
                       );
                     })}
@@ -474,9 +487,7 @@ export function PromotionModal({
                     placeholder="Ex.: IMPERIO10 (vazio = automático)"
                     value={promoCouponCode}
                     onChange={(e) =>
-                      setPromoCouponCode(
-                        e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "")
-                      )
+                      setPromoCouponCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))
                     }
                     className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3 py-2 text-xs font-mono font-bold uppercase text-foreground placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   />
@@ -554,7 +565,10 @@ export function PromotionModal({
                   onChange={(e) => setPromoActive(e.target.checked)}
                   className="h-4 w-4 rounded border-border text-gold focus:ring-gold"
                 />
-                <label htmlFor="promoActiveModal" className="text-xs font-semibold text-foreground cursor-pointer">
+                <label
+                  htmlFor="promoActiveModal"
+                  className="text-xs font-semibold text-foreground cursor-pointer"
+                >
                   Promoção Ativa e Visível no Cardápio
                 </label>
               </div>
@@ -567,9 +581,7 @@ export function PromotionModal({
                 type={promoType}
                 discountValue={promoDiscountValue}
                 rewardDiscountPercent={promoRewardDiscountPercent}
-                rewardItemName={
-                  menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"
-                }
+                rewardItemName={menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}
               />
             </div>
           </div>
@@ -596,4 +608,3 @@ export function PromotionModal({
     </div>
   );
 }
-

@@ -31,11 +31,10 @@ const createPromoSchema = z.object({
 });
 
 // 1. Consulta pública para cardápio e vitrine
-export const getPublicPromotions = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { listPublicPromotionsFromDb } = await import("./promotions.server");
-    return listPublicPromotionsFromDb();
-  });
+export const getPublicPromotions = createServerFn({ method: "GET" }).handler(async () => {
+  const { listPublicPromotionsFromDb } = await import("./promotions.server");
+  return listPublicPromotionsFromDb();
+});
 
 // 2. Consulta administrativa (Apenas Admin)
 export const getAdminPromotions = createServerFn({ method: "GET" })
@@ -59,10 +58,12 @@ export const createPromotionFn = createServerFn({ method: "POST" })
 export const updatePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
   .validator((raw: unknown) =>
-    z.object({
-      id: z.string(),
-      data: createPromoSchema.partial(),
-    }).parse(raw)
+    z
+      .object({
+        id: z.string(),
+        data: createPromoSchema.partial(),
+      })
+      .parse(raw),
   )
   .handler(async ({ data }) => {
     const { updatePromotionInDb } = await import("./promotions.server");
@@ -74,10 +75,12 @@ export const updatePromotionFn = createServerFn({ method: "POST" })
 export const togglePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
   .validator((raw: unknown) =>
-    z.object({
-      id: z.string(),
-      active: z.boolean(),
-    }).parse(raw)
+    z
+      .object({
+        id: z.string(),
+        active: z.boolean(),
+      })
+      .parse(raw),
   )
   .handler(async ({ data }) => {
     const { togglePromotionInDb } = await import("./promotions.server");

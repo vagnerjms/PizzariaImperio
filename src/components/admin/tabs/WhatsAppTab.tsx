@@ -97,7 +97,8 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
     }
   };
 
-  const instanceName = (statusRes as { instanceName?: string } | undefined)?.instanceName || "Disparo";
+  const instanceName =
+    (statusRes as { instanceName?: string } | undefined)?.instanceName || "Disparo";
 
   return (
     <div className="mx-auto max-w-lg">
@@ -109,7 +110,10 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
           <div>
             <h2 className="font-serif text-lg leading-tight">Configurações do WhatsApp</h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-              Instância: <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground font-semibold">{instanceName}</span>
+              Instância:{" "}
+              <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground font-semibold">
+                {instanceName}
+              </span>
             </p>
           </div>
         </header>
@@ -186,7 +190,8 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
             {!qrCode ? (
               <div className="space-y-4 text-center">
                 <p className="text-xs text-muted-foreground leading-relaxed px-4">
-                  Para ativar os disparos, clique no botão abaixo para gerar o QR Code e escaneie com seu celular no WhatsApp.
+                  Para ativar os disparos, clique no botão abaixo para gerar o QR Code e escaneie
+                  com seu celular no WhatsApp.
                 </p>
                 <button
                   type="button"
@@ -207,13 +212,21 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
             ) : (
               <div className="space-y-5 text-center">
                 <div className="mx-auto rounded-2xl border border-border bg-white p-4 shadow-sm inline-block">
-                  <img src={qrCode} alt="Escanear QR Code" className="mx-auto" style={{ maxWidth: '240px' }} />
+                  <img
+                    src={qrCode}
+                    alt="Escanear QR Code"
+                    className="mx-auto"
+                    style={{ maxWidth: "240px" }}
+                  />
                 </div>
-                
+
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-foreground">Aguardando leitura do celular...</p>
+                  <p className="text-xs font-semibold text-foreground">
+                    Aguardando leitura do celular...
+                  </p>
                   <p className="text-[11px] text-muted-foreground leading-relaxed px-6">
-                    Abra o WhatsApp no seu celular, acesse <strong>Aparelhos conectados</strong>, clique em <strong>Conectar um aparelho</strong> e aponte a câmera.
+                    Abra o WhatsApp no seu celular, acesse <strong>Aparelhos conectados</strong>,
+                    clique em <strong>Conectar um aparelho</strong> e aponte a câmera.
                   </p>
                 </div>
 
@@ -255,7 +268,10 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed px-2 text-center">
-              Verifique se o container da <strong>Evolution API</strong> está rodando corretamente na VPS e se as credenciais no arquivo <code className="bg-secondary px-1 py-0.5 rounded font-semibold">.env</code> estão corretas.
+              Verifique se o container da <strong>Evolution API</strong> está rodando corretamente
+              na VPS e se as credenciais no arquivo{" "}
+              <code className="bg-secondary px-1 py-0.5 rounded font-semibold">.env</code> estão
+              corretas.
             </p>
 
             <button

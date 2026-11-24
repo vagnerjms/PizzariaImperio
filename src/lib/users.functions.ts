@@ -100,7 +100,7 @@ export const updateUserRole = createServerFn({ method: "POST" })
       const adminCount = await usersCol.countDocuments({ roles: "admin" });
       if (adminCount <= 1) {
         throw new Error(
-          "Operação bloqueada: não é permitido rebaixar o único Administrador ativo do sistema."
+          "Operação bloqueada: não é permitido rebaixar o único Administrador ativo do sistema.",
         );
       }
     }
@@ -171,7 +171,7 @@ export const deleteUser = createServerFn({ method: "POST" })
       const adminCount = await usersCol.countDocuments({ roles: "admin" });
       if (adminCount <= 1) {
         throw new Error(
-          "Operação bloqueada: não é permitido excluir o único Administrador ativo do sistema."
+          "Operação bloqueada: não é permitido excluir o único Administrador ativo do sistema.",
         );
       }
     }

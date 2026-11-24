@@ -37,15 +37,13 @@ export function generateStaticPix(
   name: string,
   city: string,
   amount: number,
-  txid = "PIZZARIA"
+  txid = "PIZZARIA",
 ): string {
   const cleanKey = key.trim();
   const cleanName = name.slice(0, 25).trim();
   const cleanCity = city.slice(0, 15).trim();
 
-  const merchantAccountInfo =
-    formatField("00", "br.gov.bcb.pix") +
-    formatField("01", cleanKey);
+  const merchantAccountInfo = formatField("00", "br.gov.bcb.pix") + formatField("01", cleanKey);
 
   const payload = [
     formatField("00", "01"),
@@ -62,4 +60,3 @@ export function generateStaticPix(
 
   return payload + calculateCrc16(payload);
 }
-

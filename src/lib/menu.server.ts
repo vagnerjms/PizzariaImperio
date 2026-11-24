@@ -289,7 +289,7 @@ export async function upsertMenuItemInDb(input: {
           sort_order: nextSort,
           updated_at: now,
         },
-      }
+      },
     );
 
     return {
@@ -366,7 +366,8 @@ export async function upsertMenuOverrideInDb(input: {
   const updateFields: Record<string, unknown> = {
     updated_at: new Date(),
   };
-  if (input.isAdmin && input.price !== undefined) updateFields.price = Number(input.price.toFixed(2));
+  if (input.isAdmin && input.price !== undefined)
+    updateFields.price = Number(input.price.toFixed(2));
   if (input.available !== undefined) updateFields.available = input.available;
   if (input.isAdmin && input.badge !== undefined) updateFields.badge = input.badge;
 
@@ -405,7 +406,7 @@ export async function upsertCrustOptionInDb(input: {
           sort_order: nextSort,
           updated_at: now,
         },
-      }
+      },
     );
     return {
       id: input.id,

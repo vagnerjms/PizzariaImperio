@@ -10,10 +10,7 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        -1840,
-        16
-      ],
+      "position": [-1840, 16],
       "id": "a734cb72-ac09-4232-b5c8-94e1702b2341",
       "name": "Webhook",
       "webhookId": "26a5e790-8c3d-4b4c-9599-69619248bde1"
@@ -42,10 +39,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -1056,
-        -192
-      ],
+      "position": [-1056, -192],
       "id": "29e7d916-cadf-4656-afc1-203a41926836",
       "name": "HTTP Request"
     },
@@ -133,10 +127,7 @@
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
-      "position": [
-        -1536,
-        0
-      ],
+      "position": [-1536, 0],
       "id": "6d591999-0a7a-460f-8fde-97f33783e53b",
       "name": "Switch"
     },
@@ -164,10 +155,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -1056,
-        16
-      ],
+      "position": [-1056, 16],
       "id": "d802b112-6ef3-4c1d-b327-1371c2fd5837",
       "name": "HTTP Request1"
     },
@@ -195,10 +183,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [
-        -1056,
-        208
-      ],
+      "position": [-1056, 208],
       "id": "156cf9db-52fd-4dca-8f5d-a4fa95cac6ea",
       "name": "HTTP Request2"
     }

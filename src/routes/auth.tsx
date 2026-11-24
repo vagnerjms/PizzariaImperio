@@ -6,10 +6,7 @@ import { Flame } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
-    meta: [
-      { title: "Painel — Pizzaria Império" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "Painel — Pizzaria Império" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: AuthPage,
 });
@@ -40,11 +37,11 @@ function AuthPage() {
     try {
       const res = await login({ data: { email: cleanEmail, password: cleanPassword } });
       setLoading(false);
-      
+
       // Save token in cookie (for SSR/headers) and localStorage (for client-side SPA)
       document.cookie = `auth_token=${res.token}; path=/; max-age=604800; SameSite=Lax`;
       localStorage.setItem("auth_token", res.token);
-      
+
       navigate({ to: "/admin" });
     } catch (err: any) {
       setLoading(false);
@@ -55,7 +52,10 @@ function AuthPage() {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <Link to="/" className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-gold transition">
+        <Link
+          to="/"
+          className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-gold transition"
+        >
           <Flame className="h-4 w-4 text-gold" />
           Pizzaria Império
         </Link>

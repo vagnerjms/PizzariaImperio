@@ -27,7 +27,7 @@ export function useCustomerProfile() {
       const saved = JSON.parse(raw);
       if (saved && typeof saved === "object") {
         const validIdentity = Boolean(
-          saved.name && saved.phone && String(saved.phone).replace(/\D/g, "").length >= 10
+          saved.name && saved.phone && String(saved.phone).replace(/\D/g, "").length >= 10,
         );
         const validAddress = Boolean(saved.rua && saved.numero && saved.bairro);
         setHasSavedIdentity(validIdentity);
@@ -77,4 +77,3 @@ export function useCustomerProfile() {
     saveProfile,
   };
 }
-

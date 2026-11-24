@@ -8,7 +8,7 @@ const N8N_TIMEOUT_MS = 8000;
 export function dispatchN8nEvent(
   webhookUrl: string | null | undefined,
   event: N8nOrderEvent,
-  order: Record<string, unknown>
+  order: Record<string, unknown>,
 ): void {
   if (!webhookUrl) return;
 
@@ -25,7 +25,7 @@ export function dispatchN8nEvent(
       if (!res.ok) {
         console.error(
           `[n8n Error] ${event} returned HTTP ${res.status} (Order: ${orderId}):`,
-          await res.text()
+          await res.text(),
         );
       } else {
         console.log(`[n8n Success] ${event} delivered for order ${orderId}.`);

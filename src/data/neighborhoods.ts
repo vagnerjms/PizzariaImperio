@@ -102,4 +102,3 @@ export const BRAGANCA_PAULISTA_NEIGHBORHOODS: string[] = [
   "Vargem",
   "Vista Alegre",
 ];
-

@@ -15,7 +15,7 @@ export const loginFn = createServerFn({ method: "POST" })
 
     const usersCol = await getUsersCollection();
     const user = await usersCol.findOne({ email: data.email });
-    
+
     if (!user) {
       throw new Error("Usuário ou senha incorretos.");
     }
@@ -25,8 +25,7 @@ export const loginFn = createServerFn({ method: "POST" })
       throw new Error("Usuário ou senha incorretos.");
     }
 
-    const roles: string[] =
-      Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : [];
+    const roles: string[] = Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : [];
 
     if (roles.length === 0) {
       throw new Error("Conta sem permissões atribuídas. Contate o administrador.");
@@ -45,13 +44,12 @@ export const loginFn = createServerFn({ method: "POST" })
     };
   });
 
-export const getCurrentUserFn = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { getRequest } = await import("@tanstack/react-start/server");
-    const { extractAuthTokenFromRequest } = await import("./auth-middleware");
-    const token = extractAuthTokenFromRequest(getRequest());
-    if (!token) return null;
+export const getCurrentUserFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getRequest } = await import("@tanstack/react-start/server");
+  const { extractAuthTokenFromRequest } = await import("./auth-middleware");
+  const token = extractAuthTokenFromRequest(getRequest());
+  if (!token) return null;
 
-    const { verifyToken } = await import("./jwt");
-    return verifyToken(token);
-  });
+  const { verifyToken } = await import("./jwt");
+  return verifyToken(token);
+});

@@ -13,12 +13,29 @@ export interface LocationResult {
 }
 
 const COMMON_HEADERS = {
-  "Accept": "application/json",
-  "Referer": "https://imperio.embraganca.com.br/",
+  Accept: "application/json",
+  Referer: "https://imperio.embraganca.com.br/",
   "User-Agent": "PizzariaImperioApp/2.0 (contato@embraganca.com.br)",
 };
 
-const STOP_WORDS = new Set(["rua", "r", "av", "avenida", "alameda", "pca", "praca", "travessa", "estrada", "bairro", "de", "da", "do", "das", "dos", "e"]);
+const STOP_WORDS = new Set([
+  "rua",
+  "r",
+  "av",
+  "avenida",
+  "alameda",
+  "pca",
+  "praca",
+  "travessa",
+  "estrada",
+  "bairro",
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "e",
+]);
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
 const MAX_CACHE_ENTRIES = 500;
@@ -28,7 +45,10 @@ const MAX_RATE_LIMIT_IPS = 2000;
 
 class LruTtlCache<T> {
   private map = new Map<string, { data: T; timestamp: number }>();
-  constructor(private readonly maxEntries: number, private readonly ttlMs: number) {}
+  constructor(
+    private readonly maxEntries: number,
+    private readonly ttlMs: number,
+  ) {}
 
   get(key: string): T | undefined {
     const entry = this.map.get(key);
@@ -62,17 +82,16 @@ async function enforceLocationRateLimit(): Promise<void> {
   const { getRequest } = await import("@tanstack/react-start/server");
   const req = getRequest();
   const forwarded = req?.headers.get("x-forwarded-for") || "";
-  const ip =
-    forwarded.split(",")[0]?.trim() ||
-    req?.headers.get("x-real-ip")?.trim() ||
-    "unknown";
+  const ip = forwarded.split(",")[0]?.trim() || req?.headers.get("x-real-ip")?.trim() || "unknown";
 
   const now = Date.now();
   const cutoff = now - RATE_LIMIT_WINDOW_MS;
   const recent = (rateLimitBuckets.get(ip) || []).filter((ts) => ts > cutoff);
 
   if (recent.length >= RATE_LIMIT_MAX_REQ) {
-    throw new Error("Muitas buscas de endereço em sequência. Aguarde alguns segundos e tente novamente.");
+    throw new Error(
+      "Muitas buscas de endereço em sequência. Aguarde alguns segundos e tente novamente.",
+    );
   }
 
   recent.push(now);
@@ -94,7 +113,7 @@ function getSignificantWords(text: string): string[] {
 function matchesSignificantQuery(streetName: string, queryWords: string[]): boolean {
   if (queryWords.length === 0) return true;
   const cleanStreet = cleanString(streetName);
-  
+
   const firstSignificant = queryWords[0];
   if (firstSignificant && firstSignificant.length >= 3) {
     if (!cleanStreet.includes(firstSignificant)) {
@@ -112,10 +131,12 @@ function matchesSignificantQuery(streetName: string, queryWords: string[]): bool
  */
 export const reverseGeocodeGPS = createServerFn({ method: "POST" })
   .validator((raw: unknown) =>
-    z.object({
-      lat: z.number(),
-      lon: z.number(),
-    }).parse(raw)
+    z
+      .object({
+        lat: z.number(),
+        lon: z.number(),
+      })
+      .parse(raw),
   )
   .handler(async ({ data }): Promise<LocationResult | null> => {
     await enforceLocationRateLimit();
@@ -158,13 +179,24 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
         const json = await res.json();
         if (json && json.address) {
           const addr = json.address;
-          const rua = addr.road || addr.street || addr.pedestrian || addr.footway || addr.suburb || "";
+          const rua =
+            addr.road || addr.street || addr.pedestrian || addr.footway || addr.suburb || "";
           const numero = addr.house_number || "";
-          const bairro = addr.suburb || addr.neighbourhood || addr.residential || addr.city_district || addr.quarter || "";
-          const cidade = addr.city || addr.town || addr.municipality || addr.village || "Bragança Paulista";
+          const bairro =
+            addr.suburb ||
+            addr.neighbourhood ||
+            addr.residential ||
+            addr.city_district ||
+            addr.quarter ||
+            "";
+          const cidade =
+            addr.city || addr.town || addr.municipality || addr.village || "Bragança Paulista";
           const uf = addr.state_code || (addr.state === "São Paulo" ? "SP" : addr.state) || "SP";
           const rawCep = (addr.postcode || "").replace(/\D/g, "");
-          const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : (rawCep || "12900-000");
+          const formattedCep =
+            rawCep.length === 8
+              ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}`
+              : rawCep || "12900-000";
 
           if (rua || bairro) {
             result = {
@@ -202,7 +234,8 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
             const cidade = props.city || "Bragança Paulista";
             const uf = props.state || "SP";
             const rawCep = (props.postcode || "").replace(/\D/g, "");
-            const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
+            const formattedCep =
+              rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
 
             result = {
               rua,
@@ -235,7 +268,11 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
           });
           if (res.ok) {
             const dataGoogle = await res.json();
-            if (dataGoogle.status === "OK" && Array.isArray(dataGoogle.results) && dataGoogle.results.length > 0) {
+            if (
+              dataGoogle.status === "OK" &&
+              Array.isArray(dataGoogle.results) &&
+              dataGoogle.results.length > 0
+            ) {
               const r = dataGoogle.results[0];
               let rua = "";
               let numero = "";
@@ -250,7 +287,11 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
                   rua = comp.long_name;
                 } else if (types.includes("street_number")) {
                   numero = comp.long_name;
-                } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
+                } else if (
+                  types.includes("sublocality_level_1") ||
+                  types.includes("sublocality") ||
+                  types.includes("neighborhood")
+                ) {
                   bairro = comp.long_name;
                 } else if (types.includes("administrative_area_level_2")) {
                   cidade = comp.long_name;
@@ -287,11 +328,13 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       try {
         const { getDb } = await import("./db");
         const db = await getDb();
-        await db.collection("address_cache").updateOne(
-          { _id: gpsCacheKey as any },
-          { $set: { data: result, updated_at: new Date() } },
-          { upsert: true }
-        );
+        await db
+          .collection("address_cache")
+          .updateOne(
+            { _id: gpsCacheKey as any },
+            { $set: { data: result, updated_at: new Date() } },
+            { upsert: true },
+          );
       } catch (e) {
         console.warn("[GPS Cache Save Warning]:", e);
       }
@@ -305,9 +348,11 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
  */
 export const searchStreetAddress = createServerFn({ method: "POST" })
   .validator((raw: unknown) =>
-    z.object({
-      query: z.string().trim().min(3),
-    }).parse(raw)
+    z
+      .object({
+        query: z.string().trim().min(3),
+      })
+      .parse(raw),
   )
   .handler(async ({ data }): Promise<LocationResult[]> => {
     await enforceLocationRateLimit();
@@ -395,9 +440,14 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
             const bairro = props.district || props.locality || props.suburb || "Bragança Paulista";
             const cidade = props.city || "Bragança Paulista";
 
-            if (rua && matchesSignificantQuery(rua, queryWords) && (cidade.toLowerCase().includes("bragan") || props.state?.includes("SP"))) {
+            if (
+              rua &&
+              matchesSignificantQuery(rua, queryWords) &&
+              (cidade.toLowerCase().includes("bragan") || props.state?.includes("SP"))
+            ) {
               const rawCep = (props.postcode || "").replace(/\D/g, "");
-              const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
+              const formattedCep =
+                rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
               addResult({
                 rua,
                 numero: props.housenumber || "",
@@ -432,9 +482,15 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
             for (const item of osmList) {
               const addr = item.address || {};
               const rua = addr.road || addr.street || addr.pedestrian || item.name || "";
-              const bairro = addr.suburb || addr.neighbourhood || addr.residential || addr.city_district || "Bragança Paulista";
+              const bairro =
+                addr.suburb ||
+                addr.neighbourhood ||
+                addr.residential ||
+                addr.city_district ||
+                "Bragança Paulista";
               const rawCep = (addr.postcode || "").replace(/\D/g, "");
-              const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
+              const formattedCep =
+                rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5, 8)}` : "12900-000";
 
               if (rua && matchesSignificantQuery(rua, queryWords)) {
                 addResult({
@@ -462,7 +518,8 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       try {
         const { getDeliverySettings } = await import("./delivery-config.server");
         const deliverySettings = await getDeliverySettings();
-        const neighborhoods: Array<{ name: string; fee: number }> = deliverySettings.neighborhoods || [];
+        const neighborhoods: Array<{ name: string; fee: number }> =
+          deliverySettings.neighborhoods || [];
 
         const queryClean = cleanString(cleanQuery);
         const matchedNeighborhoods = neighborhoods.filter((n) => {
@@ -478,7 +535,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
             cidade: "Bragança Paulista",
             uf: "SP",
             cep: "12900-000",
-            formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa: R$ ${n.fee.toFixed(2).replace('.', ',')})`,
+            formattedAddress: `Bairro ${n.name} - Bragança Paulista, SP (Taxa: R$ ${n.fee.toFixed(2).replace(".", ",")})`,
           });
         }
       } catch (err) {
@@ -496,8 +553,10 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
         const settings = await getSystemSettings();
         const apiKey = settings.google_maps_api_key;
         if (apiKey) {
-          console.log(`[Google Maps Failover] Acionando Google Geocoding API para "${cleanQuery}"...`);
-          
+          console.log(
+            `[Google Maps Failover] Acionando Google Geocoding API para "${cleanQuery}"...`,
+          );
+
           const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ", Bragança Paulista, SP, Brasil")}&key=${apiKey}&language=pt-BR&region=br`;
           const res = await fetch(googleUrl, {
             headers: COMMON_HEADERS,
@@ -521,7 +580,11 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
                     rua = comp.long_name;
                   } else if (types.includes("street_number")) {
                     numero = comp.long_name;
-                  } else if (types.includes("sublocality_level_1") || types.includes("sublocality") || types.includes("neighborhood")) {
+                  } else if (
+                    types.includes("sublocality_level_1") ||
+                    types.includes("sublocality") ||
+                    types.includes("neighborhood")
+                  ) {
                     bairro = comp.long_name;
                   } else if (types.includes("administrative_area_level_2")) {
                     cidade = comp.long_name;
@@ -548,7 +611,11 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
                 }
               }
             } else if (dataGoogle.status !== "OK") {
-              console.warn("[Google Maps API Status Warning]:", dataGoogle.status, dataGoogle.error_message);
+              console.warn(
+                "[Google Maps API Status Warning]:",
+                dataGoogle.status,
+                dataGoogle.error_message,
+              );
             }
           }
         }
@@ -563,11 +630,13 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       try {
         const { getDb } = await import("./db");
         const db = await getDb();
-        await db.collection("address_cache").updateOne(
-          { _id: cacheKey as any },
-          { $set: { results, query: cleanQuery, updated_at: new Date() } },
-          { upsert: true }
-        );
+        await db
+          .collection("address_cache")
+          .updateOne(
+            { _id: cacheKey as any },
+            { $set: { results, query: cleanQuery, updated_at: new Date() } },
+            { upsert: true },
+          );
       } catch (e) {
         console.warn("[Address Cache Save Warning]:", e);
       }

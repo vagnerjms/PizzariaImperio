@@ -57,3 +57,33 @@ export function formatDateBR(dateStr: string | null | undefined): string {
   }
 }
 
+export const PIZZA_CATEGORIES = new Set<string>([
+  "tradicionais",
+  "especiais",
+  "doces",
+  "doces-especiais",
+]);
+
+/**
+ * Indica se a categoria corresponde a uma pizza de 8 fatias (elegível a borda e meio a meio).
+ */
+export function isPizzaCategory(category: string | null | undefined): boolean {
+  return Boolean(category && PIZZA_CATEGORIES.has(category));
+}
+
+/**
+ * Remove caracteres de controle ASCII (0x00-0x1F, 0x7F) sem usar regex de controle,
+ * aplica limite máximo opcional e faz trim.
+ */
+export function sanitizeText(str: string, max?: number): string {
+  if (!str) return "";
+  let cleaned = "";
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code >= 32 && code !== 127) {
+      cleaned += str[i];
+    }
+  }
+  const sliced = typeof max === "number" ? cleaned.slice(0, max) : cleaned;
+  return sliced.trim();
+}

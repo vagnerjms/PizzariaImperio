@@ -11,16 +11,16 @@ export interface NeighborhoodFeeItem {
 export function matchDeliveryFee(
   neighborhood: string,
   neighborhoods?: NeighborhoodFeeItem[],
-  defaultFee = 7.00
+  defaultFee = 7.0,
 ): number {
   if (!neighborhood) return defaultFee;
   const cleanTarget = cleanString(neighborhood);
 
   if (neighborhoods && neighborhoods.length > 0) {
-    const exact = neighborhoods.find(n => cleanString(n.name) === cleanTarget);
+    const exact = neighborhoods.find((n) => cleanString(n.name) === cleanTarget);
     if (exact) return exact.fee;
 
-    const partial = neighborhoods.find(n => {
+    const partial = neighborhoods.find((n) => {
       const cleanName = cleanString(n.name);
       return cleanTarget.includes(cleanName) || cleanName.includes(cleanTarget);
     });
@@ -35,7 +35,7 @@ export function matchDeliveryFee(
 export function getDeliveryFeeForNeighborhood(
   neighborhood: string,
   neighborhoods?: NeighborhoodFeeItem[],
-  defaultFee = 7.00
+  defaultFee = 7.0,
 ): number {
   return matchDeliveryFee(neighborhood, neighborhoods, defaultFee);
 }

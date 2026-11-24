@@ -49,7 +49,7 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
         if (!createRes.ok) {
           console.error(
             `Falha ao criar instância '${instanceName}' na Evolution API:`,
-            await createRes.text()
+            await createRes.text(),
           );
           return { status: "close" as const, instanceName, message: "Instância não criada" };
         }

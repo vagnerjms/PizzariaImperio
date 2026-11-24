@@ -90,9 +90,7 @@ export function CheckoutIdentityStep({
         <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-xl font-bold text-foreground">
-                Confirme seus dados
-              </h3>
+              <h3 className="font-serif text-xl font-bold text-foreground">Confirme seus dados</h3>
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
                 <ShieldCheck className="h-3 w-3" /> Seguro
               </span>

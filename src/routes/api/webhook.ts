@@ -38,7 +38,7 @@ export const Route = createFileRoute("/api/webhook")({
                 xSignature.split(",").map((kv) => {
                   const [k, v] = kv.trim().split("=");
                   return [k, v];
-                })
+                }),
               );
               const ts = parts.ts;
               const v1 = parts.v1;
@@ -66,7 +66,7 @@ export const Route = createFileRoute("/api/webhook")({
               }
             } else if (process.env.NODE_ENV === "production") {
               console.warn(
-                "[Webhook Security Warning] MERCADO_PAGO_WEBHOOK_SECRET is not set in production; relying solely on Mercado Pago API verification."
+                "[Webhook Security Warning] MERCADO_PAGO_WEBHOOK_SECRET is not set in production; relying solely on Mercado Pago API verification.",
               );
             }
 
@@ -88,13 +88,13 @@ export const Route = createFileRoute("/api/webhook")({
                   Authorization: `Bearer ${accessToken}`,
                 },
                 signal: AbortSignal.timeout(5000),
-              }
+              },
             );
 
             if (!response.ok) {
               console.error(
                 `Failed to verify payment ${paymentId} with Mercado Pago:`,
-                await response.text()
+                await response.text(),
               );
               return new Response("Failed to fetch payment details", { status: 400 });
             }
@@ -104,7 +104,7 @@ export const Route = createFileRoute("/api/webhook")({
             const status = paymentData.status;
 
             console.log(
-              `Payment ${paymentId} verified with status '${status}' for order ${orderId}`
+              `Payment ${paymentId} verified with status '${status}' for order ${orderId}`,
             );
 
             if (orderId) {
@@ -135,7 +135,7 @@ export const Route = createFileRoute("/api/webhook")({
                       updated_at: new Date(),
                     },
                   },
-                  { returnDocument: "after" }
+                  { returnDocument: "after" },
                 );
 
                 if (!paidOrderDoc) {
@@ -145,7 +145,7 @@ export const Route = createFileRoute("/api/webhook")({
                     return new Response("Order not found", { status: 404 });
                   }
                   console.log(
-                    `Order ${orderId} was already paid, skipping duplicate n8n notification.`
+                    `Order ${orderId} was already paid, skipping duplicate n8n notification.`,
                   );
                 } else {
                   console.log(`Order ${orderId} successfully transitioned to payment_status: paid`);
@@ -159,7 +159,7 @@ export const Route = createFileRoute("/api/webhook")({
                       gateway_payment_id: String(paymentId),
                       updated_at: new Date(),
                     },
-                  }
+                  },
                 );
                 console.log(`Order ${orderId} updated to payment_status: refunded`);
               } else {
@@ -172,11 +172,11 @@ export const Route = createFileRoute("/api/webhook")({
                       gateway_payment_id: String(paymentId),
                       updated_at: new Date(),
                     },
-                  }
+                  },
                 );
                 if (res.matchedCount === 0) {
                   console.log(
-                    `Skipped non-paid webhook (${mappedStatus}) for already-settled or missing order ${orderId}.`
+                    `Skipped non-paid webhook (${mappedStatus}) for already-settled or missing order ${orderId}.`,
                   );
                 } else {
                   console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);

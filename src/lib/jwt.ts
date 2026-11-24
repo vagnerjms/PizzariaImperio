@@ -11,7 +11,11 @@ function getJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secretKey);
 }
 
-export async function signToken(payload: { userId: string; email: string; roles: string[] }): Promise<string> {
+export async function signToken(payload: {
+  userId: string;
+  email: string;
+  roles: string[];
+}): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

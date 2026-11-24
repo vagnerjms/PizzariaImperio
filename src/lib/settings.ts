@@ -24,7 +24,10 @@ const openingHoursSchema = z.object({
 const optionalUrlSchema = z
   .string()
   .trim()
-  .refine((v) => v === "" || /^https?:\/\/.+/.test(v), "Informe uma URL válida ou deixe em branco.");
+  .refine(
+    (v) => v === "" || /^https?:\/\/.+/.test(v),
+    "Informe uma URL válida ou deixe em branco.",
+  );
 
 const updateSettingsSchema = z.object({
   evolution_api_url: optionalUrlSchema.optional(),
@@ -63,7 +66,7 @@ const updateSettingsSchema = z.object({
     .trim()
     .refine(
       (v) => v === "" || isValidGa4MeasurementId(v),
-      "GA4 Measurement ID deve começar com G- (ex: G-XXXXXXXXXX)."
+      "GA4 Measurement ID deve começar com G- (ex: G-XXXXXXXXXX).",
     )
     .optional(),
 });
@@ -93,10 +96,7 @@ export const updateAdminSettings = createServerFn({ method: "POST" })
     ) {
       throw new Error("Mantenha ao menos uma forma de pagamento ativa.");
     }
-    if (
-      data.enabled_delivery_modes &&
-      !Object.values(data.enabled_delivery_modes).some(Boolean)
-    ) {
+    if (data.enabled_delivery_modes && !Object.values(data.enabled_delivery_modes).some(Boolean)) {
       throw new Error("Mantenha ao menos uma modalidade de atendimento ativa.");
     }
     const { saveSystemSettings } = await import("./settings.server");
@@ -114,9 +114,8 @@ export const toggleStorePause = createServerFn({ method: "POST" })
   .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => toggleStorePauseSchema.parse(raw))
   .handler(async ({ data }) => {
-    const { saveSystemSettings, getSystemSettings, getPublicStoreConfigFromSettings } = await import(
-      "./settings.server"
-    );
+    const { saveSystemSettings, getSystemSettings, getPublicStoreConfigFromSettings } =
+      await import("./settings.server");
     await saveSystemSettings({
       store_status_override: data.store_status_override,
       pause_reason: data.pause_reason ?? "",
