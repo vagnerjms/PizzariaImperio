@@ -4,7 +4,9 @@ import { requireAuth } from "./auth-middleware";
 import {
   CatalogCrustOption,
   CatalogMenuItem,
+  normalizeImageForStorage,
   PublicCatalogResponse,
+  resolveMenuImage,
   slugifyCatalogId,
 } from "./menu-domain";
 
@@ -98,7 +100,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
       if (!existing) throw new Error("Item do cardápio não encontrado.");
 
       const nextSort = data.sort_order !== undefined ? data.sort_order : existing.sort_order;
-      const nextImage = data.image || existing.image;
+      const storedImage = normalizeImageForStorage(data.image || existing.image);
 
       await col.updateOne(
         { _id: data.id },
@@ -110,7 +112,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
             desc: cleanDesc,
             price: cleanPrice,
             badge: cleanBadge,
-            image: nextImage,
+            image: storedImage,
             available: data.available,
             sort_order: nextSort,
             updated_at: now,
@@ -124,7 +126,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
         desc: cleanDesc,
         ingredients: data.ingredients,
         price: cleanPrice,
-        image: nextImage,
+        image: resolveMenuImage(storedImage, data.id),
         badge: cleanBadge || undefined,
         category: data.category,
         available: data.available,
@@ -141,6 +143,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
 
     const count = await col.estimatedDocumentCount();
     const sortOrder = data.sort_order !== undefined ? data.sort_order : count + 1;
+    const storedImage = normalizeImageForStorage(data.image);
 
     await col.insertOne({
       _id: candidateId,
@@ -148,7 +151,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
       desc: cleanDesc,
       ingredients: data.ingredients,
       price: cleanPrice,
-      image: data.image || "",
+      image: storedImage,
       badge: cleanBadge,
       category: data.category,
       available: data.available,
@@ -163,7 +166,7 @@ export const saveMenuItem = createServerFn({ method: "POST" })
       desc: cleanDesc,
       ingredients: data.ingredients,
       price: cleanPrice,
-      image: data.image || "",
+      image: resolveMenuImage(storedImage, candidateId),
       badge: cleanBadge || undefined,
       category: data.category,
       available: data.available,

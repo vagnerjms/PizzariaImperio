@@ -236,6 +236,24 @@ describe("Dynamic Catalog Seed Migration & Tracking Pixels (Pacote 3)", () => {
     );
   });
 
+  test("normalizes image keys for DB storage and heals raw filesystem paths cleanly", () => {
+    const { normalizeImageForStorage, resolveMenuImage } = require("../menu-domain");
+    const { MENU_IMAGES } = require("@/data/catalog");
+    assert.equal(
+      normalizeImageForStorage("/home/antigravity/PizzariaImperio/src/assets/menu/vegetariana.jpg"),
+      "vegetariana",
+    );
+    assert.equal(
+      normalizeImageForStorage("https://cdn.example.com/pizza.jpg"),
+      "https://cdn.example.com/pizza.jpg",
+    );
+
+    const healed = resolveMenuImage("/home/other-machine/src/assets/menu/calabresa.jpg");
+    assert.equal(healed, MENU_IMAGES.calabresa);
+    assert.equal(resolveMenuImage("vegetariana"), MENU_IMAGES.vegetariana);
+    assert.equal(resolveMenuImage("https://cdn.example.com/custom.png"), "https://cdn.example.com/custom.png");
+  });
+
   test("validates Meta Pixel and GA4 Measurement IDs strictly against injection", () => {
     assert.equal(isValidMetaPixelId("123456789012345"), true);
     assert.equal(isValidMetaPixelId("1234<script>"), false);

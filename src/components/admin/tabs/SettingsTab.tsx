@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert,
   Loader2,
@@ -47,6 +48,7 @@ export function SettingsTab({
   onTestPrint: () => void;
   onUpdatePrinterSetting: <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => void;
 }) {
+  const queryClient = useQueryClient();
   const fetchSettings = useServerFn(getAdminSettings);
   const saveSettings = useServerFn(updateAdminSettings);
 
@@ -132,6 +134,7 @@ export function SettingsTab({
     setSettingsErrorMsg(null);
     try {
       await saveSettings({ data: settingsForm });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "store-config"] });
       setSettingsSuccessMsg("Configurações salvas com sucesso!");
       setTimeout(() => setSettingsSuccessMsg(null), 4000);
     } catch (err) {
@@ -184,7 +187,6 @@ export function SettingsTab({
                   </label>
                   <input
                     type="text"
-                    required
                     value={settingsForm.evolution_api_url}
                     onChange={(e) => setSettingsForm((prev) => ({ ...prev, evolution_api_url: e.target.value }))}
                     className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
@@ -210,7 +212,6 @@ export function SettingsTab({
                 </label>
                 <input
                   type="password"
-                  required
                   value={settingsForm.evolution_api_key}
                   onChange={(e) => setSettingsForm((prev) => ({ ...prev, evolution_api_key: e.target.value }))}
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
@@ -229,7 +230,6 @@ export function SettingsTab({
                 </label>
                 <input
                   type="password"
-                  required
                   value={settingsForm.mercado_pago_access_token}
                   onChange={(e) => setSettingsForm((prev) => ({ ...prev, mercado_pago_access_token: e.target.value }))}
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
@@ -242,7 +242,6 @@ export function SettingsTab({
                 </label>
                 <input
                   type="text"
-                  required
                   value={settingsForm.mercado_pago_public_key}
                   onChange={(e) => setSettingsForm((prev) => ({ ...prev, mercado_pago_public_key: e.target.value }))}
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
@@ -261,7 +260,6 @@ export function SettingsTab({
                 </label>
                 <input
                   type="text"
-                  required
                   value={settingsForm.n8n_webhook_url}
                   onChange={(e) => setSettingsForm((prev) => ({ ...prev, n8n_webhook_url: e.target.value }))}
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"

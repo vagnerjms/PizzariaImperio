@@ -7,6 +7,7 @@ import {
   CatalogMenuItem,
   LegacyMenuOverride,
   PublicCatalogResponse,
+  resolveMenuImage,
 } from "./menu-domain";
 
 export interface MenuOverrideDoc extends LegacyMenuOverride {
@@ -48,7 +49,7 @@ function serializeMenuItem(doc: MenuItemDoc): CatalogMenuItem {
     desc: doc.desc || doc.ingredients || doc.name,
     ingredients: doc.ingredients || doc.desc || "",
     price: Number(Number(doc.price || 0).toFixed(2)),
-    image: doc.image || "",
+    image: resolveMenuImage(doc.image, doc._id),
     badge: doc.badge || undefined,
     category: doc.category,
     available: doc.available !== false,
@@ -180,7 +181,9 @@ export async function getFullCatalogFromDb(): Promise<PublicCatalogResponse> {
     ]);
 
     const items =
-      itemDocs.length > 0 ? itemDocs.map(serializeMenuItem) : buildInitialMenuSeed(MENU);
+      itemDocs.length > 0
+        ? itemDocs.map(serializeMenuItem)
+        : buildInitialMenuSeed(MENU).map((i) => ({ ...i, image: resolveMenuImage(i.image, i.id) }));
     const crusts =
       crustDocs.length > 0 ? crustDocs.map(serializeCrust) : buildInitialCrustSeed(CRUST_OPTIONS);
 
@@ -188,7 +191,10 @@ export async function getFullCatalogFromDb(): Promise<PublicCatalogResponse> {
   } catch (err) {
     console.error("Failed to load full catalog from DB, falling back to static catalog:", err);
     return {
-      items: buildInitialMenuSeed(MENU),
+      items: buildInitialMenuSeed(MENU).map((i) => ({
+        ...i,
+        image: resolveMenuImage(i.image, i.id),
+      })),
       crusts: buildInitialCrustSeed(CRUST_OPTIONS),
     };
   }

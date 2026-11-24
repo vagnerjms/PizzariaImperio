@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { CartItem, MENU_BY_ID } from "@/data/catalog";
 import {
   Promotion,
@@ -22,35 +22,37 @@ export function useCart(
   promotions: Promotion[],
   menuById: Record<string, MenuItemRef> = MENU_BY_ID
 ) {
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("imperio_cart_v2");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            return parsed.filter(
-              (i) => i && typeof i === "object" && i.pizzaId && typeof i.totalPrice === "number"
-            );
-          }
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const cartHydratedRef = useRef(false);
 
   const [cartOpen, setCartOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [couponCode, setCouponCode] = useState<string>("");
   const [couponError, setCouponError] = useState<string | null>(null);
 
-  // Persiste carrinho no localStorage
+  // Hidrata carrinho do localStorage após montagem no cliente (evita mismatch SSR React #418)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("imperio_cart_v2", JSON.stringify(cart));
-      } catch {}
-    }
+    try {
+      const saved = localStorage.getItem("imperio_cart_v2");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (i) => i && typeof i === "object" && i.pizzaId && typeof i.totalPrice === "number"
+          );
+          if (valid.length > 0) setCart(valid);
+        }
+      }
+    } catch {}
+    cartHydratedRef.current = true;
+  }, []);
+
+  // Persiste carrinho no localStorage após hidratação inicial
+  useEffect(() => {
+    if (!cartHydratedRef.current) return;
+    try {
+      localStorage.setItem("imperio_cart_v2", JSON.stringify(cart));
+    } catch {}
   }, [cart]);
 
   const cartCount = useMemo(() => {
