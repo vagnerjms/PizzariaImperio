@@ -46,7 +46,7 @@ export function normalizeImageForStorage(rawImage?: string | null): string {
   const val = (rawImage || "").trim();
   if (!val) return "calabresa";
   if (val in MENU_IMAGES) return val;
-  if (/^https?:\/\//i.test(val)) return val;
+  if (/^https?:\/\//i.test(val) || val.startsWith("/api/media/")) return val;
 
   // Match against current build's resolved MENU_IMAGES values
   for (const [key, resolved] of Object.entries(MENU_IMAGES)) {
@@ -68,7 +68,7 @@ export function normalizeImageForStorage(rawImage?: string | null): string {
  */
 export function resolveMenuImage(rawImage?: string | null, itemId?: string): string {
   const val = (rawImage || "").trim();
-  if (/^https?:\/\//i.test(val)) return val;
+  if (/^https?:\/\//i.test(val) || val.startsWith("/api/media/")) return val;
 
   if (val && val in MENU_IMAGES) {
     return MENU_IMAGES[val as MenuImageKey];

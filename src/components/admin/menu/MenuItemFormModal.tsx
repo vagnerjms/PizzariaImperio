@@ -1,6 +1,10 @@
-import { X } from "lucide-react";
+import { useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { ImagePlus, Link2, Loader2, Upload, X } from "lucide-react";
 import { CATEGORIES, Category } from "@/data/catalog";
 import { CatalogMenuItem } from "@/lib/menu-domain";
+import { uploadMenuItemImage } from "@/lib/menu.functions";
+import { compressImageFileToDataUrl } from "@/lib/image-upload";
 import { MENU_IMAGE_PRESETS } from "./menu-presets";
 
 const EDITABLE_CATEGORIES = CATEGORIES.filter((c) => c.id !== "todas");
@@ -30,6 +34,34 @@ export function MenuItemFormModal({
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
 }) {
+  const uploadImageFn = useServerFn(uploadMenuItemImage);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(() => /^https?:\/\//i.test(form.image || ""));
+
+  const isUploadedMedia = (form.image || "").startsWith("/api/media/");
+  const isExternalUrl = /^https?:\/\//i.test(form.image || "");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const dataUrl = await compressImageFileToDataUrl(file);
+      const res = await uploadImageFn({ data: { dataUrl } });
+      onChange((f) => ({ ...f, image: res.url }));
+      setShowUrlInput(false);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Erro ao enviar imagem.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div
       role="dialog"
@@ -121,16 +153,79 @@ export function MenuItemFormModal({
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted-foreground">
-            Imagem (escolha um modelo ou cole uma URL)
-          </label>
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-semibold text-muted-foreground">Imagem do Produto</label>
+            <button
+              type="button"
+              onClick={() => setShowUrlInput((v) => !v)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-gold transition"
+            >
+              <Link2 className="h-3 w-3" />
+              {showUrlInput ? "Ocultar URL" : "Usar URL externa"}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-background/60 p-2.5">
+            <div className="relative h-16 w-20 flex-none overflow-hidden rounded-lg border border-border bg-secondary flex items-center justify-center">
+              {form.image ? (
+                <img
+                  src={form.image}
+                  alt={form.name || "Pré-visualização"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ImagePlus className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                disabled={uploading || saving}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-full border border-gold/50 bg-gold/15 px-3.5 py-1.5 text-xs font-bold text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-50"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando foto...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-3.5 w-3.5" /> Enviar foto do dispositivo
+                  </>
+                )}
+              </button>
+              <p className="text-[11px] text-muted-foreground">
+                {isUploadedMedia
+                  ? "Foto personalizada enviada e salva no servidor."
+                  : "JPG, PNG ou WebP (otimizada automaticamente) ou escolha um modelo abaixo:"}
+              </p>
+            </div>
+          </div>
+
+          {uploadError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+              {uploadError}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-1.5">
             {MENU_IMAGE_PRESETS.map((preset) => (
               <button
                 key={preset.key}
                 type="button"
-                onClick={() => onChange((f) => ({ ...f, image: preset.src }))}
+                onClick={() => {
+                  setUploadError(null);
+                  onChange((f) => ({ ...f, image: preset.src }));
+                }}
                 className={`rounded-lg border px-2 py-1 text-[11px] transition ${
                   form.image === preset.src
                     ? "border-gold bg-gold/15 text-gold font-bold"
@@ -141,13 +236,16 @@ export function MenuItemFormModal({
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            value={form.image}
-            onChange={(e) => onChange((f) => ({ ...f, image: e.target.value }))}
-            placeholder="https://... ou caminho da imagem"
-            className="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-gold focus:outline-none"
-          />
+
+          {showUrlInput && (
+            <input
+              type="url"
+              value={isExternalUrl ? form.image : ""}
+              onChange={(e) => onChange((f) => ({ ...f, image: e.target.value }))}
+              placeholder="https://exemplo.com/foto-da-pizza.jpg"
+              className="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-gold focus:outline-none"
+            />
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
@@ -160,7 +258,7 @@ export function MenuItemFormModal({
           </button>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || uploading}
             className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground hover:brightness-110 disabled:opacity-50"
           >
             {saving ? "Salvando..." : editingItem ? "Salvar Alterações" : "Criar Item"}

@@ -41,6 +41,20 @@ export const saveMenuItem = createServerFn({ method: "POST" })
     return upsertMenuItemInDb(data);
   });
 
+export const uploadMenuItemImage = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((raw: unknown) =>
+    z
+      .object({
+        dataUrl: z.string().min(30, "Imagem inválida.").max(3_000_000, "Imagem muito grande."),
+      })
+      .parse(raw),
+  )
+  .handler(async ({ data }): Promise<{ id: string; url: string }> => {
+    const { saveMediaImageInDb } = await import("./media.server");
+    return saveMediaImageInDb(data.dataUrl);
+  });
+
 export const deleteMenuItem = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
   .validator((raw: unknown) => z.object({ id: z.string().min(1) }).parse(raw))
