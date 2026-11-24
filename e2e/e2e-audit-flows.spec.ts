@@ -93,6 +93,8 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await expect(page.locator("text=Atendente")).toBeVisible();
 
     // Abas administrativas NÃO devem existir para o Atendente
+    await expect(page.locator('button:has-text("Caixa")')).not.toBeVisible();
+    await expect(page.locator('button:has-text("Entregadores")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Cardápio")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Promoções")')).not.toBeVisible();
     await expect(page.locator('button:has-text("WhatsApp")')).not.toBeVisible();
@@ -101,7 +103,7 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await expect(page.locator('button:has-text("Taxas de Entrega")')).not.toBeVisible();
   });
 
-  test("Supervisor deve acessar Pedidos, Estoque, Operação (Hoje), WhatsApp e Taxas (consulta), sem Promoções/Usuários/Configurações", async ({
+  test("Supervisor deve acessar Pedidos, Caixa, Entregadores, Estoque, Operação (Hoje), WhatsApp e Taxas, sem Promoções/Usuários/Configurações", async ({
     page,
   }) => {
     await page.goto("http://localhost:3002/auth");
@@ -111,6 +113,8 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await page.click('button:has-text("Entrar")');
 
     await expect(page.locator("text=Supervisor")).toBeVisible();
+    await expect(page.locator('button:has-text("Caixa")')).toBeVisible();
+    await expect(page.locator('button:has-text("Entregadores")')).toBeVisible();
     await expect(page.locator('button:has-text("Estoque")')).toBeVisible();
     await expect(page.locator('button:has-text("WhatsApp")')).toBeVisible();
     await expect(page.locator('button:has-text("Operação (Hoje)")')).toBeVisible();
@@ -120,7 +124,7 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await expect(page.locator('button:has-text("Configurações")')).not.toBeVisible();
   });
 
-  test("Admin deve ter acesso a todos os módulos, incluindo Cardápio, Promoções, Usuários e Configurações", async ({
+  test("Admin deve ter acesso a todos os módulos, incluindo Caixa, Entregadores, Cardápio, Promoções, Usuários e Configurações", async ({
     page,
   }) => {
     await page.goto("http://localhost:3002/auth");
@@ -130,6 +134,8 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await page.click('button:has-text("Entrar")');
 
     await expect(page.locator("text=Admin")).toBeVisible();
+    await expect(page.locator('button:has-text("Caixa")')).toBeVisible();
+    await expect(page.locator('button:has-text("Entregadores")')).toBeVisible();
     await expect(page.locator('button:has-text("Cardápio")')).toBeVisible();
     await expect(page.locator('button:has-text("Promoções")')).toBeVisible();
     await expect(page.locator('button:has-text("Usuários")')).toBeVisible();

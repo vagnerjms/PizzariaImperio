@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listOrders, updateOrderStatus, confirmOrderPayment } from "@/lib/orders.functions";
+import { listCouriers } from "@/lib/couriers.functions";
+import { CourierRow } from "@/lib/couriers-domain";
 import { getPublicStoreConfig, toggleStorePause } from "@/lib/settings";
 import { PublicStoreConfig } from "@/lib/store-hours";
 import {
@@ -17,6 +19,8 @@ import {
 } from "@/lib/thermal-printer";
 import { AdminHeader, AdminViewMode } from "@/components/admin/AdminHeader";
 import { OrdersTab, OrderRow } from "@/components/admin/tabs/OrdersTab";
+import { CashTab } from "@/components/admin/tabs/CashTab";
+import { CouriersTab } from "@/components/admin/tabs/CouriersTab";
 import { MenuTab } from "@/components/admin/tabs/MenuTab";
 import { WhatsAppTab } from "@/components/admin/tabs/WhatsAppTab";
 import { FinancialTab } from "@/components/admin/tabs/FinancialTab";
@@ -39,9 +43,13 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
   const isAdmin = Boolean(user?.roles?.includes("admin"));
+  const isSupervisorOrAdmin = Boolean(
+    user?.roles?.some((r) => ["admin", "supervisor"].includes(r))
+  );
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fetchOrders = useServerFn(listOrders);
+  const fetchCouriers = useServerFn(listCouriers);
   const updateStatus = useServerFn(updateOrderStatus);
   const confirmPaymentFn = useServerFn(confirmOrderPayment);
   const fetchStoreConfig = useServerFn(getPublicStoreConfig);
@@ -66,6 +74,12 @@ function AdminPage() {
   const { data: storeConfig } = useQuery<PublicStoreConfig>({
     queryKey: ["admin", "store-config"],
     queryFn: async () => fetchStoreConfig(),
+    refetchInterval: 30000,
+  });
+
+  const { data: couriers = [] } = useQuery<CourierRow[]>({
+    queryKey: ["admin", "couriers"],
+    queryFn: async () => fetchCouriers(),
     refetchInterval: 30000,
   });
 
@@ -219,12 +233,30 @@ function AdminPage() {
     return c;
   }, [orders]);
 
-  const handleStatus = async (id: string, status: OrderRow["status"]) => {
+  const handleStatus = async (
+    id: string,
+    status: OrderRow["status"],
+    courierId?: string | null
+  ) => {
     const targetOrder = orders.find((o) => o.id === id);
+    const chosenCourier = courierId ? couriers.find((c) => c.id === courierId) : null;
 
     // Atualização otimista no cache do TanStack Query
     queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
-      prev.map((o) => (o.id === id ? { ...o, status } : o))
+      prev.map((o) =>
+        o.id === id
+          ? {
+              ...o,
+              status,
+              ...(courierId !== undefined
+                ? {
+                    courier_id: courierId,
+                    courier_name: chosenCourier?.name ?? null,
+                  }
+                : {}),
+            }
+          : o
+      )
     );
 
     // Auto-print thermal receipt when accepting order ("preparando")
@@ -235,8 +267,15 @@ function AdminPage() {
     }
 
     try {
-      await updateStatus({ data: { id, status } });
+      await updateStatus({
+        data: {
+          id,
+          status,
+          ...(courierId !== undefined ? { courier_id: courierId } : {}),
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] });
     } catch {
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
@@ -360,23 +399,34 @@ function AdminPage() {
           <OrdersTab
             orders={filtered}
             loading={loading}
+            couriers={couriers}
             onStatus={handleStatus}
             onConfirmPayment={handleConfirmPayment}
             onPrint={handlePrintOrder}
           />
         )}
 
-        {viewMode === "cardapio" && <MenuTab isAdmin={isAdmin} />}
+        {viewMode === "caixa" && isSupervisorOrAdmin && (
+          <CashTab isAdmin={isAdmin} printerSettings={printerSettings} />
+        )}
 
-        {viewMode === "indicadores" && <FinancialTab orders={orders} isAdmin={isAdmin} />}
+        {viewMode === "entregadores" && isSupervisorOrAdmin && (
+          <CouriersTab orders={orders} isAdmin={isAdmin} />
+        )}
+
+        {viewMode === "cardapio" && isSupervisorOrAdmin && <MenuTab isAdmin={isAdmin} />}
+
+        {viewMode === "indicadores" && isSupervisorOrAdmin && (
+          <FinancialTab orders={orders} isAdmin={isAdmin} />
+        )}
 
         {viewMode === "usuarios" && isAdmin && <UsersTab currentUser={user} />}
 
-        {viewMode === "taxas" && <DeliveryTab user={user} />}
+        {viewMode === "taxas" && isSupervisorOrAdmin && <DeliveryTab user={user} />}
 
         {viewMode === "promocoes" && isAdmin && <PromotionsTab />}
 
-        {viewMode === "whatsapp" && <WhatsAppTab isAdmin={isAdmin} />}
+        {viewMode === "whatsapp" && isSupervisorOrAdmin && <WhatsAppTab isAdmin={isAdmin} />}
 
         {viewMode === "configuracoes" && isAdmin && (
           <SettingsTab

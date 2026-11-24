@@ -44,6 +44,9 @@ export interface OrderRow {
   canceled_at?: string | null;
   cancel_reason?: string | null;
   table_number?: string | null;
+  courier_id?: string | null;
+  courier_name?: string | null;
+  courier_payout?: number | null;
   payment_status: PaymentStatus;
   payment_gateway?: string | null;
   gateway_payment_id?: string | null;

@@ -354,6 +354,9 @@ export const listOrders = createServerFn({ method: "GET" })
       customer_address: o.customer_address,
       delivery_mode: o.delivery_mode || "delivery",
       table_number: o.table_number || null,
+      courier_id: o.courier_id || null,
+      courier_name: o.courier_name || null,
+      courier_payout: typeof o.courier_payout === "number" ? o.courier_payout : null,
       payment_method: o.payment_method,
       troco: o.troco,
       notes: o.notes || null,
@@ -394,6 +397,7 @@ const updateStatusSchema = z.object({
   id: z.string(),
   status: z.enum(["novo", "preparando", "saiu", "entregue", "cancelado"]),
   cancel_reason: z.string().trim().max(200).optional(),
+  courier_id: z.string().trim().max(80).nullable().optional(),
 });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
@@ -404,9 +408,12 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       throw new Error("Acesso restrito.");
     }
 
-    const { getOrdersCollection } = await import("./db");
+    const { getDb, getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
     const orderBefore = await ordersCol.findOne({ _id: data.id });
+    if (!orderBefore) {
+      throw new Error("Pedido não encontrado.");
+    }
 
     const now = new Date();
     const updateDoc: Record<string, unknown> = {
@@ -423,6 +430,43 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     } else if (data.status === "cancelado" && !orderBefore?.canceled_at) {
       updateDoc.canceled_at = now;
       if (data.cancel_reason) updateDoc.cancel_reason = data.cancel_reason;
+    }
+
+    let resolvedCourierName: string | null | undefined = orderBefore.courier_name || null;
+    if (data.courier_id !== undefined) {
+      if (data.courier_id === null || data.courier_id === "") {
+        updateDoc.courier_id = null;
+        updateDoc.courier_name = null;
+        updateDoc.courier_payout = null;
+        resolvedCourierName = null;
+      } else {
+        const db = await getDb();
+        const courier = await db
+          .collection<{
+            _id: string;
+            name: string;
+            payout_mode?: "delivery_fee" | "fixed";
+            fixed_fee?: number;
+            fee_share_percent?: number;
+          }>("couriers")
+          .findOne({ _id: data.courier_id });
+        if (!courier) {
+          throw new Error("Entregador selecionado não encontrado.");
+        }
+        const { calculateOrderCourierPayout } = await import("./couriers-domain");
+        updateDoc.courier_id = courier._id;
+        updateDoc.courier_name = courier.name;
+        updateDoc.courier_payout = calculateOrderCourierPayout(
+          Number(orderBefore.delivery_fee || 0),
+          {
+            payout_mode: courier.payout_mode === "fixed" ? "fixed" : "delivery_fee",
+            fixed_fee: Number(courier.fixed_fee || 0),
+            fee_share_percent:
+              typeof courier.fee_share_percent === "number" ? courier.fee_share_percent : 100,
+          }
+        );
+        resolvedCourierName = courier.name;
+      }
     }
 
     const result = await ordersCol.updateOne({ _id: data.id }, { $set: updateDoc });
@@ -450,6 +494,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
             customer_phone: orderBefore?.customer_phone,
             customer_address: orderBefore?.customer_address,
             delivery_mode: orderBefore?.delivery_mode || "delivery",
+            courier_name: resolvedCourierName || undefined,
             status: data.status,
             previous_status: orderBefore?.status,
             total: orderBefore?.total,

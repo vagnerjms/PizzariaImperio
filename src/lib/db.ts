@@ -32,15 +32,20 @@ async function ensureIndexes(db: Db) {
       orders.createIndex({ status: 1 }),
       orders.createIndex({ payment_status: 1 }),
       orders.createIndex({ gateway_payment_id: 1 }),
+      orders.createIndex({ courier_id: 1, created_at: -1 }),
     ]);
 
     const users = db.collection("users");
     const promotions = db.collection("promotions");
     const addressCache = db.collection("address_cache");
+    const cashShifts = db.collection("cash_shifts");
+    const couriers = db.collection("couriers");
     await Promise.all([
       users.createIndex({ email: 1 }, { unique: true }),
       promotions.createIndex({ active: 1, created_at: -1 }),
       addressCache.createIndex({ updated_at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }),
+      cashShifts.createIndex({ status: 1, opened_at: -1 }),
+      couriers.createIndex({ active: 1, name: 1 }),
     ]);
 
     indexesInitialized = true;

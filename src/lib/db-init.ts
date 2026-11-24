@@ -16,6 +16,7 @@ export async function initializeDatabase() {
     await ordersCol.createIndex({ payment_status: 1 });
     await ordersCol.createIndex({ gateway_payment_id: 1 });
     await ordersCol.createIndex({ customer_phone: 1 });
+    await ordersCol.createIndex({ courier_id: 1, created_at: -1 });
 
     const deliveryCol = db.collection("delivery_settings");
     await deliveryCol.createIndex({ _id: 1 });
@@ -25,6 +26,12 @@ export async function initializeDatabase() {
 
     const promotionsCol = db.collection("promotions");
     await promotionsCol.createIndex({ active: 1, created_at: -1 });
+
+    const cashShiftsCol = db.collection("cash_shifts");
+    await cashShiftsCol.createIndex({ status: 1, opened_at: -1 });
+
+    const couriersCol = db.collection("couriers");
+    await couriersCol.createIndex({ active: 1, name: 1 });
 
     const addressCacheCol = db.collection("address_cache");
     await addressCacheCol.createIndex(

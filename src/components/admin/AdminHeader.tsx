@@ -4,6 +4,8 @@ import { StoreStatusOverride } from "@/lib/store-hours";
 
 export type AdminViewMode =
   | "pedidos"
+  | "caixa"
+  | "entregadores"
   | "cardapio"
   | "whatsapp"
   | "indicadores"
@@ -100,6 +102,32 @@ export function AdminHeader({
             >
               🍕 Pedidos (KDS)
             </button>
+
+            {isSupervisorOrAdmin && (
+              <button
+                type="button"
+                onClick={() => setViewMode("caixa")}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "caixa"
+                    ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+              >
+                💰 Caixa
+              </button>
+            )}
+
+            {isSupervisorOrAdmin && (
+              <button
+                type="button"
+                onClick={() => setViewMode("entregadores")}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${viewMode === "entregadores"
+                    ? "bg-gold text-gold-foreground font-bold shadow-gold-glow"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+              >
+                🏍️ Entregadores
+              </button>
+            )}
 
             {isSupervisorOrAdmin && (
               <button

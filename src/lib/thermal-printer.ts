@@ -536,3 +536,273 @@ export async function printTestReceipt(customSettings?: Partial<PrinterSettings>
   }
   return { success: true, message: "Comanda de teste enviada para visualização/impressão do navegador!" };
 }
+
+export interface PrintableCashShift {
+  id: string;
+  opened_by: string;
+  opened_at: string;
+  closed_by?: string | null;
+  closed_at?: string | null;
+  opening_balance: number;
+  expected_cash: number;
+  counted_cash: number | null;
+  cash_difference: number | null;
+  gross_sales: number;
+  total_orders: number;
+  by_payment: {
+    pix: number;
+    dinheiro: number;
+    credito: number;
+    debito: number;
+    outros?: number;
+  };
+  movements: Array<{
+    type: "sangria" | "suprimento";
+    amount: number;
+    reason: string;
+  }>;
+  closing_notes?: string | null;
+}
+
+export function buildCashShiftEscPosBuffer(
+  shift: PrintableCashShift,
+  settings: PrinterSettings
+): Uint8Array {
+  const is80mm = settings.paperWidth === "80mm";
+  const cols = is80mm ? 48 : 32;
+  const ESC = 0x1b;
+  const GS = 0x1d;
+  const bytes: number[] = [];
+
+  const addBytes = (...b: number[]) => bytes.push(...b);
+  const addText = (text: string) => {
+    const sanitized = sanitizeText(text);
+    for (let i = 0; i < sanitized.length; i++) {
+      bytes.push(sanitized.charCodeAt(i));
+    }
+  };
+  const addLine = (text = "") => addText(text + "\n");
+  const addDivider = (char = "-") => addLine(char.repeat(cols));
+  const addTwoColumns = (left: string, right: string) => {
+    const cleanLeft = sanitizeText(left);
+    const cleanRight = sanitizeText(right);
+    const space = cols - cleanLeft.length - cleanRight.length;
+    if (space > 0) {
+      addLine(cleanLeft + " ".repeat(space) + cleanRight);
+    } else {
+      addLine(cleanLeft);
+      addLine(" ".repeat(Math.max(0, cols - cleanRight.length)) + cleanRight);
+    }
+  };
+
+  addBytes(ESC, 0x40);
+  addBytes(ESC, 0x61, 0x01); // Center
+  addBytes(ESC, 0x45, 0x01);
+  addLine("PIZZARIA IMPERIO");
+  addLine("FECHAMENTO DE CAIXA (PDV)");
+  addBytes(ESC, 0x45, 0x00);
+  addDivider("=");
+  addBytes(ESC, 0x61, 0x00); // Left
+
+  const openDt = new Date(shift.opened_at);
+  const closeDt = shift.closed_at ? new Date(shift.closed_at) : new Date();
+  addTwoColumns("TURNO:", `#${shift.id.slice(0, 8).toUpperCase()}`);
+  addLine(`ABERTURA: ${openDt.toLocaleDateString("pt-BR")} ${openDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`);
+  addLine(`ABERTO POR: ${shift.opened_by}`);
+  addLine(`FECHAMENTO: ${closeDt.toLocaleDateString("pt-BR")} ${closeDt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`);
+  if (shift.closed_by) addLine(`FECHADO POR: ${shift.closed_by}`);
+  addDivider("-");
+
+  addBytes(ESC, 0x45, 0x01);
+  addLine("VENDAS POR FORMA DE PAGAMENTO");
+  addBytes(ESC, 0x45, 0x00);
+  addTwoColumns("Dinheiro:", formatBRLText(shift.by_payment.dinheiro));
+  addTwoColumns("Pix:", formatBRLText(shift.by_payment.pix));
+  addTwoColumns("Cartao Credito:", formatBRLText(shift.by_payment.credito));
+  addTwoColumns("Cartao Debito:", formatBRLText(shift.by_payment.debito));
+  if ((shift.by_payment.outros || 0) > 0) {
+    addTwoColumns("Outros:", formatBRLText(shift.by_payment.outros || 0));
+  }
+  addTwoColumns(`Total Vendas (${shift.total_orders} ped):`, formatBRLText(shift.gross_sales));
+  addDivider("-");
+
+  const totalSuprimentos = shift.movements
+    .filter((m) => m.type === "suprimento")
+    .reduce((acc, m) => acc + m.amount, 0);
+  const totalSangrias = shift.movements
+    .filter((m) => m.type === "sangria")
+    .reduce((acc, m) => acc + m.amount, 0);
+
+  addBytes(ESC, 0x45, 0x01);
+  addLine("CONFERENCIA DA GAVETA");
+  addBytes(ESC, 0x45, 0x00);
+  addTwoColumns("Fundo de Troco:", formatBRLText(shift.opening_balance));
+  addTwoColumns("(+) Vendas Dinheiro:", formatBRLText(shift.by_payment.dinheiro));
+  addTwoColumns("(+) Suprimentos:", formatBRLText(totalSuprimentos));
+  addTwoColumns("(-) Sangrias:", formatBRLText(totalSangrias));
+  addDivider("=");
+  addBytes(ESC, 0x45, 0x01);
+  addTwoColumns("ESPERADO GAVETA:", formatBRLText(shift.expected_cash));
+  if (shift.counted_cash !== null) {
+    addTwoColumns("CONTADO GAVETA:", formatBRLText(shift.counted_cash));
+    const diff = shift.cash_difference ?? 0;
+    const diffLabel = diff === 0 ? "BATIDO" : diff > 0 ? "SOBRA" : "FALTA";
+    addTwoColumns(`DIFERENCA (${diffLabel}):`, `${diff >= 0 ? "+" : "-"}${formatBRLText(Math.abs(diff))}`);
+  }
+  addBytes(ESC, 0x45, 0x00);
+
+  if (shift.movements.length > 0) {
+    addDivider("-");
+    addLine("MOVIMENTACOES:");
+    for (const m of shift.movements) {
+      const prefix = m.type === "suprimento" ? "[+]" : "[-]";
+      addTwoColumns(`${prefix} ${m.reason.slice(0, cols - 14)}`, formatBRLText(m.amount));
+    }
+  }
+
+  if (shift.closing_notes) {
+    addDivider(".");
+    addLine(`OBS: ${shift.closing_notes}`);
+  }
+
+  addDivider("=");
+  addBytes(ESC, 0x61, 0x01);
+  addLine(`Impresso em ${new Date().toLocaleString("pt-BR")}`);
+  addLine("\n\n\n");
+  if (settings.autoCut) addBytes(GS, 0x56, 0x42, 0x00);
+
+  return new Uint8Array(bytes);
+}
+
+export function buildCashShiftReceiptHtml(
+  shift: PrintableCashShift,
+  settings: PrinterSettings
+): string {
+  const widthCss = settings.paperWidth === "80mm" ? "76mm" : "54mm";
+  const openDt = new Date(shift.opened_at);
+  const closeDt = shift.closed_at ? new Date(shift.closed_at) : new Date();
+  const totalSuprimentos = shift.movements
+    .filter((m) => m.type === "suprimento")
+    .reduce((acc, m) => acc + m.amount, 0);
+  const totalSangrias = shift.movements
+    .filter((m) => m.type === "sangria")
+    .reduce((acc, m) => acc + m.amount, 0);
+  const diff = shift.cash_difference ?? 0;
+  const diffLabel = diff === 0 ? "BATIDO" : diff > 0 ? "SOBRA" : "FALTA";
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Fechamento de Caixa #${escapeHtml(shift.id.slice(0, 8))}</title>
+      <style>
+        @page { margin: 0; size: ${settings.paperWidth} auto; }
+        body { font-family: 'Courier New', Courier, monospace; width: ${widthCss}; margin: 0 auto; padding: 6px 4px; color: #000; font-size: 12px; line-height: 1.35; }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        .divider { border-top: 1px dashed #000; margin: 6px 0; }
+        .divider-double { border-top: 2px solid #000; margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; gap: 6px; }
+      </style>
+    </head>
+    <body>
+      <div class="text-center bold">
+        <div style="font-size:15px;">PIZZARIA IMPÉRIO</div>
+        <div style="font-size:11px;">FECHAMENTO DE CAIXA (PDV)</div>
+      </div>
+      <div class="divider-double"></div>
+      <div class="row"><span>Turno:</span><span class="bold">#${escapeHtml(shift.id.slice(0, 8).toUpperCase())}</span></div>
+      <div>Abertura: ${escapeHtml(openDt.toLocaleString("pt-BR"))}</div>
+      <div>Aberto por: ${escapeHtml(shift.opened_by)}</div>
+      <div>Fechamento: ${escapeHtml(closeDt.toLocaleString("pt-BR"))}</div>
+      ${shift.closed_by ? `<div>Fechado por: ${escapeHtml(shift.closed_by)}</div>` : ""}
+      <div class="divider"></div>
+      <div class="bold">VENDAS POR PAGAMENTO</div>
+      <div class="row"><span>Dinheiro</span><span>${escapeHtml(formatBRLText(shift.by_payment.dinheiro))}</span></div>
+      <div class="row"><span>Pix</span><span>${escapeHtml(formatBRLText(shift.by_payment.pix))}</span></div>
+      <div class="row"><span>Cartão Crédito</span><span>${escapeHtml(formatBRLText(shift.by_payment.credito))}</span></div>
+      <div class="row"><span>Cartão Débito</span><span>${escapeHtml(formatBRLText(shift.by_payment.debito))}</span></div>
+      <div class="row bold" style="margin-top:4px;"><span>Vendas (${shift.total_orders} ped.)</span><span>${escapeHtml(formatBRLText(shift.gross_sales))}</span></div>
+      <div class="divider"></div>
+      <div class="bold">CONFERÊNCIA DA GAVETA</div>
+      <div class="row"><span>Fundo de Troco</span><span>${escapeHtml(formatBRLText(shift.opening_balance))}</span></div>
+      <div class="row"><span>(+) Dinheiro</span><span>${escapeHtml(formatBRLText(shift.by_payment.dinheiro))}</span></div>
+      <div class="row"><span>(+) Suprimentos</span><span>${escapeHtml(formatBRLText(totalSuprimentos))}</span></div>
+      <div class="row"><span>(-) Sangrias</span><span>${escapeHtml(formatBRLText(totalSangrias))}</span></div>
+      <div class="divider-double"></div>
+      <div class="row bold"><span>ESPERADO GAVETA</span><span>${escapeHtml(formatBRLText(shift.expected_cash))}</span></div>
+      ${
+        shift.counted_cash !== null
+          ? `<div class="row bold"><span>CONTADO GAVETA</span><span>${escapeHtml(formatBRLText(shift.counted_cash))}</span></div>
+             <div class="row bold"><span>DIFERENÇA (${diffLabel})</span><span>${diff >= 0 ? "+" : "-"}${escapeHtml(formatBRLText(Math.abs(diff)))}</span></div>`
+          : ""
+      }
+      ${
+        shift.movements.length > 0
+          ? `<div class="divider"></div><div class="bold">MOVIMENTAÇÕES</div>` +
+            shift.movements
+              .map(
+                (m) =>
+                  `<div class="row"><span>${m.type === "suprimento" ? "[+]" : "[-]"} ${escapeHtml(m.reason)}</span><span>${escapeHtml(formatBRLText(m.amount))}</span></div>`
+              )
+              .join("")
+          : ""
+      }
+      ${
+        shift.closing_notes
+          ? `<div class="divider"></div><div><span class="bold">OBS:</span> ${escapeHtml(shift.closing_notes)}</div>`
+          : ""
+      }
+      <div class="divider-double"></div>
+      <div class="text-center" style="font-size:10px;">Impresso em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</div>
+      <br><br>
+    </body>
+    </html>
+  `;
+}
+
+export async function printCashShiftThermal(
+  shift: PrintableCashShift,
+  customSettings?: Partial<PrinterSettings>
+): Promise<{ success: boolean; method: "serial" | "browser" }> {
+  const settings = { ...getStoredPrinterSettings(), ...customSettings };
+
+  if (isPrinterConnected() && activeSerialPort?.writable) {
+    try {
+      const buffer = buildCashShiftEscPosBuffer(shift, settings);
+      const writer = activeSerialPort.writable.getWriter();
+      await writer.write(buffer);
+      writer.releaseLock();
+      return { success: true, method: "serial" };
+    } catch (err) {
+      console.error("Erro na impressão serial do fechamento de caixa, usando navegador:", err);
+    }
+  }
+
+  const html = buildCashShiftReceiptHtml(shift, settings);
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    }, 250);
+  }
+  return { success: true, method: "browser" };
+}
+

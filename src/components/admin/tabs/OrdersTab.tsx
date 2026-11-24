@@ -1,6 +1,8 @@
-import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle, QrCode, Timer } from "lucide-react";
+import { useState } from "react";
+import { Clock, Phone, MapPin, Printer, CheckCircle2, XCircle, QrCode, Timer, Bike } from "lucide-react";
 import { formatBRL } from "@/data/catalog";
 import { OrderRow } from "@/types/orders";
+import { CourierRow } from "@/lib/couriers-domain";
 
 export type { OrderRow };
 
@@ -83,16 +85,20 @@ function getElapsedBadge(createdAtIso: string) {
 export function OrdersTab({
   orders,
   loading,
+  couriers = [],
   onStatus,
   onConfirmPayment,
   onPrint,
 }: {
   orders: OrderRow[];
   loading: boolean;
-  onStatus: (id: string, status: OrderRow["status"]) => void;
+  couriers?: CourierRow[];
+  onStatus: (id: string, status: OrderRow["status"], courierId?: string | null) => void;
   onConfirmPayment?: (id: string) => void;
   onPrint?: (order: OrderRow) => void;
 }) {
+  const activeCouriers = couriers.filter((c) => c.active);
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Carregando pedidos…</p>;
   }
@@ -114,6 +120,7 @@ export function OrdersTab({
         <OrderCard
           key={o.id}
           order={o}
+          activeCouriers={activeCouriers}
           onStatus={onStatus}
           onConfirmPayment={onConfirmPayment}
           onPrint={onPrint}
@@ -125,15 +132,18 @@ export function OrdersTab({
 
 function OrderCard({
   order,
+  activeCouriers,
   onStatus,
   onConfirmPayment,
   onPrint,
 }: {
   order: OrderRow;
-  onStatus: (id: string, status: OrderRow["status"]) => void;
+  activeCouriers: CourierRow[];
+  onStatus: (id: string, status: OrderRow["status"], courierId?: string | null) => void;
   onConfirmPayment?: (id: string) => void;
   onPrint?: (order: OrderRow) => void;
 }) {
+  const [pickingCourier, setPickingCourier] = useState(false);
   const meta = STATUS_META[order.status];
   const created = new Date(order.created_at);
   const timeStr = created.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -145,6 +155,7 @@ function OrderCard({
     order.payment_method === "Pix" &&
     order.payment_status === "pending" &&
     order.status !== "cancelado";
+  const isDelivery = (order.delivery_mode || "delivery") === "delivery";
 
   return (
     <article
@@ -196,6 +207,23 @@ function OrderCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 flex-none text-gold" />
           <span className="whitespace-pre-wrap">{order.customer_address}</span>
         </div>
+        {isDelivery && (order.courier_name || (order.status === "saiu" && activeCouriers.length > 0)) && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-purple-300">
+              <Bike className="h-3.5 w-3.5" />
+              {order.courier_name || "Sem motoboy atribuído"}
+            </span>
+            {order.status === "saiu" && activeCouriers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPickingCourier((v) => !v)}
+                className="text-[11px] font-semibold text-gold hover:underline"
+              >
+                {pickingCourier ? "Fechar" : "Trocar"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <ul className="mt-4 space-y-1 border-t border-border/60 pt-3 text-sm">
@@ -253,6 +281,48 @@ function OrderCard({
         </div>
       </div>
 
+      {pickingCourier && activeCouriers.length > 0 && (
+        <div className="mt-3 rounded-xl border border-gold/40 bg-gold/5 p-3 space-y-2">
+          <div className="flex items-center justify-between text-[11px] font-bold text-gold">
+            <span className="inline-flex items-center gap-1">
+              <Bike className="h-3.5 w-3.5" /> Selecione o entregador:
+            </span>
+            <button
+              type="button"
+              onClick={() => setPickingCourier(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Cancelar
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {activeCouriers.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setPickingCourier(false);
+                  onStatus(order.id, "saiu", c.id);
+                }}
+                className="rounded-full border border-gold/40 bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-gold hover:text-gold-foreground transition"
+              >
+                {c.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setPickingCourier(false);
+                onStatus(order.id, "saiu", null);
+              }}
+              className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition"
+            >
+              Sem motoboy
+            </button>
+          </div>
+        </div>
+      )}
+
       {(meta.next || order.status !== "cancelado" || onPrint || isPendingPix) && (
         <div className="mt-4 flex flex-wrap gap-2">
           {isPendingPix && onConfirmPayment && (
@@ -279,7 +349,13 @@ function OrderCard({
           {meta.next && meta.nextLabel && (
             <button
               type="button"
-              onClick={() => onStatus(order.id, meta.next!)}
+              onClick={() => {
+                if (meta.next === "saiu" && isDelivery && activeCouriers.length > 0) {
+                  setPickingCourier((v) => !v);
+                } else {
+                  onStatus(order.id, meta.next!);
+                }
+              }}
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gold px-3 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground transition hover:brightness-110"
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> {meta.nextLabel}
