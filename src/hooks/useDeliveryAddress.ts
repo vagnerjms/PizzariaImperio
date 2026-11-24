@@ -13,6 +13,7 @@ export interface DeliveryAddressForm {
   name: string;
   phone: string;
   deliveryMode: DeliveryMode;
+  tableNumber: string;
   cep: string;
   rua: string;
   bairro: string;
@@ -29,6 +30,7 @@ const initialForm: DeliveryAddressForm = {
   name: "",
   phone: "",
   deliveryMode: "",
+  tableNumber: "",
   cep: "",
   rua: "",
   bairro: "",

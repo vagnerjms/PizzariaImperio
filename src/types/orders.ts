@@ -38,6 +38,12 @@ export interface OrderRow {
   status: OrderStatus;
   created_at: string;
   updated_at: string;
+  preparing_at?: string | null;
+  dispatched_at?: string | null;
+  delivered_at?: string | null;
+  canceled_at?: string | null;
+  cancel_reason?: string | null;
+  table_number?: string | null;
   payment_status: PaymentStatus;
   payment_gateway?: string | null;
   gateway_payment_id?: string | null;

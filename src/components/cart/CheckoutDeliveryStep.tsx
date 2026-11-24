@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import { DeliveryAddressForm, DeliveryMode } from "@/hooks/useDeliveryAddress";
 import { LocationResult } from "@/lib/location.functions";
+import { EnabledDeliveryModes } from "@/lib/store-hours";
 import { formatBRL } from "@/data/catalog";
 
 export function CheckoutDeliveryStep({
   form,
   errors,
+  enabledModes,
   cepLoading,
   locatingGPS,
   streetSearching,
@@ -36,6 +38,7 @@ export function CheckoutDeliveryStep({
 }: {
   form: DeliveryAddressForm;
   errors: Record<string, string>;
+  enabledModes?: EnabledDeliveryModes;
   cepLoading: boolean;
   locatingGPS: boolean;
   streetSearching: boolean;
@@ -52,6 +55,10 @@ export function CheckoutDeliveryStep({
   onSelectBairro: (n: { name: string; fee: number }) => void;
   onChangeField: (k: keyof DeliveryAddressForm) => (v: string) => void;
 }) {
+  const allowDelivery = enabledModes?.delivery !== false;
+  const allowPickup = enabledModes?.pickup !== false;
+  const allowDineIn = enabledModes?.dine_in !== false;
+
   const hasCompleteAddress = Boolean(form.rua.trim() && form.numero.trim() && form.bairro.trim());
   const [editingAddress, setEditingAddress] = useState(!hasCompleteAddress);
 
@@ -97,6 +104,7 @@ export function CheckoutDeliveryStep({
 
         <div className="divide-y divide-border/60">
           {/* Opção 1: Entregar no endereço / Cadastrar novo endereço */}
+          {allowDelivery && (
           <div className="p-4">
             <button
               type="button"
@@ -344,64 +352,89 @@ export function CheckoutDeliveryStep({
               </div>
             )}
           </div>
+          )}
 
           {/* Opção 2: Buscar o pedido (Retirada no balcão) */}
-          <button
-            type="button"
-            onClick={() => onDeliveryModeChange("pickup")}
-            className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-secondary/20"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
-                <Store className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-foreground">Buscar o pedido</div>
-                <div className="mt-0.5 text-xs font-bold text-emerald-400">Grátis • Retirada no balcão</div>
-              </div>
-            </div>
-
-            <div
-              className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 transition ${
-                form.deliveryMode === "pickup"
-                  ? "border-gold bg-gold"
-                  : "border-muted-foreground/50"
-              }`}
+          {allowPickup && (
+            <button
+              type="button"
+              onClick={() => onDeliveryModeChange("pickup")}
+              className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-secondary/20"
             >
-              {form.deliveryMode === "pickup" && (
-                <div className="h-2.5 w-2.5 rounded-full bg-gold-foreground" />
-              )}
-            </div>
-          </button>
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
+                  <Store className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-foreground">Buscar o pedido</div>
+                  <div className="mt-0.5 text-xs font-bold text-emerald-400">Grátis • Retirada no balcão</div>
+                </div>
+              </div>
+
+              <div
+                className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 transition ${
+                  form.deliveryMode === "pickup"
+                    ? "border-gold bg-gold"
+                    : "border-muted-foreground/50"
+                }`}
+              >
+                {form.deliveryMode === "pickup" && (
+                  <div className="h-2.5 w-2.5 rounded-full bg-gold-foreground" />
+                )}
+              </div>
+            </button>
+          )}
 
           {/* Opção 3: Consumir no local */}
-          <button
-            type="button"
-            onClick={() => onDeliveryModeChange("dine_in")}
-            className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-secondary/20"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
-                <UtensilsCrossed className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-foreground">Consumir no local</div>
-                <div className="mt-0.5 text-xs font-bold text-emerald-400">Grátis • Salão Pizzaria Império</div>
-              </div>
-            </div>
+          {allowDineIn && (
+            <div className="p-4">
+              <button
+                type="button"
+                onClick={() => onDeliveryModeChange("dine_in")}
+                className="flex w-full items-center justify-between gap-3 text-left transition hover:bg-secondary/20"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gold/15 text-gold">
+                    <UtensilsCrossed className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-foreground">Consumir no local</div>
+                    <div className="mt-0.5 text-xs font-bold text-emerald-400">
+                      Grátis • Salão Pizzaria Império
+                    </div>
+                  </div>
+                </div>
 
-            <div
-              className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 transition ${
-                form.deliveryMode === "dine_in"
-                  ? "border-gold bg-gold"
-                  : "border-muted-foreground/50"
-              }`}
-            >
+                <div
+                  className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 transition ${
+                    form.deliveryMode === "dine_in"
+                      ? "border-gold bg-gold"
+                      : "border-muted-foreground/50"
+                  }`}
+                >
+                  {form.deliveryMode === "dine_in" && (
+                    <div className="h-2.5 w-2.5 rounded-full bg-gold-foreground" />
+                  )}
+                </div>
+              </button>
+
               {form.deliveryMode === "dine_in" && (
-                <div className="h-2.5 w-2.5 rounded-full bg-gold-foreground" />
+                <div className="mt-3 pl-12">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Número da Mesa (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    value={form.tableNumber}
+                    onChange={(e) => onChangeField("tableNumber")(e.target.value)}
+                    placeholder="Ex.: Mesa 04"
+                    className="mt-1 w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
+                </div>
               )}
             </div>
-          </button>
+          )}
         </div>
       </div>
 

@@ -161,6 +161,11 @@ function OrderCard({
             <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
               #{order.id.slice(0, 6)}
             </span>
+            {order.table_number && (
+              <span className="rounded bg-gold/15 border border-gold/40 px-1.5 py-0.5 text-[10px] font-bold text-gold">
+                Mesa {order.table_number}
+              </span>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">

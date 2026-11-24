@@ -12,11 +12,23 @@ import {
   Printer,
   Usb,
   LogOut,
+  Clock,
+  CreditCard,
+  Phone,
 } from "lucide-react";
 import { getAdminSettings, updateAdminSettings } from "@/lib/settings";
 import {
-  PrinterSettings,
-} from "@/lib/thermal-printer";
+  DAY_LABELS_PT,
+  DayOfWeekKey,
+  DEFAULT_ENABLED_DELIVERY_MODES,
+  DEFAULT_ENABLED_PAYMENT_METHODS,
+  DEFAULT_OPENING_HOURS,
+  EnabledDeliveryModes,
+  EnabledPaymentMethods,
+  OpeningHoursMap,
+  StoreStatusOverride,
+} from "@/lib/store-hours";
+import { PrinterSettings } from "@/lib/thermal-printer";
 
 export function SettingsTab({
   currentUser,
@@ -38,14 +50,34 @@ export function SettingsTab({
   const fetchSettings = useServerFn(getAdminSettings);
   const saveSettings = useServerFn(updateAdminSettings);
 
-  const [settingsForm, setSettingsForm] = useState({
+  const [settingsForm, setSettingsForm] = useState<{
+    evolution_api_url: string;
+    evolution_api_key: string;
+    n8n_webhook_url: string;
+    mercado_pago_access_token: string;
+    mercado_pago_public_key: string;
+    whatsapp_instance_name: string;
+    google_maps_api_key: string;
+    store_phone: string;
+    store_status_override: StoreStatusOverride;
+    pause_reason: string;
+    opening_hours: OpeningHoursMap;
+    enabled_payment_methods: EnabledPaymentMethods;
+    enabled_delivery_modes: EnabledDeliveryModes;
+  }>({
     evolution_api_url: "",
     evolution_api_key: "",
     n8n_webhook_url: "",
     mercado_pago_access_token: "",
     mercado_pago_public_key: "",
-    whatsapp_instance_name: "",
+    whatsapp_instance_name: "Disparo",
     google_maps_api_key: "",
+    store_phone: "",
+    store_status_override: "auto",
+    pause_reason: "",
+    opening_hours: { ...DEFAULT_OPENING_HOURS },
+    enabled_payment_methods: { ...DEFAULT_ENABLED_PAYMENT_METHODS },
+    enabled_delivery_modes: { ...DEFAULT_ENABLED_DELIVERY_MODES },
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -65,8 +97,16 @@ export function SettingsTab({
         n8n_webhook_url: data.n8n_webhook_url || "",
         mercado_pago_access_token: data.mercado_pago_access_token || "",
         mercado_pago_public_key: data.mercado_pago_public_key || "",
-        whatsapp_instance_name: data.whatsapp_instance_name || "",
+        whatsapp_instance_name: data.whatsapp_instance_name || "Disparo",
         google_maps_api_key: data.google_maps_api_key || "",
+        store_phone: data.store_phone || "",
+        store_status_override: data.store_status_override || "auto",
+        pause_reason: data.pause_reason || "",
+        opening_hours: data.opening_hours || { ...DEFAULT_OPENING_HOURS },
+        enabled_payment_methods:
+          data.enabled_payment_methods || { ...DEFAULT_ENABLED_PAYMENT_METHODS },
+        enabled_delivery_modes:
+          data.enabled_delivery_modes || { ...DEFAULT_ENABLED_DELIVERY_MODES },
       });
     } catch (e) {
       setSettingsErrorMsg(e instanceof Error ? e.message : "Erro ao carregar configurações.");
@@ -280,6 +320,220 @@ export function SettingsTab({
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   🛡️ <strong>Economia & Segurança:</strong> Esta chave da Google Maps API <strong>só é consumida como último recurso</strong> caso nenhuma das 4 APIs gratuitas (ViaCEP, Photon OSM, Nominatim e Catálogo do MongoDB) localize o endereço do cliente.
                 </p>
+              </div>
+            </div>
+
+            {/* Operação da Loja: Telefone, Status & Horários de Funcionamento */}
+            <div className="space-y-4">
+              <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                <Clock className="h-4 w-4" /> Funcionamento, Horários & Telefone da Loja
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    WhatsApp Oficial da Loja (Site / Contato)
+                  </label>
+                  <div className="relative mt-1.5">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/60" />
+                    <input
+                      type="text"
+                      value={settingsForm.store_phone}
+                      onChange={(e) =>
+                        setSettingsForm((prev) => ({ ...prev, store_phone: e.target.value }))
+                      }
+                      placeholder="5511999999999"
+                      className="w-full rounded-xl border border-border bg-secondary/20 pl-9 pr-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Controle de Abertura
+                  </label>
+                  <select
+                    value={settingsForm.store_status_override}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        store_status_override: e.target.value as StoreStatusOverride,
+                      }))
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  >
+                    <option value="auto">Automático (seguir horários abaixo)</option>
+                    <option value="force_open">Forçar Loja Aberta</option>
+                    <option value="force_closed">Pausar / Fechar Recebimento de Pedidos</option>
+                  </select>
+                </div>
+              </div>
+
+              {settingsForm.store_status_override === "force_closed" && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Motivo da Pausa (exibido na vitrine)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={160}
+                    value={settingsForm.pause_reason}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({ ...prev, pause_reason: e.target.value }))
+                    }
+                    placeholder="Ex.: Alta demanda no forno — voltamos em 20 min!"
+                    className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  />
+                </div>
+              )}
+
+              <div className="rounded-xl border border-border bg-secondary/15 p-3.5 space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Horários por Dia da Semana (Horário de Brasília)
+                </p>
+                {(["1", "2", "3", "4", "5", "6", "0"] as DayOfWeekKey[]).map((dayKey) => {
+                  const day = settingsForm.opening_hours[dayKey];
+                  return (
+                    <div
+                      key={dayKey}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-card/60 px-3 py-2 text-xs"
+                    >
+                      <label className="flex items-center gap-2 font-semibold text-foreground min-w-[95px] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={day.enabled}
+                          onChange={(e) =>
+                            setSettingsForm((prev) => ({
+                              ...prev,
+                              opening_hours: {
+                                ...prev.opening_hours,
+                                [dayKey]: { ...day, enabled: e.target.checked },
+                              },
+                            }))
+                          }
+                          className="accent-gold"
+                        />
+                        {DAY_LABELS_PT[dayKey]}
+                      </label>
+
+                      {day.enabled ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={day.open}
+                            onChange={(e) =>
+                              setSettingsForm((prev) => ({
+                                ...prev,
+                                opening_hours: {
+                                  ...prev.opening_hours,
+                                  [dayKey]: { ...day, open: e.target.value },
+                                },
+                              }))
+                            }
+                            className="rounded-lg border border-border bg-secondary/30 px-2 py-1 text-xs text-foreground"
+                          />
+                          <span className="text-muted-foreground">às</span>
+                          <input
+                            type="time"
+                            value={day.close}
+                            onChange={(e) =>
+                              setSettingsForm((prev) => ({
+                                ...prev,
+                                opening_hours: {
+                                  ...prev.opening_hours,
+                                  [dayKey]: { ...day, close: e.target.value },
+                                },
+                              }))
+                            }
+                            className="rounded-lg border border-border bg-secondary/30 px-2 py-1 text-xs text-foreground"
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Fechado
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modalidades & Meios de Pagamento */}
+            <div className="space-y-4">
+              <h3 className="font-serif text-sm font-bold text-gold flex items-center gap-2 border-b border-border/40 pb-2">
+                <CreditCard className="h-4 w-4" /> Modalidades & Meios de Pagamento Ativos
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-border bg-secondary/15 p-3.5 space-y-2.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Formas de Pagamento
+                  </span>
+                  {(
+                    [
+                      ["pix", "Pix Online"],
+                      ["credito", "Cartão de Crédito (Maquininha)"],
+                      ["debito", "Cartão de Débito (Maquininha)"],
+                      ["dinheiro", "Dinheiro (com Troco)"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label
+                      key={key}
+                      className="flex items-center justify-between text-xs text-foreground cursor-pointer"
+                    >
+                      <span>{label}</span>
+                      <input
+                        type="checkbox"
+                        checked={settingsForm.enabled_payment_methods[key]}
+                        onChange={(e) =>
+                          setSettingsForm((prev) => ({
+                            ...prev,
+                            enabled_payment_methods: {
+                              ...prev.enabled_payment_methods,
+                              [key]: e.target.checked,
+                            },
+                          }))
+                        }
+                        className="accent-gold h-4 w-4"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/15 p-3.5 space-y-2.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Modalidades de Recebimento
+                  </span>
+                  {(
+                    [
+                      ["delivery", "Entrega (Delivery)"],
+                      ["pickup", "Retirada no Balcão"],
+                      ["dine_in", "Consumir no Local (Salão / Mesa)"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label
+                      key={key}
+                      className="flex items-center justify-between text-xs text-foreground cursor-pointer"
+                    >
+                      <span>{label}</span>
+                      <input
+                        type="checkbox"
+                        checked={settingsForm.enabled_delivery_modes[key]}
+                        onChange={(e) =>
+                          setSettingsForm((prev) => ({
+                            ...prev,
+                            enabled_delivery_modes: {
+                              ...prev.enabled_delivery_modes,
+                              [key]: e.target.checked,
+                            },
+                          }))
+                        }
+                        className="accent-gold h-4 w-4"
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 

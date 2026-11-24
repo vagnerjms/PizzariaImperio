@@ -40,25 +40,25 @@ export const getAdminDeliverySettings = createServerFn({ method: "GET" })
     return getDeliverySettings();
   });
 
-// 4. Salvar novas taxas de entrega no MongoDB (Admin ou Supervisor)
+// 4. Salvar novas taxas de entrega no MongoDB (Apenas Admin)
 export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) => updateDeliverySettingsSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { saveDeliverySettings } = await import("./delivery-config.server");
     await saveDeliverySettings(data as any);
     return { success: true };
   });
 
-// 5. Carregar e aplicar todos os bairros oficiais de Bragança Paulista
+// 5. Carregar e aplicar todos os bairros oficiais de Bragança Paulista (Apenas Admin)
 export const resetToBragancaNeighborhoods = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { getBragancaNeighborhoodsList, saveDeliverySettings } = await import("./delivery-config.server");
     const list = getBragancaNeighborhoodsList(5.00);

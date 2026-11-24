@@ -1,4 +1,4 @@
-import { describe, test } from "node:test";
+import { describe, test } from "bun:test";
 import assert from "node:assert/strict";
 import { calculateVerifiedOrderPricing, EffectiveMenuPriceEntry } from "../order-pricing";
 import { evaluateCartPromotions } from "../promotions-engine";

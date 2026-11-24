@@ -65,19 +65,24 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
     }
   };
 
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
+
   const handleSaveDeliverySettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     setDeliverySaving(true);
     setDeliverySuccessMsg(null);
     setDeliveryErrorMsg(null);
     try {
+      const parsedDefault = Number(deliveryFeeSettings.default_fee);
+      const safeDefault = Number.isFinite(parsedDefault) && parsedDefault >= 0 ? parsedDefault : 7.0;
       await saveDeliverySettingsFn({
         data: {
-          default_fee: Number(deliveryFeeSettings.default_fee) || 7.00,
-          neighborhoods: deliveryFeeSettings.neighborhoods.map(n => ({
+          default_fee: safeDefault,
+          neighborhoods: deliveryFeeSettings.neighborhoods.map((n) => ({
             id: n.id,
             name: n.name.trim(),
-            fee: Number(n.fee) || 0,
+            fee: Number.isFinite(Number(n.fee)) && Number(n.fee) >= 0 ? Number(n.fee) : 0,
           })),
         },
       });
@@ -92,14 +97,14 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
 
   const handleAddNeighborhood = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNeighborhoodName.trim()) return;
+    if (!isAdmin || !newNeighborhoodName.trim()) return;
     const feeNum = parseFloat(newNeighborhoodFee.replace(",", ".")) || 0;
     const newEntry = {
       id: `bairro-${Date.now()}`,
       name: newNeighborhoodName.trim(),
       fee: feeNum,
     };
-    setDeliveryFeeSettings(prev => ({
+    setDeliveryFeeSettings((prev) => ({
       ...prev,
       neighborhoods: [newEntry, ...prev.neighborhoods],
     }));
@@ -108,52 +113,60 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
   };
 
   const handleDeleteNeighborhood = (id: string) => {
-    setDeliveryFeeSettings(prev => ({
+    if (!isAdmin) return;
+    setDeliveryFeeSettings((prev) => ({
       ...prev,
-      neighborhoods: prev.neighborhoods.filter(n => n.id !== id),
+      neighborhoods: prev.neighborhoods.filter((n) => n.id !== id),
     }));
   };
 
   const handleUpdateNeighborhoodFee = (id: string, feeStr: string) => {
+    if (!isAdmin) return;
     const feeNum = parseFloat(feeStr.replace(",", ".")) || 0;
-    setDeliveryFeeSettings(prev => ({
+    setDeliveryFeeSettings((prev) => ({
       ...prev,
-      neighborhoods: prev.neighborhoods.map(n => n.id === id ? { ...n, fee: feeNum } : n),
+      neighborhoods: prev.neighborhoods.map((n) => (n.id === id ? { ...n, fee: feeNum } : n)),
     }));
   };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <header className="flex items-center justify-between border-b border-border/60 pb-4 mb-6">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4 mb-6">
           <div className="flex items-center gap-4">
             <div className="rounded-xl bg-gold/10 p-2.5 text-gold">
               <Bike className="h-6 w-6" />
             </div>
             <div>
               <h2 className="font-serif text-lg leading-tight">Taxas de Entrega por Bairro</h2>
-              <p className="text-xs text-muted-foreground">Configure os valores cobrados automaticamente no Checkout via CEP</p>
+              <p className="text-xs text-muted-foreground">
+                {isAdmin
+                  ? "Configure os valores cobrados automaticamente no Checkout via CEP ou bairro"
+                  : "Modo consulta (Supervisor): alteração de taxas e bairros é restrita ao Administrador"}
+              </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleLoadBraganca}
-              disabled={deliverySaving || deliveryLoading}
-              className="rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-50"
-            >
-              Carregar Bairros de Bragança
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveDeliverySettings}
-              disabled={deliverySaving || deliveryLoading}
-              className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
-            >
-              {deliverySaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {deliverySaving ? "Salvando..." : "Salvar Alterações"}
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLoadBraganca}
+                disabled={deliverySaving || deliveryLoading}
+                className="rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-50"
+              >
+                Carregar Bairros de Bragança
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDeliverySettings}
+                disabled={deliverySaving || deliveryLoading}
+                className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deliverySaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {deliverySaving ? "Salvando..." : "Salvar Alterações"}
+              </button>
+            </div>
+          )}
         </header>
 
         {deliveryLoading ? (
@@ -178,57 +191,78 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
             <div className="rounded-xl border border-border bg-secondary/20 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">Taxa Padrão Geral (Fallback)</span>
-                  <p className="text-xs text-muted-foreground">Valor cobrado quando o cliente mora em um bairro que não está listado abaixo.</p>
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    Taxa Padrão Geral (Fallback)
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    Valor cobrado quando o cliente mora em um bairro que não está listado abaixo.
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground">R$</span>
-                  <input
-                    type="number"
-                    step="0.50"
-                    min="0"
-                    value={deliveryFeeSettings.default_fee}
-                    onChange={(e) => setDeliveryFeeSettings(prev => ({ ...prev, default_fee: parseFloat(e.target.value) || 0 }))}
-                    className="w-24 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  />
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      step="0.50"
+                      min="0"
+                      value={deliveryFeeSettings.default_fee}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setDeliveryFeeSettings((prev) => ({
+                          ...prev,
+                          default_fee: Number.isFinite(v) && v >= 0 ? v : 0,
+                        }));
+                      }}
+                      className="w-24 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
+                    />
+                  ) : (
+                    <span className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-bold text-gold">
+                      {deliveryFeeSettings.default_fee.toFixed(2).replace(".", ",")}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Adicionar Novo Bairro */}
-            <form onSubmit={handleAddNeighborhood} className="rounded-xl border border-dashed border-border p-4 bg-secondary/10 space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
-                <Plus className="h-4 w-4" /> Cadastrar Novo Bairro
-              </span>
-              <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
-                <input
-                  type="text"
-                  placeholder="Nome do Bairro (ex: Lavapés)"
-                  value={newNeighborhoodName}
-                  onChange={(e) => setNewNeighborhoodName(e.target.value)}
-                  className="rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                />
-                <div className="flex items-center gap-1.5 bg-card rounded-xl border border-border px-3 py-2">
-                  <span className="text-xs font-semibold text-muted-foreground">R$</span>
+            {/* Adicionar Novo Bairro (Apenas Admin) */}
+            {isAdmin && (
+              <form
+                onSubmit={handleAddNeighborhood}
+                className="rounded-xl border border-dashed border-border p-4 bg-secondary/10 space-y-3"
+              >
+                <span className="text-xs font-bold uppercase tracking-wider text-gold flex items-center gap-1.5">
+                  <Plus className="h-4 w-4" /> Cadastrar Novo Bairro
+                </span>
+                <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
                   <input
-                    type="number"
-                    step="0.50"
-                    min="0"
-                    placeholder="5.00"
-                    value={newNeighborhoodFee}
-                    onChange={(e) => setNewNeighborhoodFee(e.target.value)}
-                    className="w-full bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+                    type="text"
+                    placeholder="Nome do Bairro (ex: Lavapés)"
+                    value={newNeighborhoodName}
+                    onChange={(e) => setNewNeighborhoodName(e.target.value)}
+                    className="rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   />
+                  <div className="flex items-center gap-1.5 bg-card rounded-xl border border-border px-3 py-2">
+                    <span className="text-xs font-semibold text-muted-foreground">R$</span>
+                    <input
+                      type="number"
+                      step="0.50"
+                      min="0"
+                      placeholder="5.00"
+                      value={newNeighborhoodFee}
+                      onChange={(e) => setNewNeighborhoodFee(e.target.value)}
+                      className="w-full bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!newNeighborhoodName.trim()}
+                    className="rounded-xl bg-gold/15 border border-gold/40 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
+                  >
+                    Adicionar
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!newNeighborhoodName.trim()}
-                  className="rounded-xl bg-gold/15 border border-gold/40 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
-                >
-                  Adicionar
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
 
             {/* Busca e Lista de Bairros */}
             <div className="space-y-3">
@@ -250,30 +284,45 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
 
               <div className="divide-y divide-border/60 rounded-xl border border-border bg-card overflow-hidden max-h-96 overflow-y-auto">
                 {deliveryFeeSettings.neighborhoods
-                  .filter(n => !neighborhoodSearch.trim() || n.name.toLowerCase().includes(neighborhoodSearch.toLowerCase().trim()))
+                  .filter(
+                    (n) =>
+                      !neighborhoodSearch.trim() ||
+                      n.name.toLowerCase().includes(neighborhoodSearch.toLowerCase().trim())
+                  )
                   .map((n) => (
-                    <div key={n.id} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/15 transition">
+                    <div
+                      key={n.id}
+                      className="flex items-center justify-between px-4 py-3 hover:bg-secondary/15 transition"
+                    >
                       <span className="text-sm font-medium text-foreground">{n.name}</span>
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg border border-border px-2.5 py-1">
-                          <span className="text-xs font-bold text-muted-foreground">R$</span>
-                          <input
-                            type="number"
-                            step="0.50"
-                            min="0"
-                            value={n.fee}
-                            onChange={(e) => handleUpdateNeighborhoodFee(n.id, e.target.value)}
-                            className="w-16 bg-transparent text-xs font-bold text-gold focus:outline-none text-right"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteNeighborhood(n.id)}
-                          title="Remover Bairro"
-                          className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {isAdmin ? (
+                          <>
+                            <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg border border-border px-2.5 py-1">
+                              <span className="text-xs font-bold text-muted-foreground">R$</span>
+                              <input
+                                type="number"
+                                step="0.50"
+                                min="0"
+                                value={n.fee}
+                                onChange={(e) => handleUpdateNeighborhoodFee(n.id, e.target.value)}
+                                className="w-16 bg-transparent text-xs font-bold text-gold focus:outline-none text-right"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNeighborhood(n.id)}
+                              title="Remover Bairro"
+                              className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="rounded-lg border border-border bg-secondary/30 px-2.5 py-1 text-xs font-bold text-gold">
+                            R$ {n.fee.toFixed(2).replace(".", ",")}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -35,19 +35,27 @@ export const saveMenuOverride = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) => updateMenuOverrideSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
+    const isAdmin = Boolean(context.roles?.includes("admin"));
+    const isSupervisor = Boolean(context.roles?.includes("supervisor"));
+
+    if (!isAdmin && !isSupervisor) {
       throw new Error("Acesso restrito a supervisores e administradores.");
+    }
+
+    // Supervisor can ONLY toggle stock availability (no price or badge changes)
+    if (!isAdmin && (data.price !== undefined || data.badge !== undefined)) {
+      throw new Error("Apenas Administradores podem alterar preços ou selos do cardápio.");
     }
 
     const { getCollection } = await import("./db");
     const col = await getCollection("menu_overrides");
 
-    const updateFields: Record<string, any> = {
+    const updateFields: Record<string, unknown> = {
       updated_at: new Date(),
     };
-    if (data.price !== undefined) updateFields.price = Number(data.price.toFixed(2));
+    if (isAdmin && data.price !== undefined) updateFields.price = Number(data.price.toFixed(2));
     if (data.available !== undefined) updateFields.available = data.available;
-    if (data.badge !== undefined) updateFields.badge = data.badge;
+    if (isAdmin && data.badge !== undefined) updateFields.badge = data.badge;
 
     await col.updateOne(
       { _id: data.id as any },
@@ -62,8 +70,8 @@ export const resetMenuOverride = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
 
     const { getCollection } = await import("./db");

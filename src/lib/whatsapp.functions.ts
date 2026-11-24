@@ -108,12 +108,12 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
     }
   });
 
-// 3. Desconectar WhatsApp (Logout)
+// 3. Desconectar WhatsApp (Logout - Apenas Admin)
 export const disconnectWhatsApp = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Apenas Administradores podem desconectar a instância do WhatsApp.");
     }
 
     const { getSystemSettings } = await import("./settings.server");

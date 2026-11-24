@@ -1,6 +1,9 @@
 import { Phone } from "lucide-react";
 
-export function Contact() {
+export function Contact({ storePhone }: { storePhone?: string }) {
+  const digits = (storePhone || "").replace(/\D/g, "");
+  const whatsappUrl = digits ? `https://wa.me/${digits}` : null;
+
   return (
     <section id="contato" className="border-t border-border/50 bg-background py-20">
       <div className="mx-auto max-w-7xl px-6 text-center">
@@ -15,14 +18,16 @@ export function Contact() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-6">
-          <a
-            href="https://wa.me/5511999999999"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-7 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-emerald-500"
-          >
-            <Phone className="h-4 w-4" /> Chamar no WhatsApp
-          </a>
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-7 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-emerald-500"
+            >
+              <Phone className="h-4 w-4" /> Chamar no WhatsApp
+            </a>
+          )}
           <a
             href="#cardapio"
             className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-secondary/60 px-7 py-3 text-sm font-semibold tracking-wider text-gold transition hover:bg-gold/10"

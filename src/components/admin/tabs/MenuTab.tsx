@@ -9,7 +9,7 @@ import {
   PublicMenuOverride,
 } from "@/lib/menu.functions";
 
-export function MenuTab() {
+export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const fetchOverrides = useServerFn(getPublicMenuOverrides);
   const saveOverride = useServerFn(saveMenuOverride);
   const resetOverride = useServerFn(resetMenuOverride);
@@ -93,21 +93,27 @@ export function MenuTab() {
     setSavingId(item.id);
     const nextAvailable = !item.available;
     try {
-      await saveOverride({
-        data: {
-          id: item.id,
-          available: nextAvailable,
-          price: item.price,
-          badge: item.badge ?? null,
-        },
-      });
+      const payload = isAdmin
+        ? {
+            id: item.id,
+            available: nextAvailable,
+            price: item.price,
+            badge: item.badge ?? null,
+          }
+        : {
+            id: item.id,
+            available: nextAvailable,
+          };
+
+      await saveOverride({ data: payload });
       setOverrides((prev) => ({
         ...prev,
         [item.id]: {
+          ...prev[item.id],
           id: item.id,
-          price: item.price,
+          price: prev[item.id]?.price ?? item.price,
           available: nextAvailable,
-          badge: item.badge ?? null,
+          badge: prev[item.id]?.badge ?? item.badge ?? null,
         },
       }));
       showToast(
@@ -125,6 +131,7 @@ export function MenuTab() {
   const handleSaveItem = async (
     item: Pizza & { available: boolean; price: number }
   ) => {
+    if (!isAdmin) return;
     const rawPriceDraft = priceDrafts[item.id];
     const parsedPrice =
       rawPriceDraft !== undefined ? Number(rawPriceDraft.replace(",", ".")) : item.price;
@@ -175,6 +182,7 @@ export function MenuTab() {
   };
 
   const handleReset = async (item: Pizza & { defaultPrice: number }) => {
+    if (!isAdmin) return;
     setSavingId(item.id);
     try {
       await resetOverride({ data: { id: item.id } });
@@ -206,10 +214,12 @@ export function MenuTab() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="font-serif text-2xl font-bold text-foreground">
-            Gerenciamento de Cardápio
+            {isAdmin ? "Gerenciamento de Cardápio" : "Ajuste Rápido de Estoque"}
           </h2>
           <p className="text-sm text-muted-foreground">
-            Altere preços, selos de destaque ou pause sabores e bebidas temporariamente esgotados.
+            {isAdmin
+              ? "Altere preços, selos de destaque ou pause sabores e bebidas temporariamente esgotados."
+              : "Modo Supervisor: pause ou reative itens que acabaram no estoque durante o expediente. Alteração de preços é restrita ao Administrador."}
           </p>
         </div>
 
@@ -220,9 +230,11 @@ export function MenuTab() {
           <span className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 font-bold text-red-400">
             Esgotados: {stats.paused}
           </span>
-          <span className="rounded-xl border border-gold/30 bg-gold/10 px-3 py-1.5 font-bold text-gold">
-            Preços editados: {stats.customized}
-          </span>
+          {isAdmin && (
+            <span className="rounded-xl border border-gold/30 bg-gold/10 px-3 py-1.5 font-bold text-gold">
+              Preços editados: {stats.customized}
+            </span>
+          )}
         </div>
       </div>
 
@@ -340,56 +352,67 @@ export function MenuTab() {
                 </div>
 
                 <div className="mt-4 space-y-2.5 border-t border-border/60 pt-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-muted-foreground">R$</span>
+                  {isAdmin ? (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground">R$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={draftVal}
+                            onChange={(e) =>
+                              setPriceDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            className="w-24 rounded-lg border border-border bg-secondary/40 px-2.5 py-1.5 text-sm font-bold text-gold focus:outline-none focus:ring-2 focus:ring-gold/50"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {hasPendingDraft && (
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => handleSaveItem(item)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gold px-3 py-1.5 text-xs font-bold text-gold-foreground transition hover:brightness-110"
+                            >
+                              <Save className="h-3.5 w-3.5" /> Salvar
+                            </button>
+                          )}
+
+                          {item.hasOverride && (
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => handleReset(item)}
+                              title={`Restaurar padrão (${formatBRL(item.defaultPrice)})`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-gold/40 hover:text-foreground"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
                       <input
                         type="text"
-                        inputMode="decimal"
-                        value={draftVal}
+                        maxLength={40}
+                        value={badgeDraftVal}
                         onChange={(e) =>
-                          setPriceDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                          setBadgeDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
                         }
-                        className="w-24 rounded-lg border border-border bg-secondary/40 px-2.5 py-1.5 text-sm font-bold text-gold focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder="Selo opcional (ex: Mais pedida, Novidade)"
+                        className="w-full rounded-lg border border-border/70 bg-secondary/30 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-gold/40"
                       />
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Preço atual</span>
+                      <span className="font-serif text-sm font-bold text-gold">
+                        {formatBRL(item.price)}
+                      </span>
                     </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {hasPendingDraft && (
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() => handleSaveItem(item)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-gold px-3 py-1.5 text-xs font-bold text-gold-foreground transition hover:brightness-110"
-                        >
-                          <Save className="h-3.5 w-3.5" /> Salvar
-                        </button>
-                      )}
-
-                      {item.hasOverride && (
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() => handleReset(item)}
-                          title={`Restaurar padrão (${formatBRL(item.defaultPrice)})`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-gold/40 hover:text-foreground"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <input
-                    type="text"
-                    maxLength={40}
-                    value={badgeDraftVal}
-                    onChange={(e) =>
-                      setBadgeDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
-                    }
-                    placeholder="Selo opcional (ex: Mais pedida, Novidade)"
-                    className="w-full rounded-lg border border-border/70 bg-secondary/30 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-gold/40"
-                  />
+                  )}
                 </div>
               </div>
             );

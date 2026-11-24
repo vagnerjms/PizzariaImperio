@@ -22,6 +22,7 @@ export interface PrintableOrder {
   customer_phone: string;
   customer_address: string;
   delivery_mode?: "delivery" | "pickup" | "dine_in";
+  table_number?: string | null;
   payment_method: string;
   payment_status?: string;
   troco?: number | null;
@@ -198,6 +199,9 @@ export function buildEscPosBuffer(order: PrintableOrder, settings: PrinterSettin
       : "ENTREGA DELIVERY";
   addBytes(ESC, 0x45, 0x01);
   addLine(`MODALIDADE: [${modeLabel}]`);
+  if (order.table_number) {
+    addLine(`MESA:    ${order.table_number}`);
+  }
   addLine(`CLIENTE: ${order.customer_name}`);
   addBytes(ESC, 0x45, 0x00);
   addLine(`TEL:     ${order.customer_phone}`);
@@ -411,6 +415,7 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
           ? "CONSUMIR NO LOCAL"
           : "ENTREGA DELIVERY"
       }</div>
+      ${order.table_number ? `<div><span class="bold">MESA:</span> ${escapeHtml(order.table_number)}</div>` : ""}
       <div><span class="bold">CLIENTE:</span> ${escapeHtml(order.customer_name)}</div>
       <div><span class="bold">TEL:</span> ${escapeHtml(order.customer_phone)}</div>
       <div><span class="bold">END:</span> ${escapeHtml(order.customer_address)}</div>

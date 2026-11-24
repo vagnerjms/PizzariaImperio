@@ -101,7 +101,7 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await expect(page.locator('button:has-text("Taxas de Entrega")')).not.toBeVisible();
   });
 
-  test("Supervisor deve acessar Pedidos, Cardápio, Promoções, WhatsApp, Indicadores e Taxas de Entrega", async ({
+  test("Supervisor deve acessar Pedidos, Estoque, Operação (Hoje), WhatsApp e Taxas (consulta), sem Promoções/Usuários/Configurações", async ({
     page,
   }) => {
     await page.goto("http://localhost:3002/auth");
@@ -111,11 +111,11 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
     await page.click('button:has-text("Entrar")');
 
     await expect(page.locator("text=Supervisor")).toBeVisible();
-    await expect(page.locator('button:has-text("Cardápio")')).toBeVisible();
-    await expect(page.locator('button:has-text("Promoções")')).toBeVisible();
+    await expect(page.locator('button:has-text("Estoque")')).toBeVisible();
     await expect(page.locator('button:has-text("WhatsApp")')).toBeVisible();
-    await expect(page.locator('button:has-text("Indicadores")')).toBeVisible();
+    await expect(page.locator('button:has-text("Operação (Hoje)")')).toBeVisible();
     await expect(page.locator('button:has-text("Taxas de Entrega")')).toBeVisible();
+    await expect(page.locator('button:has-text("Promoções")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Usuários")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Configurações")')).not.toBeVisible();
   });

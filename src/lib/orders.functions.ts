@@ -19,6 +19,7 @@ const createOrderSchema = z.object({
   customer_address: z.string().trim().min(5).max(400),
   delivery_mode: z.enum(["delivery", "pickup", "dine_in"]).optional(),
   neighborhood: z.string().max(100).nullable().optional(),
+  table_number: z.string().trim().max(20).nullable().optional(),
   payment_method: z.enum(["Pix", "Dinheiro", "Cartão de crédito", "Cartão de débito"]),
   troco: z.number().min(0).max(10000).nullable().optional(),
   notes: z.string().max(500).optional().nullable(),
@@ -40,6 +41,11 @@ export const createOrder = createServerFn({ method: "POST" })
     const { listPublicPromotionsFromDb } = await import("./promotions.server");
     const { calculateVerifiedOrderPricing } = await import("./order-pricing");
     const { getSystemSettings } = await import("./settings.server");
+    const {
+      evaluateStoreOpenStatus,
+      isDeliveryModeEnabled,
+      isPaymentMethodEnabled,
+    } = await import("./store-hours");
 
     const ordersCol = await getOrdersCollection();
     const orderId = randomUUID();
@@ -54,6 +60,20 @@ export const createOrder = createServerFn({ method: "POST" })
           : Promise.resolve(0),
         getSystemSettings(),
       ]);
+
+    // Store operational checks (hours/pause, enabled delivery modes & payment methods)
+    const storeStatus = evaluateStoreOpenStatus(settings);
+    if (!storeStatus.isOpen) {
+      throw new Error(storeStatus.reason);
+    }
+    if (!isDeliveryModeEnabled(deliveryMode, settings.enabled_delivery_modes)) {
+      throw new Error("A modalidade de atendimento escolhida está temporariamente indisponível.");
+    }
+    if (!isPaymentMethodEnabled(data.payment_method, settings.enabled_payment_methods)) {
+      throw new Error(
+        `A forma de pagamento "${data.payment_method}" está temporariamente indisponível.`
+      );
+    }
 
     // 🔒 Strict Server-Side Recalculation & Anti-Tampering (OWASP A04:2021)
     const {
@@ -198,6 +218,7 @@ export const createOrder = createServerFn({ method: "POST" })
       customer_phone: data.customer_phone,
       customer_address: data.customer_address,
       delivery_mode: deliveryMode,
+      table_number: deliveryMode === "dine_in" ? data.table_number ?? null : null,
       payment_method: data.payment_method,
       troco: data.troco ?? null,
       notes: data.notes ?? null,
@@ -214,6 +235,11 @@ export const createOrder = createServerFn({ method: "POST" })
       payment_details: paymentDetails,
       created_at: now,
       updated_at: now,
+      preparing_at: null as Date | null,
+      dispatched_at: null as Date | null,
+      delivered_at: null as Date | null,
+      canceled_at: null as Date | null,
+      cancel_reason: null as string | null,
       items: validatedItems,
     };
 
@@ -235,6 +261,7 @@ export const createOrder = createServerFn({ method: "POST" })
             customer_phone: data.customer_phone,
             customer_address: data.customer_address,
             delivery_mode: deliveryMode,
+            table_number: newOrder.table_number,
             payment_method: data.payment_method,
             troco: data.troco,
             notes: data.notes,
@@ -267,6 +294,7 @@ export const createOrder = createServerFn({ method: "POST" })
       delivery_fee: verifiedDeliveryFee,
       total,
       delivery_mode: deliveryMode,
+      table_number: newOrder.table_number,
       status: "novo" as const,
       payment_method: data.payment_method,
       payment_status: paymentStatus,
@@ -298,6 +326,8 @@ export const listOrders = createServerFn({ method: "GET" })
           $set: {
             status: "cancelado",
             payment_status: "failed",
+            canceled_at: new Date(),
+            cancel_reason: "Pix expirado automaticamente após 30 minutos",
             updated_at: new Date(),
           },
         }
@@ -310,12 +340,20 @@ export const listOrders = createServerFn({ method: "GET" })
       .limit(200)
       .toArray();
 
+    const toIsoOrNull = (val: unknown): string | null => {
+      if (!val) return null;
+      if (val instanceof Date) return val.toISOString();
+      if (typeof val === "string") return val;
+      return null;
+    };
+
     return orders.map((o: any) => ({
       id: o._id,
       customer_name: o.customer_name,
       customer_phone: o.customer_phone,
       customer_address: o.customer_address,
       delivery_mode: o.delivery_mode || "delivery",
+      table_number: o.table_number || null,
       payment_method: o.payment_method,
       troco: o.troco,
       notes: o.notes || null,
@@ -328,6 +366,11 @@ export const listOrders = createServerFn({ method: "GET" })
       status: o.status,
       created_at: o.created_at.toISOString(),
       updated_at: o.updated_at.toISOString(),
+      preparing_at: toIsoOrNull(o.preparing_at),
+      dispatched_at: toIsoOrNull(o.dispatched_at),
+      delivered_at: toIsoOrNull(o.delivered_at),
+      canceled_at: toIsoOrNull(o.canceled_at),
+      cancel_reason: o.cancel_reason || null,
       payment_status: o.payment_status,
       payment_gateway: o.payment_gateway,
       gateway_payment_id: o.gateway_payment_id,
@@ -350,6 +393,7 @@ export const listOrders = createServerFn({ method: "GET" })
 const updateStatusSchema = z.object({
   id: z.string(),
   status: z.enum(["novo", "preparando", "saiu", "entregue", "cancelado"]),
+  cancel_reason: z.string().trim().max(200).optional(),
 });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
@@ -364,15 +408,24 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     const ordersCol = await getOrdersCollection();
     const orderBefore = await ordersCol.findOne({ _id: data.id });
 
-    const result = await ordersCol.updateOne(
-      { _id: data.id },
-      {
-        $set: {
-          status: data.status,
-          updated_at: new Date(),
-        },
-      }
-    );
+    const now = new Date();
+    const updateDoc: Record<string, unknown> = {
+      status: data.status,
+      updated_at: now,
+    };
+
+    if (data.status === "preparando" && !orderBefore?.preparing_at) {
+      updateDoc.preparing_at = now;
+    } else if (data.status === "saiu" && !orderBefore?.dispatched_at) {
+      updateDoc.dispatched_at = now;
+    } else if (data.status === "entregue" && !orderBefore?.delivered_at) {
+      updateDoc.delivered_at = now;
+    } else if (data.status === "cancelado" && !orderBefore?.canceled_at) {
+      updateDoc.canceled_at = now;
+      if (data.cancel_reason) updateDoc.cancel_reason = data.cancel_reason;
+    }
+
+    const result = await ordersCol.updateOne({ _id: data.id }, { $set: updateDoc });
 
     if (result.matchedCount === 0) {
       throw new Error("Pedido não encontrado.");

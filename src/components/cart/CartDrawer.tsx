@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CartItem, formatBRL } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
+import { PublicStoreConfig } from "@/lib/store-hours";
 import { useDeliveryAddress } from "@/hooks/useDeliveryAddress";
 import { useActiveOrder } from "@/hooks/useActiveOrder";
 import { OrderStatusView } from "./OrderStatusView";
@@ -25,6 +26,7 @@ export function CartDrawer({
   onOpen,
   cart,
   appliedPromotion,
+  storeConfig,
   onInc,
   onDec,
   onRemove,
@@ -35,11 +37,14 @@ export function CartDrawer({
   onOpen: () => void;
   cart: CartItem[];
   appliedPromotion: AppliedPromotionResult | null;
+  storeConfig?: PublicStoreConfig | null;
   onInc: (itemId: string) => void;
   onDec: (itemId: string) => void;
   onRemove: (itemId: string) => void;
   onClear: () => void;
 }) {
+  const isStoreOpen = storeConfig?.status?.isOpen ?? true;
+  const storeClosedReason = storeConfig?.status?.reason || "Estamos fechados no momento.";
   const [step, setStep] = useState<CheckoutStep>("cart");
   const [viewMode, setViewMode] = useState<"cart" | "order_status">("cart");
 
@@ -294,6 +299,7 @@ export function CartDrawer({
             <CheckoutDeliveryStep
               form={form}
               errors={errors}
+              enabledModes={storeConfig?.enabled_delivery_modes}
               cepLoading={cepLoading}
               locatingGPS={locatingGPS}
               streetSearching={streetSearching}
@@ -316,6 +322,7 @@ export function CartDrawer({
               errors={errors}
               total={total}
               submitError={submitError}
+              enabledPayments={storeConfig?.enabled_payment_methods}
               onChangeDelivery={() => setStep("delivery")}
               onChangeField={setField}
             />
@@ -325,6 +332,12 @@ export function CartDrawer({
         {/* Bottom Sticky Bar (shown on cart, delivery, and payment steps) */}
         {cart.length > 0 && viewMode !== "order_status" && step !== "identity" && (
           <div className="border-t border-border bg-secondary/40 p-5 space-y-3.5">
+            {!isStoreOpen && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-xs font-medium text-red-300">
+                {storeClosedReason}
+              </div>
+            )}
+
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Subtotal</span>
@@ -360,16 +373,24 @@ export function CartDrawer({
             {step === "cart" ? (
               <button
                 type="button"
+                disabled={!isStoreOpen}
                 onClick={handleStartCheckout}
-                className="w-full rounded-xl bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95 flex items-center justify-center gap-2"
+                className="w-full rounded-xl bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground shadow-gold-glow transition hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Confirmar Pedido <ChevronRight className="h-4 w-4" />
+                {isStoreOpen ? (
+                  <>
+                    Confirmar Pedido <ChevronRight className="h-4 w-4" />
+                  </>
+                ) : (
+                  "Loja Fechada no Momento"
+                )}
               </button>
             ) : step === "delivery" ? (
               <button
                 type="button"
+                disabled={!isStoreOpen}
                 onClick={handleProceedFromDelivery}
-                className={`w-full rounded-xl py-3.5 text-sm font-bold transition active:scale-95 flex items-center justify-center gap-2 ${
+                className={`w-full rounded-xl py-3.5 text-sm font-bold transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                   form.deliveryMode
                     ? "bg-gold text-gold-foreground shadow-gold-glow hover:brightness-110"
                     : "bg-secondary text-muted-foreground"
@@ -383,15 +404,17 @@ export function CartDrawer({
               <button
                 type="button"
                 onClick={buildAndSend}
-                disabled={submitting || !form.payment}
+                disabled={submitting || !form.payment || !isStoreOpen}
                 className={`w-full rounded-xl py-3.5 text-sm font-bold transition active:scale-95 flex items-center justify-center gap-2 ${
-                  form.payment
+                  form.payment && isStoreOpen
                     ? "bg-gold text-gold-foreground shadow-gold-glow hover:brightness-110 disabled:opacity-50"
                     : "bg-secondary text-muted-foreground cursor-not-allowed"
                 }`}
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {submitting
+                {!isStoreOpen
+                  ? "Loja Fechada no Momento"
+                  : submitting
                   ? "Enviando Pedido..."
                   : form.payment
                   ? `Finalizar pedido • ${formatBRL(total)}`

@@ -1,5 +1,6 @@
-import { Flame, LogOut, RefreshCw, Printer, Volume2, VolumeX } from "lucide-react";
+import { Flame, LogOut, RefreshCw, Printer, Volume2, VolumeX, Store, PauseCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { StoreStatusOverride } from "@/lib/store-hours";
 
 export type AdminViewMode =
   | "pedidos"
@@ -20,6 +21,10 @@ export function AdminHeader({
   counts,
   printerConnected,
   soundEnabled,
+  storeOpen,
+  storeOverrideMode,
+  togglingStore,
+  onToggleStorePause,
   onToggleSound,
   onConnectPrinter,
   onDisconnectPrinter,
@@ -34,12 +39,21 @@ export function AdminHeader({
   counts: Record<string, number>;
   printerConnected: boolean;
   soundEnabled?: boolean;
+  storeOpen?: boolean;
+  storeOverrideMode?: StoreStatusOverride;
+  togglingStore?: boolean;
+  onToggleStorePause?: () => void;
   onToggleSound?: () => void;
   onConnectPrinter: () => void;
   onDisconnectPrinter: () => void;
   onRefreshOrders: () => void;
   onLogout: () => void;
 }) {
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
+  const isSupervisorOrAdmin = Boolean(
+    user?.roles?.some((r) => ["admin", "supervisor"].includes(r))
+  );
+
   const tabs = [
     { id: "ativos", label: `Ativos (${counts.ativos ?? 0})` },
     { id: "novo", label: `Novos (${counts.novo ?? 0})` },
@@ -61,7 +75,7 @@ export function AdminHeader({
               <div className="flex items-center gap-2">
                 <h1 className="font-serif text-lg leading-tight">Painel Administrativo</h1>
                 <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold leading-none">
-                  {user?.roles?.includes("admin")
+                  {isAdmin
                     ? "Admin"
                     : user?.roles?.includes("supervisor")
                       ? "Supervisor"
@@ -87,7 +101,7 @@ export function AdminHeader({
               🍕 Pedidos (KDS)
             </button>
 
-            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+            {isSupervisorOrAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("cardapio")}
@@ -96,11 +110,11 @@ export function AdminHeader({
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   }`}
               >
-                📋 Cardápio
+                📋 {isAdmin ? "Cardápio" : "Estoque"}
               </button>
             )}
 
-            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+            {isSupervisorOrAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("indicadores")}
@@ -109,11 +123,11 @@ export function AdminHeader({
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   }`}
               >
-                📊 Indicadores & DRE
+                📊 {isAdmin ? "Indicadores & Financeiro" : "Operação (Hoje)"}
               </button>
             )}
 
-            {user?.roles?.includes("admin") && (
+            {isAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("usuarios")}
@@ -126,7 +140,7 @@ export function AdminHeader({
               </button>
             )}
 
-            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+            {isSupervisorOrAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("taxas")}
@@ -139,7 +153,7 @@ export function AdminHeader({
               </button>
             )}
 
-            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+            {isAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("promocoes")}
@@ -152,7 +166,7 @@ export function AdminHeader({
               </button>
             )}
 
-            {user?.roles?.some((r) => ["admin", "supervisor"].includes(r)) && (
+            {isSupervisorOrAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("whatsapp")}
@@ -165,7 +179,7 @@ export function AdminHeader({
               </button>
             )}
 
-            {user?.roles?.includes("admin") && (
+            {isAdmin && (
               <button
                 type="button"
                 onClick={() => setViewMode("configuracoes")}
@@ -181,6 +195,39 @@ export function AdminHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          {isSupervisorOrAdmin && onToggleStorePause && (
+            <button
+              type="button"
+              disabled={togglingStore}
+              onClick={onToggleStorePause}
+              title={
+                storeOpen
+                  ? "Loja recebendo pedidos — clique para pausar recebimento"
+                  : "Loja fechada/pausada — clique para reabrir recebimento"
+              }
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border transition disabled:opacity-50 ${
+                storeOpen
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                  : "border-red-500/40 bg-red-500/15 text-red-400 hover:bg-red-500/25"
+              }`}
+            >
+              {storeOpen ? (
+                <Store className="h-3.5 w-3.5" />
+              ) : (
+                <PauseCircle className="h-3.5 w-3.5" />
+              )}
+              <span>
+                {storeOpen
+                  ? storeOverrideMode === "force_open"
+                    ? "Aberta (Manual)"
+                    : "Loja Aberta"
+                  : storeOverrideMode === "force_closed"
+                    ? "Pausada"
+                    : "Fechada (Horário)"}
+              </span>
+            </button>
+          )}
+
           {onToggleSound && (
             <button
               type="button"

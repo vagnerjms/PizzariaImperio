@@ -3,6 +3,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getPublicPromotions } from "@/lib/promotions.functions";
 import { getPublicMenuOverrides, PublicMenuOverride } from "@/lib/menu.functions";
+import { getPublicStoreConfig } from "@/lib/settings";
+import { PublicStoreConfig } from "@/lib/store-hours";
 import { Promotion } from "@/lib/promotions.types";
 import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS, formatBRL } from "@/data/catalog";
 import { useCart } from "@/hooks/useCart";
@@ -21,16 +23,22 @@ import { ShoppingBag } from "lucide-react";
 export const Route = createFileRoute("/")({
   loader: async () => {
     try {
-      const [promos, overrides] = await Promise.all([
+      const [promos, overrides, storeConfig] = await Promise.all([
         getPublicPromotions(),
         getPublicMenuOverrides(),
+        getPublicStoreConfig(),
       ]);
       return {
         promotions: promos || [],
         menuOverrides: (overrides || {}) as Record<string, PublicMenuOverride>,
+        storeConfig: (storeConfig || null) as PublicStoreConfig | null,
       };
     } catch {
-      return { promotions: [], menuOverrides: {} as Record<string, PublicMenuOverride> };
+      return {
+        promotions: [],
+        menuOverrides: {} as Record<string, PublicMenuOverride>,
+        storeConfig: null as PublicStoreConfig | null,
+      };
     }
   },
   head: () => ({
@@ -64,9 +72,13 @@ function Home() {
 
   const fetchPromotions = useServerFn(getPublicPromotions);
   const fetchMenuOverrides = useServerFn(getPublicMenuOverrides);
+  const fetchStoreConfig = useServerFn(getPublicStoreConfig);
   const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
   const [menuOverrides, setMenuOverrides] = useState<Record<string, PublicMenuOverride>>(
     () => loaderData?.menuOverrides || {}
+  );
+  const [storeConfig, setStoreConfig] = useState<PublicStoreConfig | null>(
+    () => loaderData?.storeConfig || null
   );
 
   useEffect(() => {
@@ -81,6 +93,12 @@ function Home() {
         if (data && typeof data === "object") setMenuOverrides(data);
       })
       .catch((err) => console.error("Erro ao carregar overrides do cardápio:", err));
+
+    fetchStoreConfig()
+      .then((data) => {
+        if (data) setStoreConfig(data);
+      })
+      .catch((err) => console.error("Erro ao carregar configurações da loja:", err));
   }, []);
 
   const effectiveMenu = useMemo(() => {
@@ -167,7 +185,13 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Header cartCount={cartCount} pulse={justAdded} onOpenCart={handleOpenCart} />
+      <Header
+        cartCount={cartCount}
+        pulse={justAdded}
+        onOpenCart={handleOpenCart}
+        storeOpen={storeConfig?.status?.isOpen ?? true}
+        storeStatusReason={storeConfig?.status?.reason}
+      />
       <Hero />
       <Promocoes
         promotions={promotions}
@@ -184,7 +208,7 @@ function Home() {
         onOpenHalfAndHalf={() => handleOpenHalfAndHalf()}
       />
       <Story />
-      <Contact />
+      <Contact storePhone={storeConfig?.store_phone} />
       <Footer />
 
       {cartCount > 0 && !cartOpen && (
@@ -260,6 +284,7 @@ function Home() {
         onOpen={handleOpenCart}
         cart={cart}
         appliedPromotion={appliedPromotion}
+        storeConfig={storeConfig}
         onInc={handleIncCartItem}
         onDec={handleDecCartItem}
         onRemove={handleRemoveCartItem}

@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listOrders, updateOrderStatus, confirmOrderPayment } from "@/lib/orders.functions";
+import { getPublicStoreConfig, toggleStorePause } from "@/lib/settings";
+import { PublicStoreConfig } from "@/lib/store-hours";
 import {
   connectSerialPrinter,
   disconnectSerialPrinter,
@@ -36,17 +38,21 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fetchOrders = useServerFn(listOrders);
   const updateStatus = useServerFn(updateOrderStatus);
   const confirmPaymentFn = useServerFn(confirmOrderPayment);
+  const fetchStoreConfig = useServerFn(getPublicStoreConfig);
+  const toggleStorePauseFn = useServerFn(toggleStorePause);
 
   const [filter, setFilter] = useState<
     "ativos" | "todos" | "pix_pendente" | OrderRow["status"]
   >("ativos");
 
   const [viewMode, setViewMode] = useState<AdminViewMode>("pedidos");
+  const [togglingStore, setTogglingStore] = useState(false);
 
   // Alerta sonoro KDS
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -56,6 +62,12 @@ function AdminPage() {
     return true;
   });
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
+
+  const { data: storeConfig } = useQuery<PublicStoreConfig>({
+    queryKey: ["admin", "store-config"],
+    queryFn: async () => fetchStoreConfig(),
+    refetchInterval: 30000,
+  });
 
   // Consulta reativa dos pedidos com TanStack Query (cache e polling inteligente)
   const {
@@ -244,6 +256,52 @@ function AdminPage() {
     }
   };
 
+  const handleToggleStorePause = async () => {
+    if (togglingStore) return;
+    const currentlyOpen = storeConfig?.status?.isOpen ?? true;
+    let nextOverride: "auto" | "force_open" | "force_closed";
+    let pauseReason = "";
+
+    if (currentlyOpen) {
+      const reason = window.prompt(
+        "Pausar recebimento de pedidos? Opcionalmente informe o motivo exibido aos clientes:",
+        storeConfig?.pause_reason || "Forno em alta demanda — voltamos em breve!"
+      );
+      if (reason === null) return; // cancelled
+      nextOverride = "force_closed";
+      pauseReason = reason.trim();
+    } else {
+      // If currently closed by schedule, force open; if force_closed, restore auto (or force_open if outside hours)
+      nextOverride =
+        storeConfig?.store_status_override === "force_closed" ? "auto" : "force_open";
+    }
+
+    setTogglingStore(true);
+    try {
+      const updated = await toggleStorePauseFn({
+        data: {
+          store_status_override: nextOverride,
+          pause_reason: pauseReason,
+        },
+      });
+      queryClient.setQueryData(["admin", "store-config"], updated);
+      setPrinterMsg({
+        text: updated.status.isOpen
+          ? "Loja aberta para novos pedidos!"
+          : `Recebimento pausado: ${updated.status.reason}`,
+      });
+      setTimeout(() => setPrinterMsg(null), 5000);
+    } catch (e) {
+      setPrinterMsg({
+        text: e instanceof Error ? e.message : "Erro ao atualizar status da loja.",
+        isError: true,
+      });
+      setTimeout(() => setPrinterMsg(null), 5000);
+    } finally {
+      setTogglingStore(false);
+    }
+  };
+
   const onLogout = async () => {
     document.cookie =
       "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
@@ -262,6 +320,10 @@ function AdminPage() {
         counts={counts}
         printerConnected={printerConnected}
         soundEnabled={soundEnabled}
+        storeOpen={storeConfig?.status?.isOpen ?? true}
+        storeOverrideMode={storeConfig?.store_status_override ?? "auto"}
+        togglingStore={togglingStore}
+        onToggleStorePause={handleToggleStorePause}
         onToggleSound={handleToggleSound}
         onConnectPrinter={handleConnectPrinter}
         onDisconnectPrinter={handleDisconnectPrinter}
@@ -304,19 +366,19 @@ function AdminPage() {
           />
         )}
 
-        {viewMode === "cardapio" && <MenuTab />}
+        {viewMode === "cardapio" && <MenuTab isAdmin={isAdmin} />}
 
-        {viewMode === "indicadores" && <FinancialTab orders={orders} />}
+        {viewMode === "indicadores" && <FinancialTab orders={orders} isAdmin={isAdmin} />}
 
-        {viewMode === "usuarios" && <UsersTab currentUser={user} />}
+        {viewMode === "usuarios" && isAdmin && <UsersTab currentUser={user} />}
 
         {viewMode === "taxas" && <DeliveryTab user={user} />}
 
-        {viewMode === "promocoes" && <PromotionsTab />}
+        {viewMode === "promocoes" && isAdmin && <PromotionsTab />}
 
-        {viewMode === "whatsapp" && <WhatsAppTab />}
+        {viewMode === "whatsapp" && <WhatsAppTab isAdmin={isAdmin} />}
 
-        {viewMode === "configuracoes" && (
+        {viewMode === "configuracoes" && isAdmin && (
           <SettingsTab
             currentUser={user}
             printerConnected={printerConnected}

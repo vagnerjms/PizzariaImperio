@@ -28,31 +28,31 @@ export const getPublicPromotions = createServerFn({ method: "GET" })
     return listPublicPromotionsFromDb();
   });
 
-// 2. Consulta administrativa
+// 2. Consulta administrativa (Apenas Admin)
 export const getAdminPromotions = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { listAdminPromotionsFromDb } = await import("./promotions.server");
     return listAdminPromotionsFromDb();
   });
 
-// 3. Criação de promoção
+// 3. Criação de promoção (Apenas Admin)
 export const createPromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) => createPromoSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { createPromotionInDb } = await import("./promotions.server");
     const created = await createPromotionInDb(data as any);
     return { success: true, promotion: created };
   });
 
-// 4. Edição de promoção
+// 4. Edição de promoção (Apenas Admin)
 export const updatePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) =>
@@ -62,15 +62,15 @@ export const updatePromotionFn = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { updatePromotionInDb } = await import("./promotions.server");
     await updatePromotionInDb(data.id, data.data as any);
     return { success: true };
   });
 
-// 5. Alternar status ativo/inativo
+// 5. Alternar status ativo/inativo (Apenas Admin)
 export const togglePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) =>
@@ -80,21 +80,21 @@ export const togglePromotionFn = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { togglePromotionInDb } = await import("./promotions.server");
     await togglePromotionInDb(data.id, data.active);
     return { success: true };
   });
 
-// 6. Deletar promoção
+// 6. Deletar promoção (Apenas Admin)
 export const deletePromotionFn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Acesso restrito a Administradores.");
     }
     const { deletePromotionInDb } = await import("./promotions.server");
     await deletePromotionInDb(data.id);

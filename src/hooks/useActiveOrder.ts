@@ -130,11 +130,14 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
       setSubmitting(true);
       setSubmitError(null);
       try {
+        const tableClean = form.tableNumber?.trim();
         const fullAddress =
           form.deliveryMode === "pickup"
             ? "Retirada no Balcão (Buscar o pedido)"
             : form.deliveryMode === "dine_in"
-            ? "Consumir no Local (Salão Pizzaria Império)"
+            ? tableClean
+              ? `Consumir no Local — Mesa ${tableClean} (Salão Pizzaria Império)`
+              : "Consumir no Local (Salão Pizzaria Império)"
             : `${form.rua.trim()}, ${form.numero.trim()} - ${form.bairro.trim()}, ${form.cidadeUf.trim()}${
                 form.complemento.trim() ? " (" + form.complemento.trim() + ")" : ""
               }`;
@@ -191,6 +194,8 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
             customer_address: sanitize(fullAddress, 400),
             delivery_mode: (form.deliveryMode || "delivery") as "delivery" | "pickup" | "dine_in",
             neighborhood: form.deliveryMode === "delivery" ? sanitize(form.bairro, 80) : null,
+            table_number:
+              form.deliveryMode === "dine_in" && tableClean ? sanitize(tableClean, 20) : null,
             payment_method: form.payment as
               | "Pix"
               | "Dinheiro"

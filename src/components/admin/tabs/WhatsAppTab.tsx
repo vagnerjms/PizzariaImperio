@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 
-export function WhatsAppTab() {
+export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const [whatsappStatus, setWhatsappStatus] = useState<"open" | "close" | "checking" | "error">("checking");
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
@@ -137,18 +137,24 @@ export function WhatsAppTab() {
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={whatsappLoading}
-              onClick={handleDisconnect}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-destructive/30 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
-            >
-              {whatsappLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Desconectar WhatsApp"
-              )}
-            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                disabled={whatsappLoading}
+                onClick={handleDisconnect}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-destructive/30 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
+              >
+                {whatsappLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  "Desconectar WhatsApp"
+                )}
+              </button>
+            ) : (
+              <p className="text-center text-[11px] text-muted-foreground">
+                Apenas Administradores podem desconectar a instância ativa.
+              </p>
+            )}
           </div>
         )}
 

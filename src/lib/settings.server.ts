@@ -1,4 +1,16 @@
 import { getDb } from "./db";
+import {
+  DEFAULT_ENABLED_DELIVERY_MODES,
+  DEFAULT_ENABLED_PAYMENT_METHODS,
+  DEFAULT_OPENING_HOURS,
+  EnabledDeliveryModes,
+  EnabledPaymentMethods,
+  evaluateStoreOpenStatus,
+  normalizeOpeningHours,
+  OpeningHoursMap,
+  PublicStoreConfig,
+  StoreStatusOverride,
+} from "./store-hours";
 
 export interface SystemSettings {
   evolution_api_url: string;
@@ -8,6 +20,13 @@ export interface SystemSettings {
   mercado_pago_public_key: string;
   whatsapp_instance_name: string;
   google_maps_api_key: string;
+  // Store operational settings (Pacote 1)
+  store_phone: string;
+  store_status_override: StoreStatusOverride;
+  pause_reason: string;
+  opening_hours: OpeningHoursMap;
+  enabled_payment_methods: EnabledPaymentMethods;
+  enabled_delivery_modes: EnabledDeliveryModes;
 }
 
 interface SettingsDoc extends Partial<SystemSettings> {
@@ -24,6 +43,12 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     mercado_pago_public_key: process.env.VITE_MERCADO_PAGO_PUBLIC_KEY || "",
     whatsapp_instance_name: process.env.WHATSAPP_INSTANCE_NAME || "Disparo",
     google_maps_api_key: process.env.GOOGLE_MAPS_API_KEY || "",
+    store_phone: process.env.STORE_WHATSAPP_PHONE || "",
+    store_status_override: "auto",
+    pause_reason: "",
+    opening_hours: { ...DEFAULT_OPENING_HOURS },
+    enabled_payment_methods: { ...DEFAULT_ENABLED_PAYMENT_METHODS },
+    enabled_delivery_modes: { ...DEFAULT_ENABLED_DELIVERY_MODES },
   };
 
   try {
@@ -42,6 +67,23 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       whatsapp_instance_name:
         settings?.whatsapp_instance_name || envDefaults.whatsapp_instance_name,
       google_maps_api_key: settings?.google_maps_api_key || envDefaults.google_maps_api_key,
+      store_phone:
+        settings?.store_phone !== undefined ? settings.store_phone : envDefaults.store_phone,
+      store_status_override:
+        settings?.store_status_override === "force_open" ||
+        settings?.store_status_override === "force_closed"
+          ? settings.store_status_override
+          : "auto",
+      pause_reason: settings?.pause_reason || "",
+      opening_hours: normalizeOpeningHours(settings?.opening_hours),
+      enabled_payment_methods: {
+        ...DEFAULT_ENABLED_PAYMENT_METHODS,
+        ...(settings?.enabled_payment_methods || {}),
+      },
+      enabled_delivery_modes: {
+        ...DEFAULT_ENABLED_DELIVERY_MODES,
+        ...(settings?.enabled_delivery_modes || {}),
+      },
     };
   } catch (error) {
     console.error("Failed to load settings from DB, using environment variables:", error);
@@ -49,15 +91,36 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   }
 }
 
+export function getPublicStoreConfigFromSettings(settings: SystemSettings): PublicStoreConfig {
+  const operational = {
+    store_phone: settings.store_phone || "",
+    store_status_override: settings.store_status_override || "auto",
+    pause_reason: settings.pause_reason || "",
+    opening_hours: normalizeOpeningHours(settings.opening_hours),
+    enabled_payment_methods: {
+      ...DEFAULT_ENABLED_PAYMENT_METHODS,
+      ...(settings.enabled_payment_methods || {}),
+    },
+    enabled_delivery_modes: {
+      ...DEFAULT_ENABLED_DELIVERY_MODES,
+      ...(settings.enabled_delivery_modes || {}),
+    },
+  };
+
+  return {
+    ...operational,
+    status: evaluateStoreOpenStatus(operational),
+  };
+}
+
 export async function saveSystemSettings(settings: Partial<SystemSettings>): Promise<void> {
   const db = await getDb();
   const settingsCol = db.collection<SettingsDoc>("settings");
 
-  const cleanSettings: Partial<SettingsDoc> = {};
+  const cleanSettings: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(settings)) {
     if (val !== undefined && val !== null) {
-      (cleanSettings as Record<string, string>)[key] =
-        typeof val === "string" ? val.trim() : String(val);
+      cleanSettings[key] = typeof val === "string" ? val.trim() : val;
     }
   }
 
