@@ -13,6 +13,7 @@ import {
   Power,
 } from "lucide-react";
 import { formatBRL } from "@/lib/formatters";
+import { queryKeys } from "@/lib/query-keys";
 import { OrderRow } from "@/types/orders";
 import {
   listCouriers,
@@ -38,12 +39,12 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
   const fetchSettlementReport = useServerFn(getCourierSettlementReport);
 
   const { data: couriers = [], isLoading } = useQuery<CourierRow[]>({
-    queryKey: ["admin", "couriers"],
+    queryKey: queryKeys.admin.couriers(),
     queryFn: async () => fetchCouriers(),
   });
 
   const { data: cashData } = useQuery({
-    queryKey: ["admin", "cash-dashboard"],
+    queryKey: queryKeys.admin.cashDashboard(),
     queryFn: async () => fetchCashDashboard(),
   });
 
@@ -63,7 +64,7 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
         : "today";
 
   const { data: settlementReport } = useQuery({
-    queryKey: ["admin", "courier-settlements", period],
+    queryKey: queryKeys.admin.courierSettlements(period),
     queryFn: async () => fetchSettlementReport({ data: { period } }),
     refetchInterval: 20000,
   });
@@ -103,6 +104,12 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
     setShowForm(true);
   };
 
+  const invalidateCouriers = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.couriers() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.courierSettlementsAll() }),
+    ]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) {
@@ -123,10 +130,7 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
           fixed_fee: Math.max(0, Number(fixedFee.replace(",", ".")) || 0),
         },
       });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
-      ]);
+      await invalidateCouriers();
       showMsg(editingId ? "Entregador atualizado!" : "Entregador cadastrado!");
       resetForm();
     } catch (err) {
@@ -139,10 +143,7 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
   const handleToggleActive = async (c: CourierRow) => {
     try {
       await toggleCourierFn({ data: { id: c.id, active: !c.active } });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
-      ]);
+      await invalidateCouriers();
       showMsg(
         !c.active ? `${c.name} ativado para o turno.` : `${c.name} marcado como fora do turno.`,
       );
@@ -157,10 +158,7 @@ export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean
     }
     try {
       await deleteCourierFn({ data: { id: c.id } });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
-      ]);
+      await invalidateCouriers();
       showMsg(`Entregador "${c.name}" removido.`);
     } catch (err) {
       showMsg(err instanceof Error ? err.message : "Erro ao excluir entregador.", true);

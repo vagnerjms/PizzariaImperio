@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { createOrder, getOrderStatus } from "@/lib/orders.functions";
+import { trackPurchase } from "@/lib/analytics";
+import { queryKeys } from "@/lib/query-keys";
 import { CartItem } from "@/data/catalog";
 import { AppliedPromotionResult } from "@/lib/promotions.types";
 import { DeliveryAddressForm } from "./useDeliveryAddress";
@@ -84,7 +86,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
     activeOrder?.status === "cancelado";
 
   const { data: polledOrder } = useQuery({
-    queryKey: ["active-order-status", activeOrderId],
+    queryKey: queryKeys.public.activeOrderStatus(activeOrderId ?? null),
     queryFn: async () => {
       if (!activeOrderId) return null;
       try {
@@ -216,7 +218,6 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
         const createdOrder = (res && (res as any).order) ? (res as any).order : res;
         if (createdOrder && (createdOrder.id || createdOrder._id)) {
           setActiveOrder(createdOrder);
-          const { trackPurchase } = await import("@/lib/analytics");
           trackPurchase({
             orderId: String(createdOrder.id || createdOrder._id),
             total: Number(createdOrder.total || 0),

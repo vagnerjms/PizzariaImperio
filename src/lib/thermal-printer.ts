@@ -28,6 +28,7 @@ export {
 } from "./printer/order-receipt";
 
 export {
+  toPrintableShift,
   buildCashShiftEscPosBuffer,
   buildCashShiftReceiptHtml,
   printCashShiftThermal,

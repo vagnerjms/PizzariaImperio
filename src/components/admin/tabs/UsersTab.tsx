@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   UserPlus,
@@ -14,25 +15,36 @@ import {
   updateUserPassword,
   deleteUser,
 } from "@/lib/users.functions";
+import { queryKeys } from "@/lib/query-keys";
 
 export function UsersTab({
   currentUser,
 }: {
   currentUser: { email: string; roles: string[] };
 }) {
+  const queryClient = useQueryClient();
   const fetchUsersFn = useServerFn(listUsers);
   const createUserFn = useServerFn(createUser);
   const updateUserRoleFn = useServerFn(updateUserRole);
   const updateUserPasswordFn = useServerFn(updateUserPassword);
   const deleteUserFn = useServerFn(deleteUser);
+  const isAdmin = Boolean(currentUser?.roles?.includes("admin"));
 
-  const [usersList, setUsersList] = useState<
-    Array<{ id: string; email: string; roles: string[]; created_at: string | Date }>
-  >([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  const {
+    data: usersList = [],
+    isLoading: usersLoading,
+    error: usersQueryError,
+  } = useQuery({
+    queryKey: queryKeys.admin.users(),
+    queryFn: async () => fetchUsersFn(),
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+
   const [usersActionLoading, setUsersActionLoading] = useState(false);
   const [usersSuccessMsg, setUsersSuccessMsg] = useState<string | null>(null);
   const [usersErrorMsg, setUsersErrorMsg] = useState<string | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -42,23 +54,20 @@ export function UsersTab({
   const [passwordModalUser, setPasswordModalUser] = useState<{ id: string; email: string } | null>(null);
   const [newPasswordValue, setNewPasswordValue] = useState("");
 
-  const loadUsers = async () => {
-    if (!currentUser?.roles?.includes("admin")) return;
-    setUsersLoading(true);
-    setUsersErrorMsg(null);
-    try {
-      const data = await fetchUsersFn();
-      setUsersList(data);
-    } catch (e) {
-      setUsersErrorMsg(e instanceof Error ? e.message : "Erro ao carregar usuários.");
-    } finally {
-      setUsersLoading(false);
-    }
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
+  }, []);
+
+  const flashSuccess = (msg: string) => {
+    setUsersSuccessMsg(msg);
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setUsersSuccessMsg(null), 4000);
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  const displayedError =
+    usersErrorMsg || (usersQueryError instanceof Error ? usersQueryError.message : null);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,13 +82,12 @@ export function UsersTab({
           role: newUserRole,
         },
       });
-      setUsersSuccessMsg(`Usuário ${newUserEmail} cadastrado com sucesso!`);
+      flashSuccess(`Usuário ${newUserEmail} cadastrado com sucesso!`);
       setShowCreateUserModal(false);
       setNewUserEmail("");
       setNewUserPassword("");
       setNewUserRole("atendente");
-      loadUsers();
-      setTimeout(() => setUsersSuccessMsg(null), 4000);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.users() });
     } catch (err) {
       setUsersErrorMsg(err instanceof Error ? err.message : "Erro ao cadastrar usuário.");
     } finally {
@@ -95,9 +103,8 @@ export function UsersTab({
       await updateUserRoleFn({
         data: { userId, role: newRole },
       });
-      setUsersSuccessMsg("Permissão atualizada com sucesso!");
-      loadUsers();
-      setTimeout(() => setUsersSuccessMsg(null), 4000);
+      flashSuccess("Permissão atualizada com sucesso!");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.users() });
     } catch (err) {
       setUsersErrorMsg(err instanceof Error ? err.message : "Erro ao alterar permissão.");
     } finally {
@@ -118,10 +125,9 @@ export function UsersTab({
           newPassword: newPasswordValue.trim(),
         },
       });
-      setUsersSuccessMsg(`Senha do usuário ${passwordModalUser.email} alterada com sucesso!`);
+      flashSuccess(`Senha do usuário ${passwordModalUser.email} alterada com sucesso!`);
       setPasswordModalUser(null);
       setNewPasswordValue("");
-      setTimeout(() => setUsersSuccessMsg(null), 4000);
     } catch (err) {
       setUsersErrorMsg(err instanceof Error ? err.message : "Erro ao alterar senha.");
     } finally {
@@ -138,9 +144,8 @@ export function UsersTab({
       await deleteUserFn({
         data: { userId },
       });
-      setUsersSuccessMsg(`Usuário ${email} excluído com sucesso!`);
-      loadUsers();
-      setTimeout(() => setUsersSuccessMsg(null), 4000);
+      flashSuccess(`Usuário ${email} excluído com sucesso!`);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.users() });
     } catch (err) {
       setUsersErrorMsg(err instanceof Error ? err.message : "Erro ao excluir usuário.");
     } finally {
@@ -177,9 +182,9 @@ export function UsersTab({
           </div>
         ) : (
           <div className="space-y-6">
-            {usersErrorMsg && (
+            {displayedError && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive">
-                {usersErrorMsg}
+                {displayedError}
               </div>
             )}
             {usersSuccessMsg && (

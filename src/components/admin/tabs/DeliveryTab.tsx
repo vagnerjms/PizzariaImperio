@@ -1,12 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bike, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { getAdminDeliverySettings, updateAdminDeliverySettings, resetToBragancaNeighborhoods } from "@/lib/delivery.functions";
+import { queryKeys } from "@/lib/query-keys";
+import { cleanString, formatBRL } from "@/lib/formatters";
 
 export function DeliveryTab({ user }: { user: { email: string; roles: string[] } }) {
+  const queryClient = useQueryClient();
   const fetchDeliverySettings = useServerFn(getAdminDeliverySettings);
   const saveDeliverySettingsFn = useServerFn(updateAdminDeliverySettings);
   const resetBragancaFn = useServerFn(resetToBragancaNeighborhoods);
+
+  const canViewDelivery = Boolean(user?.roles?.some((r) => ["admin", "supervisor"].includes(r)));
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
+
+  const {
+    data: remoteDelivery,
+    isLoading: queryLoading,
+    error: deliveryQueryError,
+  } = useQuery({
+    queryKey: queryKeys.admin.delivery(),
+    queryFn: async () => fetchDeliverySettings(),
+    enabled: canViewDelivery,
+    staleTime: 60_000,
+  });
 
   const [deliveryFeeSettings, setDeliveryFeeSettings] = useState<{
     default_fee: number;
@@ -15,39 +33,43 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
     default_fee: 7.00,
     neighborhoods: [],
   });
-  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [resettingBraganca, setResettingBraganca] = useState(false);
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [deliverySuccessMsg, setDeliverySuccessMsg] = useState<string | null>(null);
   const [deliveryErrorMsg, setDeliveryErrorMsg] = useState<string | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [newNeighborhoodName, setNewNeighborhoodName] = useState("");
   const [newNeighborhoodFee, setNewNeighborhoodFee] = useState("5.00");
   const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
 
-  const loadDeliverySettings = async () => {
-    if (!user?.roles?.some(r => ["admin", "supervisor"].includes(r))) return;
-    setDeliveryLoading(true);
-    setDeliveryErrorMsg(null);
-    try {
-      const data = await fetchDeliverySettings();
-      setDeliveryFeeSettings({
-        default_fee: data.default_fee,
-        neighborhoods: data.neighborhoods || [],
-      });
-    } catch (e) {
-      setDeliveryErrorMsg(e instanceof Error ? e.message : "Erro ao carregar taxas de entrega.");
-    } finally {
-      setDeliveryLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!remoteDelivery) return;
+    setDeliveryFeeSettings({
+      default_fee: remoteDelivery.default_fee,
+      neighborhoods: remoteDelivery.neighborhoods || [],
+    });
+  }, [remoteDelivery]);
 
   useEffect(() => {
-    loadDeliverySettings();
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
   }, []);
+
+  const flashSuccess = (msg: string, ms = 4000) => {
+    setDeliverySuccessMsg(msg);
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setDeliverySuccessMsg(null), ms);
+  };
+
+  const deliveryLoading = queryLoading || resettingBraganca;
+  const displayedError =
+    deliveryErrorMsg || (deliveryQueryError instanceof Error ? deliveryQueryError.message : null);
 
   const handleLoadBraganca = async () => {
     if (!confirm("Deseja carregar a lista com todos os bairros oficiais de Bragança Paulista?")) return;
-    setDeliveryLoading(true);
+    setResettingBraganca(true);
     setDeliverySuccessMsg(null);
     setDeliveryErrorMsg(null);
     try {
@@ -56,16 +78,17 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
         default_fee: data.default_fee,
         neighborhoods: data.neighborhoods || [],
       });
-      setDeliverySuccessMsg("Todos os bairros de Bragança Paulista foram carregados!");
-      setTimeout(() => setDeliverySuccessMsg(null), 5000);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.delivery() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.public.deliveryConfig() }),
+      ]);
+      flashSuccess("Todos os bairros de Bragança Paulista foram carregados!", 5000);
     } catch (e) {
       setDeliveryErrorMsg(e instanceof Error ? e.message : "Erro ao carregar bairros.");
     } finally {
-      setDeliveryLoading(false);
+      setResettingBraganca(false);
     }
   };
-
-  const isAdmin = Boolean(user?.roles?.includes("admin"));
 
   const handleSaveDeliverySettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,8 +109,11 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
           })),
         },
       });
-      setDeliverySuccessMsg("Taxas de entrega salvas com sucesso!");
-      setTimeout(() => setDeliverySuccessMsg(null), 4000);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.delivery() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.public.deliveryConfig() }),
+      ]);
+      flashSuccess("Taxas de entrega salvas com sucesso!");
     } catch (err) {
       setDeliveryErrorMsg(err instanceof Error ? err.message : "Erro ao salvar taxas de entrega.");
     } finally {
@@ -176,9 +202,9 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
           </div>
         ) : (
           <div className="space-y-6">
-            {deliveryErrorMsg && (
+            {displayedError && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive">
-                {deliveryErrorMsg}
+                {displayedError}
               </div>
             )}
             {deliverySuccessMsg && (
@@ -199,25 +225,27 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground">R$</span>
                   {isAdmin ? (
-                    <input
-                      type="number"
-                      step="0.50"
-                      min="0"
-                      value={deliveryFeeSettings.default_fee}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value);
-                        setDeliveryFeeSettings((prev) => ({
-                          ...prev,
-                          default_fee: Number.isFinite(v) && v >= 0 ? v : 0,
-                        }));
-                      }}
-                      className="w-24 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    />
+                    <>
+                      <span className="text-xs font-bold text-muted-foreground">R$</span>
+                      <input
+                        type="number"
+                        step="0.50"
+                        min="0"
+                        value={deliveryFeeSettings.default_fee}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setDeliveryFeeSettings((prev) => ({
+                            ...prev,
+                            default_fee: Number.isFinite(v) && v >= 0 ? v : 0,
+                          }));
+                        }}
+                        className="w-24 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                    </>
                   ) : (
                     <span className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-bold text-gold">
-                      {deliveryFeeSettings.default_fee.toFixed(2).replace(".", ",")}
+                      {formatBRL(deliveryFeeSettings.default_fee)}
                     </span>
                   )}
                 </div>
@@ -287,7 +315,7 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
                   .filter(
                     (n) =>
                       !neighborhoodSearch.trim() ||
-                      n.name.toLowerCase().includes(neighborhoodSearch.toLowerCase().trim())
+                      cleanString(n.name).includes(cleanString(neighborhoodSearch.trim()))
                   )
                   .map((n) => (
                     <div
@@ -320,7 +348,7 @@ export function DeliveryTab({ user }: { user: { email: string; roles: string[] }
                           </>
                         ) : (
                           <span className="rounded-lg border border-border bg-secondary/30 px-2.5 py-1 text-xs font-bold text-gold">
-                            R$ {n.fee.toFixed(2).replace(".", ",")}
+                            {formatBRL(n.fee)}
                           </span>
                         )}
                       </div>

@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Tag,
   Plus,
@@ -18,40 +19,56 @@ import {
 } from "@/lib/promotions.functions";
 import { Promotion } from "@/lib/promotions.types";
 import { formatBRL, formatDateBR as formatPromoDate } from "@/lib/formatters";
+import { queryKeys } from "@/lib/query-keys";
 import { PromotionModal, PromotionFormData } from "../promotions/PromotionModal";
 
 export function PromotionsTab() {
+  const queryClient = useQueryClient();
   const fetchPromotions = useServerFn(getAdminPromotions);
   const createPromo = useServerFn(createPromotionFn);
   const updatePromo = useServerFn(updatePromotionFn);
   const togglePromo = useServerFn(togglePromotionFn);
   const deletePromo = useServerFn(deletePromotionFn);
 
-  const [promotionsList, setPromotionsList] = useState<Promotion[]>([]);
-  const [promotionsLoading, setPromotionsLoading] = useState(false);
+  const {
+    data: promotionsList = [],
+    isLoading: promotionsLoading,
+    error: promotionsQueryError,
+  } = useQuery({
+    queryKey: queryKeys.admin.promotions(),
+    queryFn: async () => fetchPromotions(),
+    staleTime: 30_000,
+  });
+
   const [promotionsActionLoading, setPromotionsActionLoading] = useState(false);
   const [promotionsSuccessMsg, setPromotionsSuccessMsg] = useState<string | null>(null);
   const [promotionsErrorMsg, setPromotionsErrorMsg] = useState<string | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
 
-  const loadPromotions = async () => {
-    setPromotionsLoading(true);
-    setPromotionsErrorMsg(null);
-    try {
-      const data = await fetchPromotions();
-      setPromotionsList(data);
-    } catch (err: any) {
-      setPromotionsErrorMsg(err?.message || "Erro ao carregar promoções.");
-    } finally {
-      setPromotionsLoading(false);
-    }
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
+  }, []);
+
+  const flashSuccess = (msg: string) => {
+    setPromotionsSuccessMsg(msg);
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setPromotionsSuccessMsg(null), 4000);
   };
 
-  useEffect(() => {
-    loadPromotions();
-  }, []);
+  const displayedError =
+    promotionsErrorMsg ||
+    (promotionsQueryError instanceof Error ? promotionsQueryError.message : null);
+
+  const invalidatePromotions = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.promotions() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.public.promotions() }),
+    ]);
 
   const handleOpenCreatePromo = () => {
     setEditingPromo(null);
@@ -73,16 +90,15 @@ export function PromotionsTab() {
     try {
       if (editingPromo?._id) {
         await updatePromo({ data: { id: editingPromo._id, data: payload } });
-        setPromotionsSuccessMsg("Promoção atualizada com sucesso!");
+        flashSuccess("Promoção atualizada com sucesso!");
       } else {
         await createPromo({ data: payload });
-        setPromotionsSuccessMsg("Nova promoção criada com sucesso!");
+        flashSuccess("Nova promoção criada com sucesso!");
       }
       setShowPromoModal(false);
-      await loadPromotions();
-      setTimeout(() => setPromotionsSuccessMsg(null), 4000);
-    } catch (err: any) {
-      setPromotionsErrorMsg(err?.message || "Erro ao salvar promoção.");
+      await invalidatePromotions();
+    } catch (err: unknown) {
+      setPromotionsErrorMsg(err instanceof Error ? err.message : "Erro ao salvar promoção.");
       throw err;
     } finally {
       setPromotionsActionLoading(false);
@@ -92,11 +108,12 @@ export function PromotionsTab() {
   const handleTogglePromo = async (id: string, currentActive: boolean) => {
     try {
       await togglePromo({ data: { id, active: !currentActive } });
-      setPromotionsList((prev) =>
-        prev.map((p) => (p._id === id ? { ...p, active: !currentActive } : p))
+      await invalidatePromotions();
+    } catch (err: unknown) {
+      setPromotionsErrorMsg(
+        "Erro ao alternar status da promoção: " +
+          (err instanceof Error ? err.message : "erro desconhecido"),
       );
-    } catch (err: any) {
-      alert("Erro ao alternar status da promoção: " + err.message);
     }
   };
 
@@ -104,9 +121,11 @@ export function PromotionsTab() {
     if (!confirm(`Tem certeza que deseja excluir a promoção "${title}"?`)) return;
     try {
       await deletePromo({ data: { id } });
-      setPromotionsList((prev) => prev.filter((p) => p._id !== id));
-    } catch (err: any) {
-      alert("Erro ao excluir promoção: " + err.message);
+      await invalidatePromotions();
+    } catch (err: unknown) {
+      setPromotionsErrorMsg(
+        "Erro ao excluir promoção: " + (err instanceof Error ? err.message : "erro desconhecido"),
+      );
     }
   };
 
@@ -134,9 +153,9 @@ export function PromotionsTab() {
           </button>
         </header>
 
-        {promotionsErrorMsg && (
+        {displayedError && (
           <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive flex items-center justify-between">
-            <span>{promotionsErrorMsg}</span>
+            <span>{displayedError}</span>
             <button type="button" onClick={() => setPromotionsErrorMsg(null)} className="text-destructive font-bold">
               ×
             </button>

@@ -1,8 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { getDeliveryFeeForNeighborhood } from "@/lib/delivery-config";
 import { cleanString, formatPhoneMask } from "@/lib/formatters";
-import { useCustomerProfile, CUSTOMER_STORAGE_KEY } from "./useCustomerProfile";
+import { lookupAddressByCep } from "@/lib/cep-client";
+import { queryKeys } from "@/lib/query-keys";
+import { useCustomerProfile } from "./useCustomerProfile";
 export { formatPhoneMask };
 import { getPublicDeliveryConfig } from "@/lib/delivery.functions";
 import { reverseGeocodeGPS, searchStreetAddress, LocationResult } from "@/lib/location.functions";
@@ -53,21 +56,16 @@ export function useDeliveryAddress() {
   const [bairroSuggestions, setBairroSuggestions] = useState<Array<{ name: string; fee: number }>>([]);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deliveryConfig, setDeliveryConfig] = useState<{ default_fee: number; neighborhoods: any[] } | null>(null);
 
   const fetchDeliveryConfig = useServerFn(getPublicDeliveryConfig);
   const fetchGpsAddress = useServerFn(reverseGeocodeGPS);
   const fetchStreetSearch = useServerFn(searchStreetAddress);
 
-  useEffect(() => {
-    fetchDeliveryConfig()
-      .then((cfg) => {
-        if (cfg) {
-          setDeliveryConfig(cfg);
-        }
-      })
-      .catch((err) => console.error("Erro ao carregar taxas de entrega:", err));
-  }, []);
+  const { data: deliveryConfig = null } = useQuery<{ default_fee: number; neighborhoods: any[] } | null>({
+    queryKey: queryKeys.public.deliveryConfig(),
+    queryFn: async () => (await fetchDeliveryConfig()) || null,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Hidrata dados do perfil do cliente quando carregado do storage
   useEffect(() => {
@@ -125,63 +123,28 @@ export function useDeliveryAddress() {
     });
 
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`, {
-        signal: AbortSignal.timeout(2500),
-      });
-      if (!res.ok) throw new Error("Erro na busca de CEP");
-      const data = await res.json();
-
-      if (data.erro) {
-        setErrors((prev) => ({ ...prev, cep: "CEP não encontrado." }));
+      const result = await lookupAddressByCep(cleanCEP);
+      if (!result) {
+        setErrors((prev) => ({
+          ...prev,
+          cep: "CEP não localizado nas bases públicas. Digite sua rua abaixo.",
+        }));
         return;
       }
 
-      const fee = getDeliveryFeeForNeighborhood(data.bairro, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
+      const fee = getDeliveryFeeForNeighborhood(
+        result.bairro,
+        deliveryConfig?.neighborhoods,
+        deliveryConfig?.default_fee
+      );
 
       setForm((prev) => ({
         ...prev,
-        rua: data.logradouro || "",
-        bairro: data.bairro || "",
-        cidadeUf: `${data.localidade} - ${data.uf}`,
+        rua: result.rua,
+        bairro: result.bairro,
+        cidadeUf: result.cidadeUf,
         deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
       }));
-    } catch {
-      try {
-        const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCEP}`, {
-          signal: AbortSignal.timeout(2500),
-        });
-        if (!res.ok) throw new Error("Erro na busca de CEP");
-        const data = await res.json();
-
-        const fee = getDeliveryFeeForNeighborhood(data.neighborhood, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
-
-        setForm((prev) => ({
-          ...prev,
-          rua: data.street || "",
-          bairro: data.neighborhood || "",
-          cidadeUf: `${data.city} - ${data.state}`,
-          deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
-        }));
-      } catch {
-        try {
-          const res = await fetch(`https://cep.awesomeapi.com.br/json/${cleanCEP}`, {
-            signal: AbortSignal.timeout(2500),
-          });
-          if (!res.ok) throw new Error("Erro na busca de CEP");
-          const data = await res.json();
-          const fee = getDeliveryFeeForNeighborhood(data.district || data.neighborhood, deliveryConfig?.neighborhoods, deliveryConfig?.default_fee);
-
-          setForm((prev) => ({
-            ...prev,
-            rua: data.address || "",
-            bairro: data.district || data.neighborhood || "",
-            cidadeUf: `${data.city} - ${data.state}`,
-            deliveryFee: prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in" ? 0 : fee,
-          }));
-        } catch {
-          setErrors((prev) => ({ ...prev, cep: "CEP não localizado nas bases públicas. Digite sua rua abaixo." }));
-        }
-      }
     } finally {
       setCepLoading(false);
     }

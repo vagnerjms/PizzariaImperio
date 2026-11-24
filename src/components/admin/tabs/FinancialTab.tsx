@@ -14,6 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatBRL } from "@/lib/formatters";
+import { queryKeys } from "@/lib/query-keys";
 import { OrderRow } from "@/types/orders";
 import {
   exportFinancialOrdersCsv,
@@ -36,7 +37,7 @@ export function FinancialTab({
   const fetchCsv = useServerFn(exportFinancialOrdersCsv);
 
   const { data: report, isLoading } = useQuery({
-    queryKey: ["admin", "financial-report", period],
+    queryKey: queryKeys.admin.financialReport(period),
     queryFn: async () => fetchReport({ data: { period } }),
     refetchInterval: 30000,
   });

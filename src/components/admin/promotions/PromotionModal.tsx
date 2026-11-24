@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles, XCircle, Eye, Loader2, Ticket } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Sparkles, XCircle, Loader2 } from "lucide-react";
 import {
   normalizeCouponCode,
   Promotion,
   PROMO_CATEGORIES,
   PROMO_WEEKDAYS,
 } from "@/lib/promotions.types";
-import { MENU as STATIC_MENU_ITEMS, Pizza } from "@/data/catalog";
+import { MENU as STATIC_MENU_ITEMS } from "@/data/catalog";
 import { formatBRL } from "@/lib/formatters";
 import { getPublicCatalog } from "@/lib/menu.functions";
+import { queryKeys } from "@/lib/query-keys";
+import { PromotionPreviewCard } from "./PromotionPreviewCard";
 
 export interface PromotionFormData {
   title: string;
@@ -47,7 +50,14 @@ export function PromotionModal({
   loading: boolean;
 }) {
   const fetchCatalog = useServerFn(getPublicCatalog);
-  const [menuItems, setMenuItems] = useState<Pizza[]>(STATIC_MENU_ITEMS);
+  const { data: catalogData } = useQuery({
+    queryKey: queryKeys.public.catalog(),
+    queryFn: async () => fetchCatalog(),
+    enabled: isOpen,
+    staleTime: 60_000,
+  });
+  const menuItems = catalogData?.items?.length ? catalogData.items : STATIC_MENU_ITEMS;
+
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDescription, setPromoDescription] = useState("");
   const [promoBadgeText, setPromoBadgeText] = useState("OFERTA RELÂMPAGO");
@@ -67,15 +77,6 @@ export function PromotionModal({
   const [promoStartDate, setPromoStartDate] = useState("");
   const [promoEndDate, setPromoEndDate] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    fetchCatalog()
-      .then((res) => {
-        if (res?.items?.length) setMenuItems(res.items);
-      })
-      .catch(() => {});
-  }, [isOpen]);
 
   useEffect(() => {
     if (initialPromo) {
@@ -176,7 +177,11 @@ export function PromotionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+    >
       <div className="w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl my-8">
         <header className="flex items-center justify-between border-b border-border/60 pb-4 mb-6">
           <div className="flex items-center gap-3">
@@ -554,41 +559,18 @@ export function PromotionModal({
                 </label>
               </div>
 
-              {/* Preview da Promoção */}
-              <div className="pt-3">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Eye className="h-3 w-3 text-gold" /> Pré-visualização no Site:
-                </span>
-                <div className="rounded-2xl border border-gold/40 bg-card/90 p-4 shadow-gold-glow">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-gold uppercase">
-                      <Sparkles className="h-3 w-3 fill-gold" /> {promoBadgeText || "OFERTA RELÂMPAGO"}
-                    </div>
-                    {promoCouponCode && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-gold/60 bg-gold/10 px-2 py-0.5 font-mono text-[10px] font-bold text-gold">
-                        <Ticket className="h-3 w-3" /> {promoCouponCode}
-                      </span>
-                    )}
-                  </div>
-                  <h5 className="mt-1.5 font-serif text-base font-bold text-foreground">
-                    {promoTitle || "Título da Promoção"}
-                  </h5>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {promoDescription || "Descrição da promoção..."}
-                  </p>
-                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2 text-xs font-semibold">
-                    <span className="text-gold">
-                      {promoType === "PERCENTAGE_DISCOUNT" && `${promoDiscountValue}% de Desconto`}
-                      {promoType === "FIXED_DISCOUNT" && `${formatBRL(promoDiscountValue)} OFF`}
-                      {promoType === "BUY_X_GET_Y" &&
-                        `Ganhe ${promoRewardDiscountPercent === 100 ? "Grátis" : `${promoRewardDiscountPercent}% OFF`} em 1x ${menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}`}
-                    </span>
-                    <span className="rounded-full bg-gold px-2.5 py-0.5 text-[10px] font-bold text-gold-foreground">
-                      Aproveitar
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <PromotionPreviewCard
+                badgeText={promoBadgeText}
+                couponCode={promoCouponCode}
+                title={promoTitle}
+                description={promoDescription}
+                type={promoType}
+                discountValue={promoDiscountValue}
+                rewardDiscountPercent={promoRewardDiscountPercent}
+                rewardItemName={
+                  menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"
+                }
+              />
             </div>
           </div>
 

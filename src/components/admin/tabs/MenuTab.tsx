@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Save,
@@ -9,11 +10,12 @@ import {
   Plus,
   Pencil,
   Trash2,
-  X,
   Pizza as PizzaIcon,
   CircleDot,
 } from "lucide-react";
-import { CATEGORIES, Category, formatBRL, MENU_IMAGES } from "@/data/catalog";
+import { CATEGORIES, Category, MENU_IMAGES } from "@/data/catalog";
+import { cleanString, formatBRL } from "@/lib/formatters";
+import { queryKeys } from "@/lib/query-keys";
 import {
   getPublicCatalog,
   saveMenuItem,
@@ -23,26 +25,12 @@ import {
   toggleCrustAvailability,
   deleteCrustOption,
 } from "@/lib/menu.functions";
-import { CatalogCrustOption, CatalogMenuItem } from "@/lib/menu-domain";
-
-const IMAGE_PRESETS = [
-  { key: "calabresa", label: "Calabresa / Salgada", src: MENU_IMAGES.calabresa },
-  { key: "mussarela", label: "Margherita / Mussarela", src: MENU_IMAGES.mussarela },
-  { key: "queijos", label: "Quatro Queijos", src: MENU_IMAGES.queijos },
-  { key: "pepperoni", label: "Pepperoni", src: MENU_IMAGES.pepperoni },
-  { key: "portuguesa", label: "Portuguesa / Presunto", src: MENU_IMAGES.portuguesa },
-  { key: "frango", label: "Frango c/ Catupiry", src: MENU_IMAGES.frango },
-  { key: "vegetariana", label: "Vegetariana / Brócolis", src: MENU_IMAGES.vegetariana },
-  { key: "chocolate", label: "Chocolate / Doce", src: MENU_IMAGES.chocolate },
-  { key: "romeu", label: "Romeu e Julieta", src: MENU_IMAGES.romeu },
-  { key: "coca", label: "Refrigerante Cola", src: MENU_IMAGES.coca },
-  { key: "guarana", label: "Guaraná", src: MENU_IMAGES.guarana },
-  { key: "agua", label: "Água / Bebida", src: MENU_IMAGES.agua },
-];
-
-const EDITABLE_CATEGORIES = CATEGORIES.filter((c) => c.id !== "todas");
+import { CatalogCrustOption, CatalogMenuItem, PublicCatalogResponse } from "@/lib/menu-domain";
+import { MenuItemFormModal, MenuItemFormState } from "../menu/MenuItemFormModal";
+import { CrustFormModal, CrustFormState } from "../menu/CrustFormModal";
 
 export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
+  const queryClient = useQueryClient();
   const fetchCatalog = useServerFn(getPublicCatalog);
   const saveItemFn = useServerFn(saveMenuItem);
   const deleteItemFn = useServerFn(deleteMenuItem);
@@ -51,23 +39,35 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const toggleCrustFn = useServerFn(toggleCrustAvailability);
   const deleteCrustFn = useServerFn(deleteCrustOption);
 
+  const { data: catalogData, isLoading: loading } = useQuery<PublicCatalogResponse>({
+    queryKey: queryKeys.admin.menuCatalog(),
+    queryFn: async () => fetchCatalog(),
+  });
+
+  const items = catalogData?.items ?? [];
+  const crusts = catalogData?.crusts ?? [];
+
+  const updateCatalogCache = (updater: (prev: PublicCatalogResponse) => PublicCatalogResponse) => {
+    queryClient.setQueryData<PublicCatalogResponse>(queryKeys.admin.menuCatalog(), (prev) =>
+      updater(prev || { items: [], crusts: [] })
+    );
+  };
+
   const [subTab, setSubTab] = useState<"items" | "crusts">("items");
-  const [items, setItems] = useState<CatalogMenuItem[]>([]);
-  const [crusts, setCrusts] = useState<CatalogCrustOption[]>([]);
-  const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("todas");
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [badgeDrafts, setBadgeDrafts] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Item CRUD modal state (Admin only)
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogMenuItem | null>(null);
-  const [itemForm, setItemForm] = useState({
+  const [itemForm, setItemForm] = useState<MenuItemFormState>({
     name: "",
-    category: "tradicionais" as Category,
+    category: "tradicionais",
     ingredients: "",
     price: "",
     badge: "",
@@ -75,46 +75,27 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
     available: true,
   });
 
-  // Crust CRUD inline form (Admin only)
+  // Crust CRUD modal state (Admin only)
   const [editingCrust, setEditingCrust] = useState<CatalogCrustOption | null>(null);
   const [crustModalOpen, setCrustModalOpen] = useState(false);
-  const [crustForm, setCrustForm] = useState({
+  const [crustForm, setCrustForm] = useState<CrustFormState>({
     name: "",
     price: "7",
     available: true,
   });
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchCatalog();
-      setItems(data?.items || []);
-      setCrusts(data?.crusts || []);
-    } catch (e) {
-      console.error("Erro ao carregar cardápio:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
   const showToast = (text: string, isError?: boolean) => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     setFeedback({ text, isError });
-    setTimeout(() => setFeedback(null), 4000);
+    feedbackTimerRef.current = setTimeout(() => setFeedback(null), 4000);
   };
 
   const filtered = useMemo(() => {
+    const q = cleanString(search);
     return items.filter((item) => {
       if (category !== "todas" && item.category !== category) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        return (
-          item.name.toLowerCase().includes(q) ||
-          item.ingredients.toLowerCase().includes(q)
-        );
+      if (q) {
+        return cleanString(item.name).includes(q) || cleanString(item.ingredients).includes(q);
       }
       return true;
     });
@@ -137,9 +118,10 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
           available: nextAvailable,
         },
       });
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, available: nextAvailable } : i))
-      );
+      updateCatalogCache((prev) => ({
+        ...prev,
+        items: prev.items.map((i) => (i.id === item.id ? { ...i, available: nextAvailable } : i)),
+      }));
       showToast(
         nextAvailable
           ? `"${item.name}" ativado no cardápio.`
@@ -176,13 +158,14 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
           badge: nextBadge,
         },
       });
-      setItems((prev) =>
-        prev.map((i) =>
+      updateCatalogCache((prev) => ({
+        ...prev,
+        items: prev.items.map((i) =>
           i.id === item.id
             ? { ...i, price: parsedPrice, badge: nextBadge || undefined }
             : i
-        )
-      );
+        ),
+      }));
       setPriceDrafts((prev) => {
         const copy = { ...prev };
         delete copy[item.id];
@@ -253,11 +236,12 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
           available: itemForm.available,
         },
       });
-      setItems((prev) =>
-        editingItem
-          ? prev.map((i) => (i.id === saved.id ? saved : i))
-          : [...prev, saved]
-      );
+      updateCatalogCache((prev) => ({
+        ...prev,
+        items: editingItem
+          ? prev.items.map((i) => (i.id === saved.id ? saved : i))
+          : [...prev.items, saved],
+      }));
       setItemModalOpen(false);
       showToast(
         editingItem
@@ -277,7 +261,10 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
     setSavingId(item.id);
     try {
       await deleteItemFn({ data: { id: item.id } });
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      updateCatalogCache((prev) => ({
+        ...prev,
+        items: prev.items.filter((i) => i.id !== item.id),
+      }));
       showToast(`"${item.name}" removido do cardápio.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Erro ao excluir item.", true);
@@ -293,9 +280,10 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
     const next = !crust.available;
     try {
       await toggleCrustFn({ data: { id: crust.id, available: next } });
-      setCrusts((prev) =>
-        prev.map((c) => (c.id === crust.id ? { ...c, available: next } : c))
-      );
+      updateCatalogCache((prev) => ({
+        ...prev,
+        crusts: prev.crusts.map((c) => (c.id === crust.id ? { ...c, available: next } : c)),
+      }));
       showToast(
         next ? `"${crust.name}" ativada.` : `"${crust.name}" marcada como esgotada.`
       );
@@ -337,9 +325,12 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
           available: crustForm.available,
         },
       });
-      setCrusts((prev) =>
-        editingCrust ? prev.map((c) => (c.id === saved.id ? saved : c)) : [...prev, saved]
-      );
+      updateCatalogCache((prev) => ({
+        ...prev,
+        crusts: editingCrust
+          ? prev.crusts.map((c) => (c.id === saved.id ? saved : c))
+          : [...prev.crusts, saved],
+      }));
       setCrustModalOpen(false);
       showToast(editingCrust ? `Borda "${saved.name}" atualizada!` : `Borda "${saved.name}" criada!`);
     } catch (err) {
@@ -355,7 +346,10 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
     setSavingId(`crust:${crust.id}`);
     try {
       await deleteCrustFn({ data: { id: crust.id } });
-      setCrusts((prev) => prev.filter((c) => c.id !== crust.id));
+      updateCatalogCache((prev) => ({
+        ...prev,
+        crusts: prev.crusts.filter((c) => c.id !== crust.id),
+      }));
       showToast(`Borda "${crust.name}" removida.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Erro ao excluir borda.", true);
@@ -708,209 +702,26 @@ export function MenuTab({ isAdmin = true }: { isAdmin?: boolean }) {
 
       {/* MODAL CRIAR / EDITAR ITEM (ADMIN) */}
       {isAdmin && itemModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-          <form
-            onSubmit={handleSubmitItemModal}
-            className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 my-8"
-          >
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <h3 className="font-serif text-lg font-bold">
-                {editingItem ? `Editar "${editingItem.name}"` : "Novo Item do Cardápio"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setItemModalOpen(false)}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground">Nome *</label>
-                <input
-                  type="text"
-                  required
-                  value={itemForm.name}
-                  onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Ex.: Pepperoni Trufada"
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-gold focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground">Categoria *</label>
-                <select
-                  value={itemForm.category}
-                  onChange={(e) =>
-                    setItemForm((f) => ({ ...f, category: e.target.value as Category }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-gold focus:outline-none"
-                >
-                  {EDITABLE_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground">Preço (R$) *</label>
-                <input
-                  type="number"
-                  step="0.50"
-                  min="0"
-                  required
-                  value={itemForm.price}
-                  onChange={(e) => setItemForm((f) => ({ ...f, price: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm font-bold text-gold focus:border-gold focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground">
-                  Selo (opcional)
-                </label>
-                <input
-                  type="text"
-                  maxLength={40}
-                  value={itemForm.badge}
-                  onChange={(e) => setItemForm((f) => ({ ...f, badge: e.target.value }))}
-                  placeholder="Ex.: Mais pedida, Chef"
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-gold focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground">
-                Ingredientes / Descrição
-              </label>
-              <textarea
-                rows={2}
-                value={itemForm.ingredients}
-                onChange={(e) => setItemForm((f) => ({ ...f, ingredients: e.target.value }))}
-                placeholder="Ex.: Molho de tomate pelati, mussarela, pepperoni artesanal e orégano"
-                className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-gold focus:outline-none"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">
-                Imagem (escolha um modelo ou cole uma URL)
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {IMAGE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.key}
-                    type="button"
-                    onClick={() => setItemForm((f) => ({ ...f, image: preset.src }))}
-                    className={`rounded-lg border px-2 py-1 text-[11px] transition ${
-                      itemForm.image === preset.src
-                        ? "border-gold bg-gold/15 text-gold font-bold"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="text"
-                value={itemForm.image}
-                onChange={(e) => setItemForm((f) => ({ ...f, image: e.target.value }))}
-                placeholder="https://... ou caminho da imagem"
-                className="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-gold focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
-              <button
-                type="button"
-                onClick={() => setItemModalOpen(false)}
-                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={savingId !== null}
-                className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground hover:brightness-110 disabled:opacity-50"
-              >
-                {savingId ? "Salvando..." : editingItem ? "Salvar Alterações" : "Criar Item"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <MenuItemFormModal
+          editingItem={editingItem}
+          form={itemForm}
+          saving={savingId !== null}
+          onChange={setItemForm}
+          onClose={() => setItemModalOpen(false)}
+          onSubmit={handleSubmitItemModal}
+        />
       )}
 
       {/* MODAL CRIAR / EDITAR BORDA (ADMIN) */}
       {isAdmin && crustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <form
-            onSubmit={handleSubmitCrust}
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <h3 className="font-serif text-lg font-bold">
-                {editingCrust ? `Editar Borda` : "Nova Borda Recheada"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setCrustModalOpen(false)}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground">Nome da Borda *</label>
-              <input
-                type="text"
-                required
-                value={crustForm.name}
-                onChange={(e) => setCrustForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Ex.: Borda Cream Cheese"
-                className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:border-gold focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground">
-                Valor Adicional (R$) *
-              </label>
-              <input
-                type="number"
-                step="0.50"
-                min="0"
-                required
-                value={crustForm.price}
-                onChange={(e) => setCrustForm((f) => ({ ...f, price: e.target.value }))}
-                className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm font-bold text-gold focus:border-gold focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
-              <button
-                type="button"
-                onClick={() => setCrustModalOpen(false)}
-                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={savingId !== null}
-                className="rounded-full bg-gold px-5 py-2 text-xs font-bold uppercase tracking-wider text-gold-foreground hover:brightness-110 disabled:opacity-50"
-              >
-                {savingId ? "Salvando..." : editingCrust ? "Salvar Borda" : "Criar Borda"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <CrustFormModal
+          editingCrust={editingCrust}
+          form={crustForm}
+          saving={savingId !== null}
+          onChange={setCrustForm}
+          onClose={() => setCrustModalOpen(false)}
+          onSubmit={handleSubmitCrust}
+        />
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
+import { queryKeys } from "@/lib/query-keys";
 
 export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const queryClient = useQueryClient();
@@ -28,7 +29,7 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
     isLoading,
     refetch: recheckStatus,
   } = useQuery({
-    queryKey: ["admin", "whatsapp-status"],
+    queryKey: queryKeys.admin.whatsappStatus(),
     queryFn: async () => {
       try {
         return await fetchWhatsappStatus();
@@ -88,7 +89,7 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
     try {
       await logoutWhatsapp();
       setQrCode(null);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "whatsapp-status"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.whatsappStatus() });
     } catch (e) {
       setWhatsappError(e instanceof Error ? e.message : "Erro ao desconectar");
     } finally {

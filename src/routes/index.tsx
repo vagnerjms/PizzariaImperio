@@ -1,14 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { getPublicPromotions } from "@/lib/promotions.functions";
 import { getPublicCatalog } from "@/lib/menu.functions";
 import { PublicCatalogResponse } from "@/lib/menu-domain";
 import { getPublicStoreConfig } from "@/lib/settings";
 import { PublicStoreConfig } from "@/lib/store-hours";
 import { initTrackingPixels } from "@/lib/analytics";
+import { queryKeys } from "@/lib/query-keys";
 import { Promotion } from "@/lib/promotions.types";
-import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS, formatBRL } from "@/data/catalog";
+import { MENU, CATEGORIES, Pizza, CartItem, CRUST_OPTIONS } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
 import { useCart } from "@/hooks/useCart";
 import { Header } from "@/components/home/Header";
 import { Hero } from "@/components/home/Hero";
@@ -75,43 +78,42 @@ function Home() {
   const fetchPromotions = useServerFn(getPublicPromotions);
   const fetchCatalog = useServerFn(getPublicCatalog);
   const fetchStoreConfig = useServerFn(getPublicStoreConfig);
-  const [promotions, setPromotions] = useState<Promotion[]>(() => loaderData?.promotions || []);
-  const [catalog, setCatalog] = useState<PublicCatalogResponse | null>(
-    () => loaderData?.catalog || null
-  );
-  const [storeConfig, setStoreConfig] = useState<PublicStoreConfig | null>(
-    () => loaderData?.storeConfig || null
-  );
 
-  useEffect(() => {
-    fetchPromotions()
-      .then((data) => {
-        if (data && Array.isArray(data)) setPromotions(data);
-      })
-      .catch((err) => console.error("Erro ao carregar promoções públicas:", err));
+  const { data: promotions = [] } = useQuery<Promotion[]>({
+    queryKey: queryKeys.public.promotions(),
+    queryFn: async () => (await fetchPromotions()) || [],
+    initialData: loaderData?.promotions,
+    staleTime: 60_000,
+    refetchOnMount: false,
+  });
 
-    fetchCatalog()
-      .then((data) => {
-        if (data?.items) setCatalog(data);
-      })
-      .catch((err) => console.error("Erro ao carregar catálogo dinâmico:", err));
+  const { data: catalog = null } = useQuery<PublicCatalogResponse | null>({
+    queryKey: queryKeys.public.catalog(),
+    queryFn: async () => (await fetchCatalog()) || null,
+    initialData: loaderData?.catalog ?? undefined,
+    staleTime: 60_000,
+    refetchOnMount: false,
+  });
 
-    fetchStoreConfig()
-      .then((data) => {
-        if (data) setStoreConfig(data);
-      })
-      .catch((err) => console.error("Erro ao carregar configurações da loja:", err));
-  }, []);
+  const { data: storeConfig = null } = useQuery<PublicStoreConfig | null>({
+    queryKey: queryKeys.public.storeConfig(),
+    queryFn: async () => (await fetchStoreConfig()) || null,
+    initialData: loaderData?.storeConfig ?? undefined,
+    staleTime: 60_000,
+    refetchOnMount: false,
+  });
 
   // Inicializa Meta Pixel & GA4 quando configurados pelo admin
+  const metaPixelId = storeConfig?.meta_pixel_id;
+  const ga4Id = storeConfig?.ga4_measurement_id;
   useEffect(() => {
-    if (storeConfig) {
+    if (metaPixelId || ga4Id) {
       initTrackingPixels({
-        meta_pixel_id: storeConfig.meta_pixel_id,
-        ga4_measurement_id: storeConfig.ga4_measurement_id,
+        meta_pixel_id: metaPixelId,
+        ga4_measurement_id: ga4Id,
       });
     }
-  }, [storeConfig?.meta_pixel_id, storeConfig?.ga4_measurement_id]);
+  }, [metaPixelId, ga4Id]);
 
   const effectiveMenu = useMemo<Pizza[]>(() => {
     const source = catalog?.items && catalog.items.length > 0 ? catalog.items : MENU;

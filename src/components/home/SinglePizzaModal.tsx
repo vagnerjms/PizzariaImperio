@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { X, Plus, Minus, Check } from "lucide-react";
-import { Pizza, CartItem, CRUST_OPTIONS, CrustOption, formatBRL } from "@/data/catalog";
+import { X } from "lucide-react";
+import { Pizza, CartItem, CRUST_OPTIONS, CrustOption } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
+import { CrustSelector } from "./CrustSelector";
+import { QuantityStepper } from "./QuantityStepper";
 
 export function SinglePizzaModal({
   pizza,
@@ -48,7 +51,11 @@ export function SinglePizzaModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+    >
       {/* Container Responsivo: Bottom Sheet no Mobile / Dialog no Desktop */}
       <div className="relative flex flex-col w-full max-w-lg max-h-[92vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl border border-gold/40 bg-card shadow-2xl overflow-hidden text-foreground">
         
@@ -67,6 +74,7 @@ export function SinglePizzaModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Fechar"
             className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-foreground backdrop-blur-md transition hover:bg-gold hover:text-gold-foreground"
           >
             <X className="h-5 w-5" />
@@ -130,61 +138,17 @@ export function SinglePizzaModal({
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {availableCrusts.map((crust) => {
-                const isSelected = selectedCrust.id === crust.id;
-                return (
-                  <button
-                    key={crust.id}
-                    type="button"
-                    onClick={() => setSelectedCrust(crust)}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-xs text-left transition ${
-                      isSelected
-                        ? "border-gold bg-gold/20 text-gold font-bold shadow-gold-glow"
-                        : "border-border bg-card text-foreground hover:border-border/80"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${
-                          isSelected ? "border-gold bg-gold text-gold-foreground" : "border-border"
-                        }`}
-                      >
-                        {isSelected && <Check className="h-2 w-2 stroke-[3]" />}
-                      </div>
-                      <span>{crust.name}</span>
-                    </div>
-                    <span className={`text-[11px] font-bold ${isSelected ? "text-gold" : "text-muted-foreground"}`}>
-                      {crust.price === 0 ? "Grátis" : `+${formatBRL(crust.price)}`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <CrustSelector
+              crusts={availableCrusts}
+              selectedCrust={selectedCrust}
+              onSelect={setSelectedCrust}
+            />
           </div>
         </div>
 
         {/* Sticky Footer com Quantidade e Preço Total */}
         <div className="flex-none border-t border-border bg-secondary/95 backdrop-blur-md p-4 sm:p-5 flex items-center justify-between gap-3">
-          {/* Seletor de Quantidade */}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 flex-none shadow-sm">
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              disabled={qty <= 1}
-              className="rounded-full p-1 text-foreground transition hover:bg-gold/20 disabled:opacity-30"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="min-w-5 text-center text-xs font-bold">{qty}</span>
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.min(20, q + 1))}
-              className="rounded-full p-1 text-foreground transition hover:bg-gold/20"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <QuantityStepper value={qty} onChange={setQty} />
 
           {/* Botão de Adicionar ao Pedido */}
           <button

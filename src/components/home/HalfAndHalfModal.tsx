@@ -1,7 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { X, Search, Plus, Minus, Check, RefreshCw, Sparkles, ChevronRight } from "lucide-react";
-import { Pizza, CartItem, CRUST_OPTIONS, CrustOption, formatBRL } from "@/data/catalog";
-import { cleanString } from "@/lib/formatters";
+import { X, Search, Check, RefreshCw, Sparkles, ChevronRight } from "lucide-react";
+import { Pizza, CartItem, CRUST_OPTIONS, CrustOption } from "@/data/catalog";
+import { cleanString, formatBRL } from "@/lib/formatters";
+import { CrustSelector } from "./CrustSelector";
+import { QuantityStepper } from "./QuantityStepper";
 
 export function HalfAndHalfModal({
   allPizzas,
@@ -38,7 +40,6 @@ export function HalfAndHalfModal({
   const [notes2, setNotes2] = useState("");
   const [qty, setQty] = useState(1);
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const crustSectionRef = useRef<HTMLDivElement>(null);
 
   // Imagem de fallback caso ainda não tenha sabor selecionado
@@ -281,7 +282,7 @@ export function HalfAndHalfModal({
         </div>
 
         {/* Corpo com Scroll */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
           
           {/* Card da Metade 1 */}
           <div
@@ -540,64 +541,20 @@ export function HalfAndHalfModal({
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {availableCrusts.map((crust) => {
-                const isSelected = selectedCrust.id === crust.id;
-                return (
-                  <button
-                    key={crust.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCrust(crust);
-                      setActiveStep(3);
-                    }}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-xs text-left transition ${
-                      isSelected
-                        ? "border-gold bg-gold/20 text-gold font-bold shadow-gold-glow"
-                        : "border-border bg-card text-foreground hover:border-border/80"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${
-                          isSelected ? "border-gold bg-gold text-gold-foreground" : "border-border"
-                        }`}
-                      >
-                        {isSelected && <Check className="h-2 w-2 stroke-[3]" />}
-                      </div>
-                      <span>{crust.name}</span>
-                    </div>
-                    <span className={`text-[11px] font-bold ${isSelected ? "text-gold" : "text-muted-foreground"}`}>
-                      {crust.price === 0 ? "Grátis" : `+${formatBRL(crust.price)}`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <CrustSelector
+              crusts={availableCrusts}
+              selectedCrust={selectedCrust}
+              onSelect={(crust) => {
+                setSelectedCrust(crust);
+                setActiveStep(3);
+              }}
+            />
           </div>
         </div>
 
         {/* Sticky Footer com Guia de Ação */}
         <div className="flex-none border-t border-border bg-secondary/95 backdrop-blur-md p-3.5 sm:p-4 pb-safe flex items-center justify-between gap-3">
-          {/* Seletor de Quantidade */}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 flex-none shadow-sm">
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              disabled={qty <= 1}
-              className="rounded-full p-1 text-foreground transition hover:bg-gold/20 disabled:opacity-30"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="min-w-5 text-center text-xs font-bold">{qty}</span>
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.min(20, q + 1))}
-              className="rounded-full p-1 text-foreground transition hover:bg-gold/20"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <QuantityStepper value={qty} onChange={setQty} />
 
           {/* Botão de Adicionar Guiado */}
           <button

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,17 +6,16 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Lock,
-  Unlock,
   Printer,
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
-  History,
   Banknote,
   QrCode,
   CreditCard,
 } from "lucide-react";
-import { formatBRL } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
+import { queryKeys } from "@/lib/query-keys";
 import {
   getCashDashboard,
   openCashShift,
@@ -24,43 +23,15 @@ import {
   closeCashShift,
   CashDashboardResponse,
 } from "@/lib/cash.functions";
-import { calculateCashClosingDifference, CashShiftRow, CashShiftSummary } from "@/lib/cash-domain";
-import { PrintableCashShift, printCashShiftThermal, PrinterSettings } from "@/lib/thermal-printer";
-
-function toPrintableShift(
-  shift: CashShiftRow,
-  summary?: CashShiftSummary | null,
-): PrintableCashShift {
-  const byPayment = shift.summary_by_payment ||
-    summary?.byPayment || {
-      pix: 0,
-      dinheiro: 0,
-      credito: 0,
-      debito: 0,
-      outros: 0,
-    };
-
-  return {
-    id: shift.id,
-    opened_by: shift.opened_by,
-    opened_at: shift.opened_at,
-    closed_by: shift.closed_by,
-    closed_at: shift.closed_at,
-    opening_balance: shift.opening_balance,
-    expected_cash: shift.expected_cash ?? summary?.expectedCash ?? 0,
-    counted_cash: shift.counted_cash,
-    cash_difference: shift.cash_difference,
-    gross_sales: shift.gross_sales ?? summary?.grossSales ?? 0,
-    total_orders: shift.total_orders ?? summary?.totalOrders ?? 0,
-    by_payment: byPayment,
-    movements: shift.movements.map((m) => ({
-      type: m.type,
-      amount: m.amount,
-      reason: m.reason,
-    })),
-    closing_notes: shift.closing_notes,
-  };
-}
+import { calculateCashClosingDifference } from "@/lib/cash-domain";
+import {
+  PrintableCashShift,
+  printCashShiftThermal,
+  PrinterSettings,
+  toPrintableShift,
+} from "@/lib/thermal-printer";
+import { OpenShiftCard } from "@/components/admin/cash/OpenShiftCard";
+import { ClosedShiftsAuditTable } from "@/components/admin/cash/ClosedShiftsAuditTable";
 
 export function CashTab({
   isAdmin,
@@ -76,7 +47,7 @@ export function CashTab({
   const closeShiftFn = useServerFn(closeCashShift);
 
   const { data, isLoading, refetch } = useQuery<CashDashboardResponse>({
-    queryKey: ["admin", "cash-dashboard"],
+    queryKey: queryKeys.admin.cashDashboard(),
     queryFn: async () => fetchDashboard(),
     refetchInterval: 15000,
   });
@@ -94,10 +65,18 @@ export function CashTab({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
   const [lastClosedReceipt, setLastClosedReceipt] = useState<PrintableCashShift | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    };
+  }, []);
 
   const showMsg = (text: string, isError = false) => {
     setFeedback({ text, isError });
-    setTimeout(() => setFeedback(null), 6000);
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => setFeedback(null), 6000);
   };
 
   const handleOpenShift = async (e: React.FormEvent) => {
@@ -112,7 +91,7 @@ export function CashTab({
     try {
       await openShiftFn({ data: { opening_balance: val } });
       setLastClosedReceipt(null);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.cashDashboard() });
       showMsg(`Caixa aberto com fundo de troco de ${formatBRL(val)}!`);
     } catch (err) {
       showMsg(err instanceof Error ? err.message : "Erro ao abrir caixa.", true);
@@ -144,7 +123,7 @@ export function CashTab({
       });
       setMovementAmount("");
       setMovementReason("");
-      await queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.cashDashboard() });
       showMsg(
         movementType === "sangria"
           ? `Sangria de ${formatBRL(val)} registrada.`
@@ -183,7 +162,7 @@ export function CashTab({
       setLastClosedReceipt(printable);
       setCountedCash("");
       setClosingNotes("");
-      await queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.cashDashboard() });
       showMsg("Turno fechado com sucesso! Recibo pronto para impressão.");
       printCashShiftThermal(printable, printerSettings).catch(console.error);
     } catch (err) {
@@ -262,47 +241,12 @@ export function CashTab({
 
       {/* TURNO FECHADO: FORMULÁRIO DE ABERTURA */}
       {!activeShift ? (
-        <form
+        <OpenShiftCard
+          openingBalance={openingBalance}
+          submitting={submitting}
+          onChangeOpeningBalance={setOpeningBalance}
           onSubmit={handleOpenShift}
-          className="rounded-2xl border border-border bg-card p-6 max-w-xl space-y-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold/15 text-gold">
-              <Unlock className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="font-serif text-lg font-bold">Abrir Caixa do Turno</h3>
-              <p className="text-xs text-muted-foreground">
-                Nenhum caixa aberto no momento. Informe o fundo de troco inicial da gaveta.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Fundo de Troco Inicial (R$)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-semibold focus:border-gold focus:outline-none"
-              placeholder="100.00"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-gold-foreground hover:brightness-110 transition disabled:opacity-50"
-          >
-            <Unlock className="h-4 w-4" />
-            {submitting ? "Abrindo..." : "Abrir Turno Agora"}
-          </button>
-        </form>
+        />
       ) : (
         /* TURNO ABERTO: DASHBOARD + MOVIMENTAÇÕES + FECHAMENTO */
         <div className="space-y-6">
@@ -645,96 +589,12 @@ export function CashTab({
 
       {/* HISTÓRICO CONSOLIDADO DE TURNOS FECHADOS (SOMENTE ADMIN) */}
       {isAdmin && (
-        <section className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-serif text-lg font-bold flex items-center gap-2">
-              <History className="h-5 w-5 text-gold" /> Histórico de Caixas Fechados (Auditoria
-              Admin)
-            </h3>
-            <span className="text-xs text-muted-foreground">Últimos {history.length} turnos</span>
-          </div>
-
-          {history.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Nenhum turno fechado registrado ainda.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground uppercase text-[10px]">
-                    <th className="py-2 pr-3">Turno / Datas</th>
-                    <th className="py-2 pr-3">Operadores</th>
-                    <th className="py-2 pr-3 text-right">Vendas</th>
-                    <th className="py-2 pr-3 text-right">Esperado</th>
-                    <th className="py-2 pr-3 text-right">Contado</th>
-                    <th className="py-2 pr-3 text-right">Diferença</th>
-                    <th className="py-2 text-right">Recibo</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {history.map((shift) => {
-                    const diff = shift.cash_difference ?? 0;
-                    const diffClass =
-                      diff === 0
-                        ? "text-emerald-400"
-                        : diff > 0
-                          ? "text-amber-300"
-                          : "text-red-400";
-                    return (
-                      <tr key={shift.id} className="hover:bg-secondary/20">
-                        <td className="py-2.5 pr-3">
-                          <div className="font-mono font-bold text-foreground">
-                            #{shift.id.slice(0, 8).toUpperCase()}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {new Date(shift.opened_at).toLocaleString("pt-BR")} →{" "}
-                            {shift.closed_at
-                              ? new Date(shift.closed_at).toLocaleTimeString("pt-BR", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "-"}
-                          </div>
-                        </td>
-                        <td className="py-2.5 pr-3 text-muted-foreground">
-                          <div>Abre: {shift.opened_by}</div>
-                          <div>Fecha: {shift.closed_by || "-"}</div>
-                        </td>
-                        <td className="py-2.5 pr-3 text-right font-semibold">
-                          {formatBRL(shift.gross_sales ?? 0)}
-                          <div className="text-[10px] text-muted-foreground">
-                            {shift.total_orders ?? 0} ped.
-                          </div>
-                        </td>
-                        <td className="py-2.5 pr-3 text-right">
-                          {formatBRL(shift.expected_cash ?? 0)}
-                        </td>
-                        <td className="py-2.5 pr-3 text-right font-semibold">
-                          {formatBRL(shift.counted_cash ?? 0)}
-                        </td>
-                        <td className={`py-2.5 pr-3 text-right font-bold ${diffClass}`}>
-                          {diff === 0
-                            ? "Batido"
-                            : `${diff > 0 ? "+" : "-"}${formatBRL(Math.abs(diff))}`}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void printCashShiftThermal(toPrintableShift(shift), printerSettings)
-                            }
-                            className="inline-flex items-center gap-1 rounded-full border border-gold/40 px-2.5 py-1 text-[11px] font-semibold text-gold hover:bg-gold hover:text-gold-foreground transition"
-                          >
-                            <Printer className="h-3 w-3" /> Imprimir
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        <ClosedShiftsAuditTable
+          history={history}
+          onPrintShift={(shift) =>
+            void printCashShiftThermal(toPrintableShift(shift), printerSettings)
+          }
+        />
       )}
     </div>
   );

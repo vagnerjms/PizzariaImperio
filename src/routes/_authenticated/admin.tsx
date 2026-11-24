@@ -1,29 +1,77 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { listOrders, updateOrderStatus, confirmOrderPayment } from "@/lib/orders.functions";
 import { listCouriers } from "@/lib/couriers.functions";
 import { CourierRow } from "@/lib/couriers-domain";
 import { getPublicStoreConfig, toggleStorePause } from "@/lib/settings";
 import { PublicStoreConfig } from "@/lib/store-hours";
 import { printOrderThermal } from "@/lib/thermal-printer";
+import { queryKeys } from "@/lib/query-keys";
 import { useThermalPrinter } from "@/hooks/useThermalPrinter";
 import { OrderRow } from "@/types/orders";
 import { AdminHeader, AdminViewMode } from "@/components/admin/AdminHeader";
 import { OrdersTab } from "@/components/admin/tabs/OrdersTab";
-import { CashTab } from "@/components/admin/tabs/CashTab";
-import { CouriersTab } from "@/components/admin/tabs/CouriersTab";
-import { MenuTab } from "@/components/admin/tabs/MenuTab";
-import { WhatsAppTab } from "@/components/admin/tabs/WhatsAppTab";
-import { FinancialTab } from "@/components/admin/tabs/FinancialTab";
-import { DeliveryTab } from "@/components/admin/tabs/DeliveryTab";
-import { PromotionsTab } from "@/components/admin/tabs/PromotionsTab";
-import { UsersTab } from "@/components/admin/tabs/UsersTab";
-import { SettingsTab } from "@/components/admin/tabs/SettingsTab";
 import { playNewOrderChime } from "@/lib/sound";
 
+// Code-split all non-default Admin tabs so atendentes/supervisores don't download restricted chunks
+const CashTab = lazy(() =>
+  import("@/components/admin/tabs/CashTab").then((m) => ({ default: m.CashTab }))
+);
+const CouriersTab = lazy(() =>
+  import("@/components/admin/tabs/CouriersTab").then((m) => ({ default: m.CouriersTab }))
+);
+const MenuTab = lazy(() =>
+  import("@/components/admin/tabs/MenuTab").then((m) => ({ default: m.MenuTab }))
+);
+const WhatsAppTab = lazy(() =>
+  import("@/components/admin/tabs/WhatsAppTab").then((m) => ({ default: m.WhatsAppTab }))
+);
+const FinancialTab = lazy(() =>
+  import("@/components/admin/tabs/FinancialTab").then((m) => ({ default: m.FinancialTab }))
+);
+const DeliveryTab = lazy(() =>
+  import("@/components/admin/tabs/DeliveryTab").then((m) => ({ default: m.DeliveryTab }))
+);
+const PromotionsTab = lazy(() =>
+  import("@/components/admin/tabs/PromotionsTab").then((m) => ({ default: m.PromotionsTab }))
+);
+const UsersTab = lazy(() =>
+  import("@/components/admin/tabs/UsersTab").then((m) => ({ default: m.UsersTab }))
+);
+const SettingsTab = lazy(() =>
+  import("@/components/admin/tabs/SettingsTab").then((m) => ({ default: m.SettingsTab }))
+);
+
+const VALID_TABS: ReadonlySet<AdminViewMode> = new Set([
+  "pedidos",
+  "caixa",
+  "entregadores",
+  "cardapio",
+  "indicadores",
+  "usuarios",
+  "taxas",
+  "promocoes",
+  "whatsapp",
+  "configuracoes",
+]);
+
+function AdminTabFallback() {
+  return (
+    <div className="flex items-center justify-center py-20 text-muted-foreground gap-2 text-sm">
+      <Loader2 className="h-5 w-5 animate-spin text-gold" />
+      Carregando módulo...
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/admin")({
+  validateSearch: (search: Record<string, unknown>): { tab?: AdminViewMode } => {
+    const raw = typeof search.tab === "string" ? (search.tab as AdminViewMode) : undefined;
+    return raw && VALID_TABS.has(raw) ? { tab: raw } : {};
+  },
   head: () => ({
     meta: [
       { title: "Painel de Pedidos — Pizzaria Império" },
@@ -35,6 +83,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 function AdminPage() {
   const { user } = Route.useRouteContext() as { user: { email: string; roles: string[] } };
+  const { tab } = Route.useSearch();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isSupervisorOrAdmin = Boolean(
     user?.roles?.some((r) => ["admin", "supervisor"].includes(r))
@@ -52,7 +101,22 @@ function AdminPage() {
     "ativos" | "todos" | "pix_pendente" | OrderRow["status"]
   >("ativos");
 
-  const [viewMode, setViewMode] = useState<AdminViewMode>("pedidos");
+  const viewMode: AdminViewMode = useMemo(() => {
+    const requested = tab || "pedidos";
+    if (requested === "pedidos") return "pedidos";
+    if (["usuarios", "promocoes", "configuracoes"].includes(requested)) {
+      return isAdmin ? requested : "pedidos";
+    }
+    return isSupervisorOrAdmin ? requested : "pedidos";
+  }, [tab, isAdmin, isSupervisorOrAdmin]);
+
+  const setViewMode = (nextTab: AdminViewMode) => {
+    navigate({
+      to: "/admin",
+      search: nextTab === "pedidos" ? {} : { tab: nextTab },
+      replace: false,
+    });
+  };
   const [togglingStore, setTogglingStore] = useState(false);
 
   // Alerta sonoro KDS
@@ -65,13 +129,13 @@ function AdminPage() {
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
 
   const { data: storeConfig } = useQuery<PublicStoreConfig>({
-    queryKey: ["admin", "store-config"],
+    queryKey: queryKeys.admin.storeConfig(),
     queryFn: async () => fetchStoreConfig(),
     refetchInterval: 30000,
   });
 
   const { data: couriers = [] } = useQuery<CourierRow[]>({
-    queryKey: ["admin", "couriers"],
+    queryKey: queryKeys.admin.couriers(),
     queryFn: async () => fetchCouriers(),
     refetchInterval: 30000,
   });
@@ -83,7 +147,7 @@ function AdminPage() {
     error: queryError,
     refetch: refetchOrders,
   } = useQuery<OrderRow[]>({
-    queryKey: ["admin", "orders"],
+    queryKey: queryKeys.admin.orders(),
     queryFn: async () => {
       const data = await fetchOrders();
       return (data || []) as OrderRow[];
@@ -198,11 +262,11 @@ function AdminPage() {
     const targetOrder = orders.find((o) => o.id === id);
     const chosenCourier = courierId ? couriers.find((c) => c.id === courierId) : null;
 
-    await queryClient.cancelQueries({ queryKey: ["admin", "orders"] });
-    const previousOrders = queryClient.getQueryData<OrderRow[]>(["admin", "orders"]);
+    await queryClient.cancelQueries({ queryKey: queryKeys.admin.orders() });
+    const previousOrders = queryClient.getQueryData<OrderRow[]>(queryKeys.admin.orders());
 
     // Atualização otimista no cache do TanStack Query
-    queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
+    queryClient.setQueryData<OrderRow[]>(queryKeys.admin.orders(), (prev = []) =>
       prev.map((o) =>
         o.id === id
           ? {
@@ -235,50 +299,50 @@ function AdminPage() {
         },
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "financial-report"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.cashDashboard() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.financialReportAll() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.courierSettlementsAll() }),
       ]);
     } catch (err) {
       if (previousOrders) {
-        queryClient.setQueryData(["admin", "orders"], previousOrders);
+        queryClient.setQueryData(queryKeys.admin.orders(), previousOrders);
       }
       showPrinterMessage(
         err instanceof Error ? err.message : "Erro ao atualizar status do pedido.",
         true,
         5000
       );
-      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() });
     }
   };
 
   const handleConfirmPayment = async (id: string) => {
-    await queryClient.cancelQueries({ queryKey: ["admin", "orders"] });
-    const previousOrders = queryClient.getQueryData<OrderRow[]>(["admin", "orders"]);
+    await queryClient.cancelQueries({ queryKey: queryKeys.admin.orders() });
+    const previousOrders = queryClient.getQueryData<OrderRow[]>(queryKeys.admin.orders());
 
-    queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
+    queryClient.setQueryData<OrderRow[]>(queryKeys.admin.orders(), (prev = []) =>
       prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o))
     );
     try {
       await confirmPaymentFn({ data: { id } });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "financial-report"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.cashDashboard() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.financialReportAll() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.admin.courierSettlementsAll() }),
       ]);
       showPrinterMessage(`Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!`, false, 4000);
     } catch (err) {
       if (previousOrders) {
-        queryClient.setQueryData(["admin", "orders"], previousOrders);
+        queryClient.setQueryData(queryKeys.admin.orders(), previousOrders);
       }
       showPrinterMessage(
         err instanceof Error ? err.message : "Erro ao confirmar pagamento.",
         true,
         5000
       );
-      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.orders() });
     }
   };
 
@@ -394,39 +458,41 @@ function AdminPage() {
           />
         )}
 
-        {viewMode === "caixa" && isSupervisorOrAdmin && (
-          <CashTab isAdmin={isAdmin} printerSettings={printerSettings} />
-        )}
+        <Suspense fallback={<AdminTabFallback />}>
+          {viewMode === "caixa" && isSupervisorOrAdmin && (
+            <CashTab isAdmin={isAdmin} printerSettings={printerSettings} />
+          )}
 
-        {viewMode === "entregadores" && isSupervisorOrAdmin && (
-          <CouriersTab orders={orders} isAdmin={isAdmin} />
-        )}
+          {viewMode === "entregadores" && isSupervisorOrAdmin && (
+            <CouriersTab orders={orders} isAdmin={isAdmin} />
+          )}
 
-        {viewMode === "cardapio" && isSupervisorOrAdmin && <MenuTab isAdmin={isAdmin} />}
+          {viewMode === "cardapio" && isSupervisorOrAdmin && <MenuTab isAdmin={isAdmin} />}
 
-        {viewMode === "indicadores" && isSupervisorOrAdmin && (
-          <FinancialTab orders={orders} isAdmin={isAdmin} />
-        )}
+          {viewMode === "indicadores" && isSupervisorOrAdmin && (
+            <FinancialTab orders={orders} isAdmin={isAdmin} />
+          )}
 
-        {viewMode === "usuarios" && isAdmin && <UsersTab currentUser={user} />}
+          {viewMode === "usuarios" && isAdmin && <UsersTab currentUser={user} />}
 
-        {viewMode === "taxas" && isSupervisorOrAdmin && <DeliveryTab user={user} />}
+          {viewMode === "taxas" && isSupervisorOrAdmin && <DeliveryTab user={user} />}
 
-        {viewMode === "promocoes" && isAdmin && <PromotionsTab />}
+          {viewMode === "promocoes" && isAdmin && <PromotionsTab />}
 
-        {viewMode === "whatsapp" && isSupervisorOrAdmin && <WhatsAppTab isAdmin={isAdmin} />}
+          {viewMode === "whatsapp" && isSupervisorOrAdmin && <WhatsAppTab isAdmin={isAdmin} />}
 
-        {viewMode === "configuracoes" && isAdmin && (
-          <SettingsTab
-            currentUser={user}
-            printerConnected={printerConnected}
-            printerSettings={printerSettings}
-            onConnectPrinter={handleConnectPrinter}
-            onDisconnectPrinter={handleDisconnectPrinter}
-            onTestPrint={handleTestPrint}
-            onUpdatePrinterSetting={handleUpdatePrinterSetting}
-          />
-        )}
+          {viewMode === "configuracoes" && isAdmin && (
+            <SettingsTab
+              currentUser={user}
+              printerConnected={printerConnected}
+              printerSettings={printerSettings}
+              onConnectPrinter={handleConnectPrinter}
+              onDisconnectPrinter={handleDisconnectPrinter}
+              onTestPrint={handleTestPrint}
+              onUpdatePrinterSetting={handleUpdatePrinterSetting}
+            />
+          )}
+        </Suspense>
       </main>
     </div>
   );

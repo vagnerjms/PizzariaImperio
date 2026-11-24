@@ -1,3 +1,4 @@
+import type { CashShiftRow, CashShiftSummary } from "@/lib/cash-domain";
 import { EscPosBuilder } from "./escpos-builder";
 import { escapeHtml, printHtmlInHiddenIframe } from "./iframe-print";
 import { isPrinterConnected, sendEscPosToSerial } from "./serial-transport";
@@ -7,6 +8,41 @@ import {
   PrintableCashShift,
   PrinterSettings,
 } from "./types";
+
+export function toPrintableShift(
+  shift: CashShiftRow,
+  summary?: CashShiftSummary | null,
+): PrintableCashShift {
+  const byPayment = shift.summary_by_payment ||
+    summary?.byPayment || {
+      pix: 0,
+      dinheiro: 0,
+      credito: 0,
+      debito: 0,
+      outros: 0,
+    };
+
+  return {
+    id: shift.id,
+    opened_by: shift.opened_by,
+    opened_at: shift.opened_at,
+    closed_by: shift.closed_by,
+    closed_at: shift.closed_at,
+    opening_balance: shift.opening_balance,
+    expected_cash: shift.expected_cash ?? summary?.expectedCash ?? 0,
+    counted_cash: shift.counted_cash,
+    cash_difference: shift.cash_difference,
+    gross_sales: shift.gross_sales ?? summary?.grossSales ?? 0,
+    total_orders: shift.total_orders ?? summary?.totalOrders ?? 0,
+    by_payment: byPayment,
+    movements: shift.movements.map((m) => ({
+      type: m.type,
+      amount: m.amount,
+      reason: m.reason,
+    })),
+    closing_notes: shift.closing_notes,
+  };
+}
 
 export function buildCashShiftEscPosBuffer(
   shift: PrintableCashShift,
