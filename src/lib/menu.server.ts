@@ -200,38 +200,46 @@ export async function getFullCatalogFromDb(): Promise<PublicCatalogResponse> {
   }
 }
 
-export async function getEffectiveServerMenuPrices(): Promise<
-  Record<string, { name: string; price: number; category: string; available: boolean }>
-> {
-  const { items } = await getFullCatalogFromDb();
-  const result: Record<
+export async function getEffectiveServerCatalogPricing(): Promise<{
+  menuPrices: Record<string, { name: string; price: number; category: string; available: boolean }>;
+  crustPrices: Record<string, { name: string; price: number; available: boolean }>;
+}> {
+  const { items, crusts } = await getFullCatalogFromDb();
+  const menuPrices: Record<
     string,
     { name: string; price: number; category: string; available: boolean }
   > = {};
-
   for (const item of items) {
-    result[item.id] = {
+    menuPrices[item.id] = {
       name: item.name,
       price: item.price,
       category: item.category,
       available: item.available,
     };
   }
-  return result;
-}
 
-export async function getEffectiveServerCrustPrices(): Promise<
-  Record<string, { name: string; price: number; available: boolean }>
-> {
-  const { crusts } = await getFullCatalogFromDb();
-  const result: Record<string, { name: string; price: number; available: boolean }> = {};
-
+  const crustPrices: Record<string, { name: string; price: number; available: boolean }> = {};
   for (const c of crusts) {
-    result[c.id] = {
+    crustPrices[c.id] = {
       name: c.name,
       price: c.price,
       available: c.available,
     };
   }
-  return result;
+
+  return { menuPrices, crustPrices };
+}
+
+export async function getEffectiveServerMenuPrices(): Promise<
+  Record<string, { name: string; price: number; category: string; available: boolean }>
+> {
+  const { menuPrices } = await getEffectiveServerCatalogPricing();
+  return menuPrices;
+}
+
+export async function getEffectiveServerCrustPrices(): Promise<
+  Record<string, { name: string; price: number; available: boolean }>
+> {
+  const { crustPrices } = await getEffectiveServerCatalogPricing();
+  return crustPrices;
 }

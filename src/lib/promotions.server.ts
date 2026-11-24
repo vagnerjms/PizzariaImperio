@@ -110,7 +110,14 @@ export async function createPromotionInDb(
     created_at: new Date(),
     updated_at: new Date(),
   };
-  await col.insertOne(doc as any);
+  try {
+    await col.insertOne(doc as any);
+  } catch (err: any) {
+    if (err?.code === 11000 && normalizedCode) {
+      throw new Error(`Já existe uma promoção cadastrada com o cupom "${normalizedCode}".`);
+    }
+    throw err;
+  }
   return serializePromotion(doc);
 }
 
@@ -121,8 +128,9 @@ export async function updatePromotionInDb(id: string, data: Partial<Promotion>):
   delete cleanData.created_at;
   delete cleanData.current_uses;
 
+  let normalizedCode: string | null = null;
   if (data.coupon_code !== undefined) {
-    const normalizedCode = normalizeCouponCode(data.coupon_code) || null;
+    normalizedCode = normalizeCouponCode(data.coupon_code) || null;
     await assertUniqueCouponCode(normalizedCode, id);
     cleanData.coupon_code = normalizedCode;
   }
@@ -139,15 +147,22 @@ export async function updatePromotionInDb(id: string, data: Partial<Promotion>):
       typeof data.max_uses === "number" && data.max_uses > 0 ? data.max_uses : null;
   }
 
-  await col.updateOne(
-    { _id: id },
-    {
-      $set: {
-        ...cleanData,
-        updated_at: new Date(),
-      },
+  try {
+    await col.updateOne(
+      { _id: id },
+      {
+        $set: {
+          ...cleanData,
+          updated_at: new Date(),
+        },
+      }
+    );
+  } catch (err: any) {
+    if (err?.code === 11000 && normalizedCode) {
+      throw new Error(`Já existe uma promoção cadastrada com o cupom "${normalizedCode}".`);
     }
-  );
+    throw err;
+  }
 }
 
 export async function togglePromotionInDb(id: string, active: boolean): Promise<void> {
@@ -191,4 +206,19 @@ export async function consumePromotionUse(id: string): Promise<boolean> {
     { returnDocument: "after" }
   );
   return Boolean(res);
+}
+
+/**
+ * Atomically releases a previously reserved promotion use (e.g. order persistence failure
+ * or order cancellation), clamped so `current_uses` never goes below 0.
+ */
+export async function releasePromotionUse(id: string): Promise<void> {
+  const col = await getPromotionsCollection();
+  await col.updateOne(
+    { _id: id, current_uses: { $gt: 0 } } as any,
+    {
+      $inc: { current_uses: -1 },
+      $set: { updated_at: new Date() },
+    }
+  );
 }

@@ -1,105 +1,81 @@
-import { getDb } from "./db";
+import { ensureIndexes, getDb } from "./db";
 import { hashPassword } from "./hash";
+import type { Collection } from "mongodb";
+
+async function ensureSeedUser(
+  usersCol: Collection,
+  opts: {
+    label: string;
+    role: "admin" | "supervisor" | "atendente";
+    email: string;
+    envPassword: string | undefined;
+    devFallbackPassword: string;
+  }
+) {
+  const existing = await usersCol.findOne({ email: opts.email });
+  if (existing) return;
+
+  const isProd = process.env.NODE_ENV === "production";
+  const allowWeakDefaults = process.env.ALLOW_DEFAULT_SEED_PASSWORDS === "true";
+  const password = opts.envPassword?.trim() || (!isProd || allowWeakDefaults ? opts.devFallbackPassword : "");
+
+  if (!password) {
+    console.warn(
+      `[DB Init] Skipping default ${opts.label} seed (${opts.email}) in production because its password env var is not configured.`
+    );
+    return;
+  }
+
+  console.log(`[DB Init] ${opts.label} user not found. Creating user: ${opts.email}`);
+  const hashedPassword = await hashPassword(password);
+  try {
+    await usersCol.insertOne({
+      email: opts.email,
+      password_hash: hashedPassword,
+      roles: [opts.role],
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+    console.log(`[DB Init] Default ${opts.label} user created successfully.`);
+  } catch (err: any) {
+    // Ignore duplicate key error if another worker seeded concurrently
+    if (err?.code !== 11000) throw err;
+  }
+}
 
 export async function initializeDatabase() {
   try {
     console.log("[DB Init] Initializing MongoDB database...");
     const db = await getDb();
-
-    // 1. Create high-performance compound indexes for peak delivery traffic
-    const usersCol = db.collection("users");
-    await usersCol.createIndex({ email: 1 }, { unique: true });
-    
-    const ordersCol = db.collection("orders");
-    await ordersCol.createIndex({ created_at: -1 });
-    await ordersCol.createIndex({ status: 1, created_at: -1 });
-    await ordersCol.createIndex({ payment_status: 1 });
-    await ordersCol.createIndex({ gateway_payment_id: 1 });
-    await ordersCol.createIndex({ customer_phone: 1 });
-    await ordersCol.createIndex({ courier_id: 1, created_at: -1 });
-
-    const deliveryCol = db.collection("delivery_settings");
-    await deliveryCol.createIndex({ _id: 1 });
-
-    const settingsCol = db.collection("settings");
-    await settingsCol.createIndex({ _id: 1 });
-
-    const promotionsCol = db.collection("promotions");
-    await promotionsCol.createIndex({ active: 1, created_at: -1 });
-    await promotionsCol.createIndex({ coupon_code: 1 });
-
-    const cashShiftsCol = db.collection("cash_shifts");
-    await cashShiftsCol.createIndex({ status: 1, opened_at: -1 });
-
-    const couriersCol = db.collection("couriers");
-    await couriersCol.createIndex({ active: 1, name: 1 });
-
-    const menuItemsCol = db.collection("menu_items");
-    await menuItemsCol.createIndex({ category: 1, sort_order: 1 });
-
-    const crustOptionsCol = db.collection("crust_options");
-    await crustOptionsCol.createIndex({ sort_order: 1 });
-
-    const addressCacheCol = db.collection("address_cache");
-    await addressCacheCol.createIndex(
-      { updated_at: 1 },
-      { expireAfterSeconds: 30 * 24 * 60 * 60 }
-    );
+    await ensureIndexes(db);
 
     const { ensureCatalogSeeded } = await import("./menu.server");
     await ensureCatalogSeeded();
 
-    // 2. Ensure initial admin user exists
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@pizzaria.com";
-    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const usersCol = db.collection("users");
+    await ensureSeedUser(usersCol, {
+      label: "Admin",
+      role: "admin",
+      email: (process.env.ADMIN_EMAIL || "admin@pizzaria.com").trim().toLowerCase(),
+      envPassword: process.env.ADMIN_PASSWORD,
+      devFallbackPassword: "admin123",
+    });
 
-    const adminExists = await usersCol.findOne({ email: adminEmail });
-    if (!adminExists) {
-      console.log(`[DB Init] Admin user not found. Creating default admin: ${adminEmail}`);
-      const hashedPassword = hashPassword(adminPassword);
-      await usersCol.insertOne({
-        email: adminEmail,
-        password_hash: hashedPassword,
-        roles: ["admin"],
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
-      console.log("[DB Init] Default admin user created successfully.");
-    } else {
-      console.log("[DB Init] Admin user already exists.");
-    }
+    await ensureSeedUser(usersCol, {
+      label: "Supervisor",
+      role: "supervisor",
+      email: (process.env.SUPERVISOR_EMAIL || "supervisor@pizzaria.com").trim().toLowerCase(),
+      envPassword: process.env.SUPERVISOR_PASSWORD,
+      devFallbackPassword: "supervisor123",
+    });
 
-    const supervisorEmail = process.env.SUPERVISOR_EMAIL || "supervisor@pizzaria.com";
-    const supervisorPassword = process.env.SUPERVISOR_PASSWORD || "supervisor123";
-    const supervisorExists = await usersCol.findOne({ email: supervisorEmail });
-    if (!supervisorExists) {
-      console.log(`[DB Init] Supervisor user not found. Creating default supervisor: ${supervisorEmail}`);
-      const hashedPassword = hashPassword(supervisorPassword);
-      await usersCol.insertOne({
-        email: supervisorEmail,
-        password_hash: hashedPassword,
-        roles: ["supervisor"],
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
-      console.log("[DB Init] Default supervisor user created successfully.");
-    }
-
-    const atendenteEmail = process.env.ATENDENTE_EMAIL || "atendente@pizzaria.com";
-    const atendentePassword = process.env.ATENDENTE_PASSWORD || "atendente123";
-    const atendenteExists = await usersCol.findOne({ email: atendenteEmail });
-    if (!atendenteExists) {
-      console.log(`[DB Init] Atendente user not found. Creating default atendente: ${atendenteEmail}`);
-      const hashedPassword = hashPassword(atendentePassword);
-      await usersCol.insertOne({
-        email: atendenteEmail,
-        password_hash: hashedPassword,
-        roles: ["atendente"],
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
-      console.log("[DB Init] Default atendente user created successfully.");
-    }
+    await ensureSeedUser(usersCol, {
+      label: "Atendente",
+      role: "atendente",
+      email: (process.env.ATENDENTE_EMAIL || "atendente@pizzaria.com").trim().toLowerCase(),
+      envPassword: process.env.ATENDENTE_PASSWORD,
+      devFallbackPassword: "atendente123",
+    });
 
     console.log("[DB Init] Database initialization complete.");
   } catch (error) {

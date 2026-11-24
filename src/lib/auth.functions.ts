@@ -20,7 +20,7 @@ export const loginFn = createServerFn({ method: "POST" })
       throw new Error("Usuário ou senha incorretos.");
     }
 
-    const isValid = verifyPassword(data.password, user.password_hash);
+    const isValid = await verifyPassword(data.password, user.password_hash);
     if (!isValid) {
       throw new Error("Usuário ou senha incorretos.");
     }

@@ -37,6 +37,36 @@ interface SettingsDoc extends Partial<SystemSettings> {
   updated_at?: Date;
 }
 
+export const SECRET_MASK_SENTINEL = "••••••••••••";
+
+const SECRET_FIELDS = [
+  "evolution_api_key",
+  "mercado_pago_access_token",
+  "google_maps_api_key",
+] as const;
+
+export interface MaskedAdminSettings extends SystemSettings {
+  configured_secrets: {
+    evolution_api_key: boolean;
+    mercado_pago_access_token: boolean;
+    google_maps_api_key: boolean;
+  };
+}
+
+export function maskSettingsForAdminClient(settings: SystemSettings): MaskedAdminSettings {
+  return {
+    ...settings,
+    evolution_api_key: settings.evolution_api_key ? SECRET_MASK_SENTINEL : "",
+    mercado_pago_access_token: settings.mercado_pago_access_token ? SECRET_MASK_SENTINEL : "",
+    google_maps_api_key: settings.google_maps_api_key ? SECRET_MASK_SENTINEL : "",
+    configured_secrets: {
+      evolution_api_key: Boolean(settings.evolution_api_key),
+      mercado_pago_access_token: Boolean(settings.mercado_pago_access_token),
+      google_maps_api_key: Boolean(settings.google_maps_api_key),
+    },
+  };
+}
+
 export async function getSystemSettings(): Promise<SystemSettings> {
   const envDefaults: SystemSettings = {
     evolution_api_url: process.env.EVOLUTION_API_URL || "",
@@ -61,19 +91,25 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     const settingsCol = db.collection<SettingsDoc>("settings");
     const settings = await settingsCol.findOne({ _id: "global" });
 
+    const pickStr = (dbVal: string | undefined, envVal: string) =>
+      dbVal !== undefined ? dbVal : envVal;
+
     return {
-      evolution_api_url: settings?.evolution_api_url || envDefaults.evolution_api_url,
-      evolution_api_key: settings?.evolution_api_key || envDefaults.evolution_api_key,
-      n8n_webhook_url: settings?.n8n_webhook_url || envDefaults.n8n_webhook_url,
-      mercado_pago_access_token:
-        settings?.mercado_pago_access_token || envDefaults.mercado_pago_access_token,
-      mercado_pago_public_key:
-        settings?.mercado_pago_public_key || envDefaults.mercado_pago_public_key,
+      evolution_api_url: pickStr(settings?.evolution_api_url, envDefaults.evolution_api_url),
+      evolution_api_key: pickStr(settings?.evolution_api_key, envDefaults.evolution_api_key),
+      n8n_webhook_url: pickStr(settings?.n8n_webhook_url, envDefaults.n8n_webhook_url),
+      mercado_pago_access_token: pickStr(
+        settings?.mercado_pago_access_token,
+        envDefaults.mercado_pago_access_token
+      ),
+      mercado_pago_public_key: pickStr(
+        settings?.mercado_pago_public_key,
+        envDefaults.mercado_pago_public_key
+      ),
       whatsapp_instance_name:
         settings?.whatsapp_instance_name || envDefaults.whatsapp_instance_name,
-      google_maps_api_key: settings?.google_maps_api_key || envDefaults.google_maps_api_key,
-      store_phone:
-        settings?.store_phone !== undefined ? settings.store_phone : envDefaults.store_phone,
+      google_maps_api_key: pickStr(settings?.google_maps_api_key, envDefaults.google_maps_api_key),
+      store_phone: pickStr(settings?.store_phone, envDefaults.store_phone),
       store_status_override:
         settings?.store_status_override === "force_open" ||
         settings?.store_status_override === "force_closed"
@@ -89,12 +125,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         ...DEFAULT_ENABLED_DELIVERY_MODES,
         ...(settings?.enabled_delivery_modes || {}),
       },
-      meta_pixel_id:
-        settings?.meta_pixel_id !== undefined ? settings.meta_pixel_id : envDefaults.meta_pixel_id,
-      ga4_measurement_id:
-        settings?.ga4_measurement_id !== undefined
-          ? settings.ga4_measurement_id
-          : envDefaults.ga4_measurement_id,
+      meta_pixel_id: pickStr(settings?.meta_pixel_id, envDefaults.meta_pixel_id),
+      ga4_measurement_id: pickStr(settings?.ga4_measurement_id, envDefaults.ga4_measurement_id),
     };
   } catch (error) {
     console.error("Failed to load settings from DB, using environment variables:", error);
@@ -130,11 +162,16 @@ export async function saveSystemSettings(settings: Partial<SystemSettings>): Pro
   const db = await getDb();
   const settingsCol = db.collection<SettingsDoc>("settings");
 
+  const secretSet = new Set<string>(SECRET_FIELDS);
   const cleanSettings: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(settings)) {
-    if (val !== undefined && val !== null) {
-      cleanSettings[key] = typeof val === "string" ? val.trim() : val;
+    if (val === undefined || val === null) continue;
+    const trimmed = typeof val === "string" ? val.trim() : val;
+    // Never overwrite a persisted secret with the UI mask sentinel
+    if (secretSet.has(key) && trimmed === SECRET_MASK_SENTINEL) {
+      continue;
     }
+    cleanSettings[key] = trimmed;
   }
 
   await settingsCol.updateOne(

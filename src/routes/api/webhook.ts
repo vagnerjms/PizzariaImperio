@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/webhook")({
               return new Response("Invalid payment id", { status: 400 });
             }
 
-            // Optional Mercado Pago x-signature HMAC-SHA256 verification when secret is configured
+            // Mercado Pago x-signature HMAC-SHA256 verification + timestamp replay window
             const webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
             if (webhookSecret) {
               const xSignature = request.headers.get("x-signature") || "";
@@ -45,6 +45,13 @@ export const Route = createFileRoute("/api/webhook")({
               if (!ts || !v1) {
                 return new Response("Missing webhook signature", { status: 401 });
               }
+              // Reject stale/future timestamps outside a 15-minute replay window
+              const tsNum = Number(ts);
+              const tsMs = tsNum > 1e12 ? tsNum : tsNum * 1000;
+              if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > 15 * 60 * 1000) {
+                console.warn(`Rejected stale webhook timestamp for payment ${paymentId}: ${ts}`);
+                return new Response("Stale webhook signature", { status: 401 });
+              }
               const { createHmac, timingSafeEqual } = await import("node:crypto");
               const manifest = `id:${paymentId};request-id:${xRequestId};ts:${ts};`;
               const expected = createHmac("sha256", webhookSecret).update(manifest).digest("hex");
@@ -57,6 +64,10 @@ export const Route = createFileRoute("/api/webhook")({
                 console.warn(`Invalid webhook signature for payment ${paymentId}`);
                 return new Response("Invalid webhook signature", { status: 401 });
               }
+            } else if (process.env.NODE_ENV === "production") {
+              console.warn(
+                "[Webhook Security Warning] MERCADO_PAGO_WEBHOOK_SECRET is not set in production; relying solely on Mercado Pago API verification."
+              );
             }
 
             const { getSystemSettings } = await import("@/lib/settings.server");
@@ -70,15 +81,21 @@ export const Route = createFileRoute("/api/webhook")({
 
             console.log(`Verifying payment ${paymentId} with Mercado Pago API...`);
 
-            const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-              signal: AbortSignal.timeout(5000),
-            });
+            const response = await fetch(
+              `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                signal: AbortSignal.timeout(5000),
+              }
+            );
 
             if (!response.ok) {
-              console.error(`Failed to verify payment ${paymentId} with Mercado Pago:`, await response.text());
+              console.error(
+                `Failed to verify payment ${paymentId} with Mercado Pago:`,
+                await response.text()
+              );
               return new Response("Failed to fetch payment details", { status: 400 });
             }
 
@@ -86,14 +103,17 @@ export const Route = createFileRoute("/api/webhook")({
             const orderId = paymentData.external_reference;
             const status = paymentData.status;
 
-            console.log(`Payment ${paymentId} verified with status '${status}' for order ${orderId}`);
+            console.log(
+              `Payment ${paymentId} verified with status '${status}' for order ${orderId}`
+            );
 
             if (orderId) {
               const { getOrdersCollection } = await import("@/lib/db");
               const ordersCol = await getOrdersCollection();
 
               // Map Mercado Pago status to public.payment_status
-              let mappedStatus: "pending" | "paid" | "failed" | "refunded" | "on_delivery" = "pending";
+              let mappedStatus: "pending" | "paid" | "failed" | "refunded" | "on_delivery" =
+                "pending";
               if (status === "approved") {
                 mappedStatus = "paid";
               } else if (status === "rejected" || status === "cancelled") {
@@ -102,11 +122,11 @@ export const Route = createFileRoute("/api/webhook")({
                 mappedStatus = "refunded";
               }
 
-              // Atomic transition check to ensure strict idempotency on concurrent webhook events
-              let shouldNotifyPaid = false;
+              // Atomic transition check: strict idempotency on `paid` and zero regression from `paid` -> `pending`/`failed`
+              let paidOrderDoc: any = null;
 
               if (mappedStatus === "paid") {
-                const atomicResult = await ordersCol.updateOne(
+                paidOrderDoc = await ordersCol.findOneAndUpdate(
                   { _id: orderId, payment_status: { $ne: "paid" } },
                   {
                     $set: {
@@ -114,24 +134,38 @@ export const Route = createFileRoute("/api/webhook")({
                       gateway_payment_id: String(paymentId),
                       updated_at: new Date(),
                     },
-                  }
+                  },
+                  { returnDocument: "after" }
                 );
 
-                if (atomicResult.matchedCount === 0) {
-                  // Either order does not exist or it was already paid previously
+                if (!paidOrderDoc) {
                   const existingOrder = await ordersCol.findOne({ _id: orderId });
                   if (!existingOrder) {
                     console.error(`Failed to update order ${orderId}: Order not found in MongoDB`);
                     return new Response("Order not found", { status: 404 });
                   }
-                  console.log(`Order ${orderId} was already paid, skipping duplicate n8n notification.`);
+                  console.log(
+                    `Order ${orderId} was already paid, skipping duplicate n8n notification.`
+                  );
                 } else {
-                  shouldNotifyPaid = true;
                   console.log(`Order ${orderId} successfully transitioned to payment_status: paid`);
                 }
-              } else {
+              } else if (mappedStatus === "refunded") {
                 await ordersCol.updateOne(
                   { _id: orderId },
+                  {
+                    $set: {
+                      payment_status: "refunded",
+                      gateway_payment_id: String(paymentId),
+                      updated_at: new Date(),
+                    },
+                  }
+                );
+                console.log(`Order ${orderId} updated to payment_status: refunded`);
+              } else {
+                // Never allow delayed pending/failed events to downgrade an already paid/refunded order
+                const res = await ordersCol.updateOne(
+                  { _id: orderId, payment_status: { $nin: ["paid", "refunded"] } },
                   {
                     $set: {
                       payment_status: mappedStatus,
@@ -140,31 +174,40 @@ export const Route = createFileRoute("/api/webhook")({
                     },
                   }
                 );
-                console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);
+                if (res.matchedCount === 0) {
+                  console.log(
+                    `Skipped non-paid webhook (${mappedStatus}) for already-settled or missing order ${orderId}.`
+                  );
+                } else {
+                  console.log(`Order ${orderId} updated to payment_status: ${mappedStatus}`);
+                }
               }
 
               // Notify n8n ONLY upon the exact atomic transition to paid
               const n8nWebhookUrl = settings.n8n_webhook_url;
-              if (n8nWebhookUrl && shouldNotifyPaid) {
-                const orderDoc = await ordersCol.findOne({ _id: orderId });
-                if (orderDoc) {
-                  fetch(n8nWebhookUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      event: "order.paid",
-                      order: {
-                        id: orderId,
-                        customer_name: orderDoc.customer_name,
-                        customer_phone: orderDoc.customer_phone,
-                        customer_address: orderDoc.customer_address,
-                        delivery_mode: orderDoc.delivery_mode || "delivery",
-                        total: orderDoc.total,
-                        payment_method: orderDoc.payment_method,
-                      },
-                    }),
-                  }).catch((err) => console.error("Failed to notify n8n webhook on payment approved:", err));
-                }
+              if (n8nWebhookUrl && paidOrderDoc) {
+                fetch(n8nWebhookUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  signal: AbortSignal.timeout(8000),
+                  body: JSON.stringify({
+                    event: "order.paid",
+                    order: {
+                      id: orderId,
+                      customer_name: paidOrderDoc.customer_name,
+                      customer_phone: paidOrderDoc.customer_phone,
+                      customer_address: paidOrderDoc.customer_address,
+                      delivery_mode: paidOrderDoc.delivery_mode || "delivery",
+                      payment_method: paidOrderDoc.payment_method,
+                      total: paidOrderDoc.total,
+                      status: paidOrderDoc.status,
+                      payment_status: "paid",
+                      items: paidOrderDoc.items,
+                    },
+                  }),
+                }).catch((err) =>
+                  console.error("Failed to notify n8n webhook on payment approved:", err)
+                );
               }
             }
           }
@@ -175,7 +218,7 @@ export const Route = createFileRoute("/api/webhook")({
           });
         } catch (err) {
           console.error("Webhook processing error:", err);
-          return new Response(err instanceof Error ? err.message : "Internal Server Error", { status: 500 });
+          return new Response("Internal Server Error", { status: 500 });
         }
       },
     },

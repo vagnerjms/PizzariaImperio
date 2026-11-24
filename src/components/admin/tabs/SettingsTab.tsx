@@ -315,10 +315,10 @@ export function SettingsTab({
                   Google Places / Maps API Key (Último Recurso)
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   value={settingsForm.google_maps_api_key}
                   onChange={(e) => setSettingsForm((prev) => ({ ...prev, google_maps_api_key: e.target.value }))}
-                  placeholder="AIzaSy..."
+                  placeholder="AIzaSy... (deixe como está para manter a chave atual ou apague para remover)"
                   className="mt-1.5 w-full rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-gold/50"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">

@@ -105,13 +105,13 @@ export function CartDrawer({
   };
 
   const rewardItemCost = appliedPromotion?.rewardItem?.unit_price || 0;
-  const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0) + rewardItemCost;
+  const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
   const discount = appliedPromotion?.discountAmount || 0;
   const deliveryFee =
     form.deliveryMode === "pickup" || form.deliveryMode === "dine_in"
       ? 0
       : form.deliveryFee || 0;
-  const total = Math.max(0, subtotal - discount) + deliveryFee;
+  const total = Math.max(0, subtotal + rewardItemCost - discount) + deliveryFee;
 
   const handleStartCheckout = () => {
     trackInitiateCheckout({

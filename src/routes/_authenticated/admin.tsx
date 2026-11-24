@@ -241,6 +241,9 @@ function AdminPage() {
     const targetOrder = orders.find((o) => o.id === id);
     const chosenCourier = courierId ? couriers.find((c) => c.id === courierId) : null;
 
+    await queryClient.cancelQueries({ queryKey: ["admin", "orders"] });
+    const previousOrders = queryClient.getQueryData<OrderRow[]>(["admin", "orders"]);
+
     // Atualização otimista no cache do TanStack Query
     queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
       prev.map((o) =>
@@ -274,23 +277,51 @@ function AdminPage() {
           ...(courierId !== undefined ? { courier_id: courierId } : {}),
         },
       });
-      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] });
-    } catch {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "financial-report"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+      ]);
+    } catch (err) {
+      if (previousOrders) {
+        queryClient.setQueryData(["admin", "orders"], previousOrders);
+      }
+      setPrinterMsg({
+        text: err instanceof Error ? err.message : "Erro ao atualizar status do pedido.",
+        isError: true,
+      });
+      setTimeout(() => setPrinterMsg(null), 5000);
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };
 
   const handleConfirmPayment = async (id: string) => {
+    await queryClient.cancelQueries({ queryKey: ["admin", "orders"] });
+    const previousOrders = queryClient.getQueryData<OrderRow[]>(["admin", "orders"]);
+
     queryClient.setQueryData<OrderRow[]>(["admin", "orders"], (prev = []) =>
       prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o))
     );
     try {
       await confirmPaymentFn({ data: { id } });
-      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "cash-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "financial-report"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+      ]);
       setPrinterMsg({ text: `Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!` });
       setTimeout(() => setPrinterMsg(null), 4000);
-    } catch {
+    } catch (err) {
+      if (previousOrders) {
+        queryClient.setQueryData(["admin", "orders"], previousOrders);
+      }
+      setPrinterMsg({
+        text: err instanceof Error ? err.message : "Erro ao confirmar pagamento.",
+        isError: true,
+      });
+      setTimeout(() => setPrinterMsg(null), 5000);
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };

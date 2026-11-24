@@ -36,11 +36,11 @@ export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { getOrdersCollection } = await import("./db");
     const { randomUUID } = await import("node:crypto");
-    const { getEffectiveServerMenuPrices, getEffectiveServerCrustPrices } = await import(
-      "./menu.server"
-    );
+    const { getEffectiveServerCatalogPricing } = await import("./menu.server");
     const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
-    const { listPublicPromotionsFromDb, consumePromotionUse } = await import("./promotions.server");
+    const { listPublicPromotionsFromDb, consumePromotionUse, releasePromotionUse } = await import(
+      "./promotions.server"
+    );
     const { calculateVerifiedOrderPricing } = await import("./order-pricing");
     const { getSystemSettings } = await import("./settings.server");
     const {
@@ -53,21 +53,16 @@ export const createOrder = createServerFn({ method: "POST" })
     const orderId = randomUUID();
     const deliveryMode = data.delivery_mode || "delivery";
 
-    const [
-      effectiveMenuPrices,
-      effectiveCrustPrices,
-      activePromotions,
-      officialDeliveryFee,
-      settings,
-    ] = await Promise.all([
-      getEffectiveServerMenuPrices(),
-      getEffectiveServerCrustPrices(),
+    const [catalogPricing, activePromotions, officialDeliveryFee, settings] = await Promise.all([
+      getEffectiveServerCatalogPricing(),
       listPublicPromotionsFromDb(),
       deliveryMode === "delivery"
         ? calculateFeeForNeighborhood(data.neighborhood || "")
         : Promise.resolve(0),
       getSystemSettings(),
     ]);
+    const effectiveMenuPrices = catalogPricing.menuPrices;
+    const effectiveCrustPrices = catalogPricing.crustPrices;
 
     // Store operational checks (hours/pause, enabled delivery modes & payment methods)
     const storeStatus = evaluateStoreOpenStatus(settings);
@@ -220,6 +215,7 @@ export const createOrder = createServerFn({ method: "POST" })
       }
     }
 
+    let promotionReserved = false;
     // Atomically enforce promotion max_uses under concurrency right before persisting the order
     if (promotionId) {
       const reserved = await consumePromotionUse(promotionId);
@@ -230,6 +226,7 @@ export const createOrder = createServerFn({ method: "POST" })
             : "A promoção aplicada atingiu o limite máximo de usos. Atualize o carrinho e tente novamente."
         );
       }
+      promotionReserved = true;
     }
 
     // Insert verified order document (including payment metadata when Pix succeeded)
@@ -249,6 +246,7 @@ export const createOrder = createServerFn({ method: "POST" })
       promotion_id: promotionId,
       promotion_title: promotionTitle,
       coupon_code: appliedCouponCode,
+      promotion_released: false,
       total,
       delivery_fee: verifiedDeliveryFee,
       status: "novo" as const,
@@ -266,7 +264,16 @@ export const createOrder = createServerFn({ method: "POST" })
       items: validatedItems,
     };
 
-    await ordersCol.insertOne(newOrder);
+    try {
+      await ordersCol.insertOne(newOrder);
+    } catch (insertErr) {
+      if (promotionReserved && promotionId) {
+        await releasePromotionUse(promotionId).catch((relErr) =>
+          console.error("Failed to rollback reserved promotion use:", relErr)
+        );
+      }
+      throw insertErr;
+    }
 
     // Trigger n8n webhook asynchronously if configured
     const n8nWebhookUrl = settings.n8n_webhook_url;
@@ -276,6 +283,7 @@ export const createOrder = createServerFn({ method: "POST" })
       fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           event: "order.created",
           order: {
@@ -492,10 +500,32 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       }
     }
 
-    const result = await ordersCol.updateOne({ _id: data.id }, { $set: updateDoc });
+    if (data.status === "cancelado" && orderBefore.promotion_id && !orderBefore.promotion_released) {
+      updateDoc.promotion_released = true;
+    }
+
+    const result = await ordersCol.updateOne(
+      data.status === "cancelado" && orderBefore.promotion_id && !orderBefore.promotion_released
+        ? { _id: data.id, promotion_released: { $ne: true } }
+        : { _id: data.id },
+      { $set: updateDoc }
+    );
 
     if (result.matchedCount === 0) {
-      throw new Error("Pedido não encontrado.");
+      const stillExists = await ordersCol.findOne({ _id: data.id });
+      if (!stillExists) {
+        throw new Error("Pedido não encontrado.");
+      }
+      await ordersCol.updateOne({ _id: data.id }, { $set: { ...updateDoc, promotion_released: true } });
+    } else if (
+      data.status === "cancelado" &&
+      orderBefore.promotion_id &&
+      !orderBefore.promotion_released
+    ) {
+      const { releasePromotionUse } = await import("./promotions.server");
+      await releasePromotionUse(String(orderBefore.promotion_id)).catch((err) =>
+        console.error("Failed to release promotion use on cancellation:", err)
+      );
     }
 
     // Notify n8n ONLY for essential delivery updates ("saiu" and "cancelado")
@@ -509,6 +539,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           event: "order.status_updated",
           order: {
@@ -571,6 +602,7 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
       fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           event: "order.paid",
           order: {
@@ -618,4 +650,263 @@ export const getOrderStatus = createServerFn({ method: "GET" })
       payment_details: order.payment_details,
       created_at: order.created_at?.toISOString ? order.created_at.toISOString() : order.created_at,
     };
+  });
+
+export type FinancialReportPeriod = "today" | "7d" | "30d" | "all";
+
+export interface FinancialReportResponse {
+  period: FinancialReportPeriod;
+  totalOrdersCount: number;
+  confirmedCount: number;
+  completedCount: number;
+  activeCount: number;
+  canceledCount: number;
+  revenue: number;
+  totalDiscounts: number;
+  totalDeliveryFees: number;
+  ticketMedio: number;
+  avgPrepMin: number | null;
+  prepSampleCount: number;
+  avgDeliveryMin: number | null;
+  deliverySampleCount: number;
+  topItems: Array<{ name: string; qty: number }>;
+  paymentBreakdown: Array<{ method: string; count: number; amount: number }>;
+}
+
+function getSaoPauloTodayStart(): Date {
+  const spDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return new Date(`${spDate}T00:00:00-03:00`);
+}
+
+function normalizeRankingName(rawName: string, basePizzaName?: string): string {
+  if (basePizzaName && basePizzaName.trim()) return basePizzaName.trim();
+  return String(rawName || "")
+    .replace(/\s*\[[^\]]*\]/g, "")
+    .replace(/\s*\((?:Borda [^)]+|Sem Borda[^)]*)\)/gi, "")
+    .trim();
+}
+
+const financialReportSchema = z.object({
+  period: z.enum(["today", "7d", "30d", "all"]).default("today"),
+});
+
+/**
+ * Server-side aggregated Financial & Operational SLA report using America/Sao_Paulo timezone.
+ * Eliminates the 200-order truncation limit from KDS listOrders and enforces Supervisor restrictions on the server.
+ */
+export const getFinancialReport = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .validator((raw: unknown) => financialReportSchema.parse(raw ?? {}))
+  .handler(async ({ data, context }): Promise<FinancialReportResponse> => {
+    const isAdmin = Boolean(context.roles?.includes("admin"));
+    const isSupervisorOrAdmin = Boolean(
+      context.roles?.some((r) => ["admin", "supervisor"].includes(r))
+    );
+    if (!isSupervisorOrAdmin) {
+      throw new Error("Acesso restrito a supervisores e administradores.");
+    }
+
+    const effectivePeriod: FinancialReportPeriod = isAdmin ? data.period : "today";
+    const matchStage: Record<string, unknown> = {};
+    if (effectivePeriod === "today") {
+      matchStage.created_at = { $gte: getSaoPauloTodayStart() };
+    } else if (effectivePeriod === "7d") {
+      matchStage.created_at = { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
+    } else if (effectivePeriod === "30d") {
+      matchStage.created_at = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+    }
+
+    const { getOrdersCollection } = await import("./db");
+    const ordersCol = await getOrdersCollection();
+
+    const docs = await ordersCol
+      .find(matchStage)
+      .project({
+        status: 1,
+        payment_method: 1,
+        payment_status: 1,
+        total: 1,
+        discount: 1,
+        delivery_fee: 1,
+        created_at: 1,
+        preparing_at: 1,
+        dispatched_at: 1,
+        delivered_at: 1,
+        items: 1,
+      })
+      .toArray();
+
+    let confirmedCount = 0;
+    let completedCount = 0;
+    let activeCount = 0;
+    let canceledCount = 0;
+    let revenue = 0;
+    let totalDiscounts = 0;
+    let totalDeliveryFees = 0;
+
+    const prepDeltas: number[] = [];
+    const deliveryDeltas: number[] = [];
+    const itemSales: Record<string, number> = {};
+    const paymentMap: Record<string, { count: number; amount: number }> = {};
+
+    const toMs = (v: unknown): number | null => {
+      if (!v) return null;
+      const ms = v instanceof Date ? v.getTime() : new Date(String(v)).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    };
+
+    for (const o of docs as any[]) {
+      if (o.status === "cancelado") {
+        canceledCount += 1;
+        continue;
+      }
+      if (o.payment_method === "Pix" && o.payment_status !== "paid") {
+        continue;
+      }
+
+      confirmedCount += 1;
+      if (o.status === "entregue") completedCount += 1;
+      else activeCount += 1;
+
+      const orderTotal = Number(o.total || 0);
+      revenue += orderTotal;
+      totalDiscounts += Number(o.discount || 0);
+      totalDeliveryFees += Number(o.delivery_fee || 0);
+
+      const createdMs = toMs(o.created_at);
+      const startPrepMs = toMs(o.preparing_at) ?? createdMs;
+      const dispatchedMs = toMs(o.dispatched_at);
+      const deliveredMs = toMs(o.delivered_at);
+
+      if (startPrepMs !== null && dispatchedMs !== null) {
+        const d = dispatchedMs - startPrepMs;
+        if (d > 0 && d < 6 * 3600 * 1000) prepDeltas.push(d);
+      }
+      if (createdMs !== null && deliveredMs !== null) {
+        const d = deliveredMs - createdMs;
+        if (d > 0 && d < 6 * 3600 * 1000) deliveryDeltas.push(d);
+      }
+
+      for (const item of o.items || []) {
+        const key = normalizeRankingName(item.pizza_name, item.base_pizza_name);
+        if (!key) continue;
+        itemSales[key] = (itemSales[key] || 0) + Number(item.quantity || 0);
+      }
+
+      const method = String(o.payment_method || "Outros");
+      const bucket = paymentMap[method] || { count: 0, amount: 0 };
+      bucket.count += 1;
+      bucket.amount += orderTotal;
+      paymentMap[method] = bucket;
+    }
+
+    const avgMin = (arr: number[]): number | null =>
+      arr.length === 0
+        ? null
+        : Math.round(arr.reduce((sum, ms) => sum + ms / 60000, 0) / arr.length);
+
+    const topItems = Object.entries(itemSales)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, qty]) => ({ name, qty }));
+
+    const paymentBreakdown = Object.entries(paymentMap).map(([method, info]) => ({
+      method,
+      count: info.count,
+      amount: isAdmin ? Math.round(info.amount * 100) / 100 : 0,
+    }));
+
+    return {
+      period: effectivePeriod,
+      totalOrdersCount: docs.length,
+      confirmedCount,
+      completedCount,
+      activeCount,
+      canceledCount,
+      revenue: isAdmin ? Math.round(revenue * 100) / 100 : 0,
+      totalDiscounts: isAdmin ? Math.round(totalDiscounts * 100) / 100 : 0,
+      totalDeliveryFees: isAdmin ? Math.round(totalDeliveryFees * 100) / 100 : 0,
+      ticketMedio: isAdmin && confirmedCount > 0 ? Math.round((revenue / confirmedCount) * 100) / 100 : 0,
+      avgPrepMin: avgMin(prepDeltas),
+      prepSampleCount: prepDeltas.length,
+      avgDeliveryMin: avgMin(deliveryDeltas),
+      deliverySampleCount: deliveryDeltas.length,
+      topItems,
+      paymentBreakdown,
+    };
+  });
+
+/**
+ * Full CSV export dataset for Admins (never truncated to 200 orders).
+ */
+export const exportFinancialOrdersCsv = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .validator((raw: unknown) => financialReportSchema.parse(raw ?? {}))
+  .handler(async ({ data, context }): Promise<string> => {
+    if (!context.roles?.includes("admin")) {
+      throw new Error("Apenas Administradores podem exportar relatórios financeiros.");
+    }
+
+    const matchStage: Record<string, unknown> = {};
+    if (data.period === "today") {
+      matchStage.created_at = { $gte: getSaoPauloTodayStart() };
+    } else if (data.period === "7d") {
+      matchStage.created_at = { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
+    } else if (data.period === "30d") {
+      matchStage.created_at = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+    }
+
+    const { getOrdersCollection } = await import("./db");
+    const ordersCol = await getOrdersCollection();
+    const docs = await ordersCol
+      .find(matchStage)
+      .sort({ created_at: -1 })
+      .project({
+        _id: 1,
+        created_at: 1,
+        customer_name: 1,
+        delivery_mode: 1,
+        payment_method: 1,
+        status: 1,
+        subtotal: 1,
+        discount: 1,
+        delivery_fee: 1,
+        total: 1,
+      })
+      .toArray();
+
+    const header = [
+      "ID",
+      "Data",
+      "Cliente",
+      "Modalidade",
+      "Pagamento",
+      "Status",
+      "Subtotal",
+      "Desconto",
+      "Taxa Entrega",
+      "Total",
+    ];
+    const rows = (docs as any[]).map((o) => {
+      const createdDate = o.created_at instanceof Date ? o.created_at : new Date(o.created_at);
+      return [
+        String(o._id).slice(0, 8),
+        createdDate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+        `"${String(o.customer_name || "").replace(/"/g, '""')}"`,
+        o.delivery_mode || "delivery",
+        `"${String(o.payment_method || "")}"`,
+        o.status,
+        Number(o.subtotal || 0).toFixed(2),
+        Number(o.discount || 0).toFixed(2),
+        Number(o.delivery_fee || 0).toFixed(2),
+        Number(o.total || 0).toFixed(2),
+      ];
+    });
+
+    return [header.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
   });

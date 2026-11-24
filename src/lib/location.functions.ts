@@ -20,10 +20,70 @@ const COMMON_HEADERS = {
 
 const STOP_WORDS = new Set(["rua", "r", "av", "avenida", "alameda", "pca", "praca", "travessa", "estrada", "bairro", "de", "da", "do", "das", "dos", "e"]);
 
-// Cache em memória RAM de ultra-alta velocidade (sub-milissegundo)
-const memoryCache = new Map<string, { data: LocationResult[]; timestamp: number }>();
-const gpsMemoryCache = new Map<string, { data: LocationResult | null; timestamp: number }>();
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
+const MAX_CACHE_ENTRIES = 500;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQ = 30;
+const MAX_RATE_LIMIT_IPS = 2000;
+
+class LruTtlCache<T> {
+  private map = new Map<string, { data: T; timestamp: number }>();
+  constructor(private readonly maxEntries: number, private readonly ttlMs: number) {}
+
+  get(key: string): T | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (Date.now() - entry.timestamp >= this.ttlMs) {
+      this.map.delete(key);
+      return undefined;
+    }
+    // Refresh recency (LRU)
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry.data;
+  }
+
+  set(key: string, data: T): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.maxEntries) {
+      const oldestKey = this.map.keys().next().value;
+      if (oldestKey !== undefined) this.map.delete(oldestKey);
+    }
+    this.map.set(key, { data, timestamp: Date.now() });
+  }
+}
+
+const memoryCache = new LruTtlCache<LocationResult[]>(MAX_CACHE_ENTRIES, CACHE_TTL_MS);
+const gpsMemoryCache = new LruTtlCache<LocationResult>(MAX_CACHE_ENTRIES, CACHE_TTL_MS);
+const rateLimitBuckets = new Map<string, number[]>();
+
+async function enforceLocationRateLimit(): Promise<void> {
+  const { getRequest } = await import("@tanstack/react-start/server");
+  const req = getRequest();
+  const forwarded = req?.headers.get("x-forwarded-for") || "";
+  const ip =
+    forwarded.split(",")[0]?.trim() ||
+    req?.headers.get("x-real-ip")?.trim() ||
+    "unknown";
+
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  const recent = (rateLimitBuckets.get(ip) || []).filter((ts) => ts > cutoff);
+
+  if (recent.length >= RATE_LIMIT_MAX_REQ) {
+    throw new Error("Muitas buscas de endereço em sequência. Aguarde alguns segundos e tente novamente.");
+  }
+
+  recent.push(now);
+  if (rateLimitBuckets.has(ip)) {
+    rateLimitBuckets.delete(ip);
+  } else if (rateLimitBuckets.size >= MAX_RATE_LIMIT_IPS) {
+    const oldestIp = rateLimitBuckets.keys().next().value;
+    if (oldestIp !== undefined) rateLimitBuckets.delete(oldestIp);
+  }
+  rateLimitBuckets.set(ip, recent);
+}
 
 function getSignificantWords(text: string): string[] {
   return cleanString(text)
@@ -58,15 +118,17 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data }): Promise<LocationResult | null> => {
+    await enforceLocationRateLimit();
+
     // Chave de cache por aproximação de ~50 metros (3 casas decimais)
     const latRounded = data.lat.toFixed(3);
     const lonRounded = data.lon.toFixed(3);
     const gpsCacheKey = `gps_${latRounded}_${lonRounded}`;
 
-    // 1. Checa Cache em Memória
+    // 1. Checa Cache em Memória (LRU)
     const memCached = gpsMemoryCache.get(gpsCacheKey);
-    if (memCached && Date.now() - memCached.timestamp < CACHE_TTL_MS && memCached.data) {
-      return memCached.data;
+    if (memCached) {
+      return memCached;
     }
 
     // 2. Checa Cache no MongoDB
@@ -75,7 +137,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       const db = await getDb();
       const cachedDoc = await db.collection("address_cache").findOne({ _id: gpsCacheKey as any });
       if (cachedDoc && cachedDoc.data) {
-        gpsMemoryCache.set(gpsCacheKey, { data: cachedDoc.data, timestamp: Date.now() });
+        gpsMemoryCache.set(gpsCacheKey, cachedDoc.data);
         return cachedDoc.data;
       }
     } catch (e) {
@@ -221,7 +283,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
 
     // Grava no Cache em Memória e MongoDB se obteve resultado
     if (result) {
-      gpsMemoryCache.set(gpsCacheKey, { data: result, timestamp: Date.now() });
+      gpsMemoryCache.set(gpsCacheKey, result);
       try {
         const { getDb } = await import("./db");
         const db = await getDb();
@@ -248,13 +310,15 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     }).parse(raw)
   )
   .handler(async ({ data }): Promise<LocationResult[]> => {
+    await enforceLocationRateLimit();
+
     const cleanQuery = data.query.trim();
     const cacheKey = `search_${cleanString(cleanQuery)}`;
 
-    // 1. Checa Cache em Memória RAM (instantâneo < 1ms)
+    // 1. Checa Cache em Memória RAM (LRU instantâneo < 1ms)
     const memCached = memoryCache.get(cacheKey);
-    if (memCached && Date.now() - memCached.timestamp < CACHE_TTL_MS && memCached.data.length > 0) {
-      return memCached.data;
+    if (memCached && memCached.length > 0) {
+      return memCached;
     }
 
     // 2. Checa Cache Persistente no MongoDB (instantâneo < 2ms)
@@ -263,7 +327,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       const db = await getDb();
       const cachedDoc = await db.collection("address_cache").findOne({ _id: cacheKey as any });
       if (cachedDoc && Array.isArray(cachedDoc.results) && cachedDoc.results.length > 0) {
-        memoryCache.set(cacheKey, { data: cachedDoc.results, timestamp: Date.now() });
+        memoryCache.set(cacheKey, cachedDoc.results);
         return cachedDoc.results;
       }
     } catch (e) {
@@ -396,10 +460,9 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
     // =========================================================================
     if (results.length === 0) {
       try {
-        const { getDb } = await import("./db");
-        const db = await getDb();
-        const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "global" as any });
-        const neighborhoods: Array<{ name: string; fee: number }> = settingsDoc?.neighborhoods || [];
+        const { getDeliverySettings } = await import("./delivery-config.server");
+        const deliverySettings = await getDeliverySettings();
+        const neighborhoods: Array<{ name: string; fee: number }> = deliverySettings.neighborhoods || [];
 
         const queryClean = cleanString(cleanQuery);
         const matchedNeighborhoods = neighborhoods.filter((n) => {
@@ -496,7 +559,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
 
     // 💾 Salva os resultados no Cache em Memória e no MongoDB para economia futura
     if (results.length > 0) {
-      memoryCache.set(cacheKey, { data: results, timestamp: Date.now() });
+      memoryCache.set(cacheKey, results);
       try {
         const { getDb } = await import("./db");
         const db = await getDb();

@@ -8,6 +8,7 @@ import {
   PROMO_WEEKDAYS,
 } from "@/lib/promotions.types";
 import { MENU as STATIC_MENU_ITEMS, Pizza } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
 import { getPublicCatalog } from "@/lib/menu.functions";
 
 export interface PromotionFormData {
@@ -324,7 +325,7 @@ export function PromotionModal({
                     >
                       {menuItems.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.name} ({item.category}) - R$ {item.price.toFixed(2)}
+                          {item.name} ({item.category}) - {formatBRL(item.price)}
                         </option>
                       ))}
                     </select>
@@ -578,7 +579,7 @@ export function PromotionModal({
                   <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2 text-xs font-semibold">
                     <span className="text-gold">
                       {promoType === "PERCENTAGE_DISCOUNT" && `${promoDiscountValue}% de Desconto`}
-                      {promoType === "FIXED_DISCOUNT" && `R$ ${promoDiscountValue},00 OFF`}
+                      {promoType === "FIXED_DISCOUNT" && `${formatBRL(promoDiscountValue)} OFF`}
                       {promoType === "BUY_X_GET_Y" &&
                         `Ganhe ${promoRewardDiscountPercent === 100 ? "Grátis" : `${promoRewardDiscountPercent}% OFF`} em 1x ${menuItems.find((i) => i.id === promoRewardItemId)?.name || "Brinde"}`}
                     </span>

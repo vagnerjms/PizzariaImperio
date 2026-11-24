@@ -12,39 +12,30 @@ import {
   Phone,
   Power,
 } from "lucide-react";
-import { formatBRL } from "@/data/catalog";
+import { formatBRL } from "@/lib/formatters";
 import { OrderRow } from "@/types/orders";
 import {
   listCouriers,
   saveCourier,
   toggleCourierActive,
   deleteCourier,
+  getCourierSettlementReport,
 } from "@/lib/couriers.functions";
 import {
-  calculateCourierSettlements,
   CourierPayoutMode,
   CourierRow,
   UNASSIGNED_COURIER_ID,
 } from "@/lib/couriers-domain";
 import { getCashDashboard } from "@/lib/cash.functions";
 
-function getTodayStartSaoPauloMs(): number {
-  const spDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  return new Date(`${spDate}T00:00:00-03:00`).getTime();
-}
-
-export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: boolean }) {
+export function CouriersTab({ isAdmin }: { orders?: OrderRow[]; isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const fetchCouriers = useServerFn(listCouriers);
   const saveCourierFn = useServerFn(saveCourier);
   const toggleCourierFn = useServerFn(toggleCourierActive);
   const deleteCourierFn = useServerFn(deleteCourier);
   const fetchCashDashboard = useServerFn(getCashDashboard);
+  const fetchSettlementReport = useServerFn(getCourierSettlementReport);
 
   const { data: couriers = [], isLoading } = useQuery<CourierRow[]>({
     queryKey: ["admin", "couriers"],
@@ -58,7 +49,25 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
 
   const activeShift = cashData?.activeShift ?? null;
 
-  const [period, setPeriod] = useState<"shift" | "today" | "7d">(activeShift ? "shift" : "today");
+  // Null means "auto" (follow active shift when open, otherwise today)
+  const [selectedPeriod, setSelectedPeriod] = useState<"shift" | "today" | "7d" | null>(null);
+  const period: "shift" | "today" | "7d" =
+    selectedPeriod !== null
+      ? !isAdmin && selectedPeriod === "7d"
+        ? "today"
+        : selectedPeriod === "shift" && !activeShift
+          ? "today"
+          : selectedPeriod
+      : activeShift
+        ? "shift"
+        : "today";
+
+  const { data: settlementReport } = useQuery({
+    queryKey: ["admin", "courier-settlements", period],
+    queryFn: async () => fetchSettlementReport({ data: { period } }),
+    refetchInterval: 20000,
+  });
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -114,7 +123,10 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
           fixed_fee: Math.max(0, Number(fixedFee.replace(",", ".")) || 0),
         },
       });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+      ]);
       showMsg(editingId ? "Entregador atualizado!" : "Entregador cadastrado!");
       resetForm();
     } catch (err) {
@@ -127,7 +139,10 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
   const handleToggleActive = async (c: CourierRow) => {
     try {
       await toggleCourierFn({ data: { id: c.id, active: !c.active } });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+      ]);
       showMsg(
         !c.active ? `${c.name} ativado para o turno.` : `${c.name} marcado como fora do turno.`,
       );
@@ -142,31 +157,17 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
     }
     try {
       await deleteCourierFn({ data: { id: c.id } });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "couriers"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
+      ]);
       showMsg(`Entregador "${c.name}" removido.`);
     } catch (err) {
       showMsg(err instanceof Error ? err.message : "Erro ao excluir entregador.", true);
     }
   };
 
-  const filteredOrders = useMemo(() => {
-    const effectivePeriod = !isAdmin && period === "7d" ? "today" : period;
-    const now = Date.now();
-    let startMs = getTodayStartSaoPauloMs();
-
-    if (effectivePeriod === "shift" && activeShift) {
-      startMs = new Date(activeShift.opened_at).getTime();
-    } else if (effectivePeriod === "7d") {
-      startMs = now - 7 * 24 * 60 * 60 * 1000;
-    }
-
-    return orders.filter((o) => new Date(o.created_at).getTime() >= startMs);
-  }, [orders, period, activeShift, isAdmin]);
-
-  const settlements = useMemo(
-    () => calculateCourierSettlements(filteredOrders, couriers),
-    [filteredOrders, couriers],
-  );
+  const settlements = settlementReport?.settlements ?? [];
 
   const totals = useMemo(() => {
     return settlements.reduce(
@@ -196,7 +197,7 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
           {activeShift && (
             <button
               type="button"
-              onClick={() => setPeriod("shift")}
+              onClick={() => setSelectedPeriod("shift")}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 period === "shift"
                   ? "border-gold bg-gold/15 text-gold font-bold"
@@ -208,7 +209,7 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
           )}
           <button
             type="button"
-            onClick={() => setPeriod("today")}
+            onClick={() => setSelectedPeriod("today")}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
               period === "today"
                 ? "border-gold bg-gold/15 text-gold font-bold"
@@ -220,7 +221,7 @@ export function CouriersTab({ orders, isAdmin }: { orders: OrderRow[]; isAdmin: 
           {isAdmin && (
             <button
               type="button"
-              onClick={() => setPeriod("7d")}
+              onClick={() => setSelectedPeriod("7d")}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 period === "7d"
                   ? "border-gold bg-gold/15 text-gold font-bold"

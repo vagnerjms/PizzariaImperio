@@ -45,7 +45,7 @@ export const createUser = createServerFn({ method: "POST" })
       throw new Error("Já existe um usuário cadastrado com este e-mail.");
     }
 
-    const hashedPassword = hashPassword(data.password);
+    const hashedPassword = await hashPassword(data.password);
     await usersCol.insertOne({
       email: data.email,
       password_hash: hashedPassword,
@@ -134,7 +134,7 @@ export const updateUserPassword = createServerFn({ method: "POST" })
       query = { _id: data.userId };
     }
 
-    const hashedPassword = hashPassword(data.newPassword);
+    const hashedPassword = await hashPassword(data.newPassword);
     const result = await usersCol.updateOne(query, {
       $set: {
         password_hash: hashedPassword,

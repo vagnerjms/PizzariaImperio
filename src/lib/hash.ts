@@ -1,19 +1,23 @@
 import crypto from "node:crypto";
+import { promisify } from "node:util";
+
+const scryptAsync = promisify(crypto.scrypt);
+const pbkdf2Async = promisify(crypto.pbkdf2);
 
 /**
- * Modern Cryptographic Password Hashing using scrypt + 16-byte Random Salt.
+ * Modern Cryptographic Password Hashing using non-blocking async scrypt + 16-byte Random Salt.
  * Format stored: `${salt}:${derivedKey}`
  */
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString("hex");
-  const derivedKey = crypto.scryptSync(password, salt, 64);
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${salt}:${derivedKey.toString("hex")}`;
 }
 
 /**
- * Constant-time password verification with backward compatibility for legacy PBKDF2 hashes.
+ * Constant-time async password verification with backward compatibility for legacy PBKDF2 hashes.
  */
-export function verifyPassword(password: string, storedHash: string): boolean {
+export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   if (!storedHash) return false;
 
   // New scrypt format with random salt
@@ -22,8 +26,8 @@ export function verifyPassword(password: string, storedHash: string): boolean {
     if (!salt || !key) return false;
 
     const keyBuffer = Buffer.from(key, "hex");
-    const derivedKey = crypto.scryptSync(password, salt, 64);
-    
+    const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+
     if (keyBuffer.length !== derivedKey.length) {
       return false;
     }
@@ -32,13 +36,11 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 
   // Legacy PBKDF2 verification with constant-time comparison
   const legacySalt = process.env.JWT_SECRET || "pizzaria_salt_123";
-  const legacyHash = crypto.pbkdf2Sync(password, legacySalt, 1000, 64, "sha512").toString("hex");
-  
-  const legacyBuffer = Buffer.from(legacyHash, "hex");
+  const legacyDerived = (await pbkdf2Async(password, legacySalt, 1000, 64, "sha512")) as Buffer;
   const storedBuffer = Buffer.from(storedHash, "hex");
 
-  if (legacyBuffer.length !== storedBuffer.length) {
+  if (legacyDerived.length !== storedBuffer.length) {
     return false;
   }
-  return crypto.timingSafeEqual(legacyBuffer, storedBuffer);
+  return crypto.timingSafeEqual(legacyDerived, storedBuffer);
 }

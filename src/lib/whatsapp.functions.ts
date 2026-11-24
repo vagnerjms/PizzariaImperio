@@ -1,11 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireAuth } from "./auth-middleware";
 
+const EVOLUTION_TIMEOUT_MS = 10000;
+
 // 1. Obter Status da Conexão do WhatsApp
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
+    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 
@@ -15,12 +17,21 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
     const apiKey = settings.evolution_api_key;
     const instanceName = settings.whatsapp_instance_name;
 
+    if (!url) {
+      return {
+        status: "error" as const,
+        instanceName,
+        error: "Evolution API URL não configurada.",
+      };
+    }
+
     try {
       const response = await fetch(`${url}/instance/connectionState/${instanceName}`, {
         method: "GET",
         headers: {
-          "apikey": apiKey,
+          apikey: apiKey,
         },
+        signal: AbortSignal.timeout(EVOLUTION_TIMEOUT_MS),
       });
 
       if (response.status === 404) {
@@ -28,9 +39,10 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
         const createRes = await fetch(`${url}/instance/create`, {
           method: "POST",
           headers: {
-            "apikey": apiKey,
+            apikey: apiKey,
             "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(EVOLUTION_TIMEOUT_MS),
           body: JSON.stringify({
             instanceName: instanceName,
             token: apiKey,
@@ -39,12 +51,19 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
         });
 
         if (!createRes.ok) {
-          console.error(`Falha ao criar instância '${instanceName}' na Evolution API:`, await createRes.text());
-          return { status: "close", instanceName, message: "Instância não criada" };
+          console.error(
+            `Falha ao criar instância '${instanceName}' na Evolution API:`,
+            await createRes.text()
+          );
+          return { status: "close" as const, instanceName, message: "Instância não criada" };
         }
 
         console.log(`Instância '${instanceName}' criada com sucesso!`);
-        return { status: "close", instanceName, message: "Instância criada. Aguardando conexão." };
+        return {
+          status: "close" as const,
+          instanceName,
+          message: "Instância criada. Aguardando conexão.",
+        };
       }
 
       if (!response.ok) {
@@ -55,14 +74,14 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
       const state = data.instance?.state || "close";
 
       return {
-        status: state === "open" ? "open" : "close",
+        status: state === "open" ? ("open" as const) : ("close" as const),
         instanceName,
         details: data.instance,
       };
     } catch (error) {
       console.error("Erro em getWhatsAppStatus:", error);
       return {
-        status: "error",
+        status: "error" as const,
         instanceName,
         error: error instanceof Error ? error.message : "Erro desconhecido",
       };
@@ -73,7 +92,7 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 export const getWhatsAppQRCode = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
+    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
       throw new Error("Acesso restrito.");
     }
 
@@ -83,12 +102,17 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
     const apiKey = settings.evolution_api_key;
     const instanceName = settings.whatsapp_instance_name;
 
+    if (!url) {
+      throw new Error("Evolution API URL não configurada nas Configurações.");
+    }
+
     try {
       const response = await fetch(`${url}/instance/connect/${instanceName}`, {
         method: "GET",
         headers: {
-          "apikey": apiKey,
+          apikey: apiKey,
         },
+        signal: AbortSignal.timeout(EVOLUTION_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -98,9 +122,9 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
       }
 
       const data = await response.json();
-      return { 
-        base64: data.base64 || null, 
-        code: data.code || null 
+      return {
+        base64: data.base64 || null,
+        code: data.code || null,
       };
     } catch (error) {
       console.error("Erro em getWhatsAppQRCode:", error);
@@ -122,12 +146,17 @@ export const disconnectWhatsApp = createServerFn({ method: "POST" })
     const apiKey = settings.evolution_api_key;
     const instanceName = settings.whatsapp_instance_name;
 
+    if (!url) {
+      throw new Error("Evolution API URL não configurada.");
+    }
+
     try {
       const response = await fetch(`${url}/instance/logout/${instanceName}`, {
         method: "DELETE",
         headers: {
-          "apikey": apiKey,
+          apikey: apiKey,
         },
+        signal: AbortSignal.timeout(EVOLUTION_TIMEOUT_MS),
       });
 
       if (!response.ok) {

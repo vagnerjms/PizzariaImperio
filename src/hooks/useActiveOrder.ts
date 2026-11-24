@@ -14,13 +14,7 @@ function sanitize(str: string, max: number): string {
 
 export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } = {}) {
   const [activeOrder, setActiveOrder] = useState<any>(null);
-  const [loadingOrder, setLoadingOrder] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return !!(params.get("order_id") || params.get("order"));
-    }
-    return false;
-  });
+  const [loadingOrder, setLoadingOrder] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 

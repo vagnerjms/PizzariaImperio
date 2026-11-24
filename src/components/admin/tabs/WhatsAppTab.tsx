@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare,
   Loader2,
@@ -13,16 +13,21 @@ import {
 import { getWhatsAppStatus, getWhatsAppQRCode, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 
 export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
-  const [whatsappStatus, setWhatsappStatus] = useState<"open" | "close" | "checking" | "error">("checking");
+  const queryClient = useQueryClient();
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
+  const [manualRechecking, setManualRechecking] = useState(false);
 
   const fetchWhatsappStatus = useServerFn(getWhatsAppStatus);
   const fetchWhatsappQRCode = useServerFn(getWhatsAppQRCode);
   const logoutWhatsapp = useServerFn(disconnectWhatsApp);
 
-  const { data: statusRes, refetch: recheckStatus } = useQuery({
+  const {
+    data: statusRes,
+    isLoading,
+    refetch: recheckStatus,
+  } = useQuery({
     queryKey: ["admin", "whatsapp-status"],
     queryFn: async () => {
       try {
@@ -36,18 +41,26 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     if (statusRes?.status === "open") {
-      setWhatsappStatus("open");
       setQrCode(null);
-    } else if (statusRes?.status === "close") {
-      setWhatsappStatus("close");
-    } else if (statusRes?.status === "error") {
-      setWhatsappStatus("error");
     }
-  }, [statusRes]);
+  }, [statusRes?.status]);
+
+  const whatsappStatus: "open" | "close" | "checking" | "error" =
+    isLoading || manualRechecking
+      ? "checking"
+      : statusRes?.status === "open"
+        ? "open"
+        : statusRes?.status === "close"
+          ? "close"
+          : "error";
 
   const checkWhatsApp = async () => {
-    setWhatsappStatus("checking");
-    await recheckStatus();
+    setManualRechecking(true);
+    try {
+      await recheckStatus();
+    } finally {
+      setManualRechecking(false);
+    }
   };
 
   const handleGenerateQR = async () => {
@@ -58,7 +71,6 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
       const qr = res.base64 || (res as any).qrcode;
       if (qr) {
         setQrCode(qr);
-        setWhatsappStatus("close");
       } else {
         setWhatsappError("Não foi possível obter o QR Code. Tente novamente.");
       }
@@ -75,8 +87,8 @@ export function WhatsAppTab({ isAdmin = true }: { isAdmin?: boolean }) {
     setWhatsappError(null);
     try {
       await logoutWhatsapp();
-      setWhatsappStatus("close");
       setQrCode(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin", "whatsapp-status"] });
     } catch (e) {
       setWhatsappError(e instanceof Error ? e.message : "Erro ao desconectar");
     } finally {

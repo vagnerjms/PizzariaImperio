@@ -64,17 +64,6 @@ export function useDeliveryAddress() {
       .then((cfg) => {
         if (cfg) {
           setDeliveryConfig(cfg);
-          // Recalcula taxa caso já tenha bairro salvo carregado do localStorage
-          setForm((prev) => {
-            if (prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in") {
-              return { ...prev, deliveryFee: 0 };
-            }
-            if (prev.bairro) {
-              const fee = getDeliveryFeeForNeighborhood(prev.bairro, cfg.neighborhoods, cfg.default_fee);
-              return { ...prev, deliveryFee: fee };
-            }
-            return prev;
-          });
         }
       })
       .catch((err) => console.error("Erro ao carregar taxas de entrega:", err));
@@ -97,6 +86,25 @@ export function useDeliveryAddress() {
       }));
     }
   }, [profile]);
+
+  // Recalcula taxa sempre que a tabela de bairros, o bairro ou a modalidade mudar (elimina race condition de hidratação)
+  useEffect(() => {
+    if (!deliveryConfig) return;
+    setForm((prev) => {
+      if (prev.deliveryMode === "pickup" || prev.deliveryMode === "dine_in") {
+        return prev.deliveryFee === 0 ? prev : { ...prev, deliveryFee: 0 };
+      }
+      if (prev.bairro) {
+        const fee = getDeliveryFeeForNeighborhood(
+          prev.bairro,
+          deliveryConfig.neighborhoods,
+          deliveryConfig.default_fee
+        );
+        return prev.deliveryFee === fee ? prev : { ...prev, deliveryFee: fee };
+      }
+      return prev;
+    });
+  }, [deliveryConfig, form.bairro, form.deliveryMode]);
 
   const persistCustomerProfile = useCallback((nextForm: DeliveryAddressForm) => {
     saveProfile(nextForm);

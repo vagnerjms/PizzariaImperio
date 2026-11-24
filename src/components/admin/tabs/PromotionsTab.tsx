@@ -8,7 +8,6 @@ import {
   Calendar,
   Edit3,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import {
   getAdminPromotions,
@@ -18,7 +17,7 @@ import {
   deletePromotionFn,
 } from "@/lib/promotions.functions";
 import { Promotion } from "@/lib/promotions.types";
-import { formatDateBR as formatPromoDate } from "@/lib/formatters";
+import { formatBRL, formatDateBR as formatPromoDate } from "@/lib/formatters";
 import { PromotionModal, PromotionFormData } from "../promotions/PromotionModal";
 
 export function PromotionsTab() {
@@ -213,7 +212,7 @@ export function PromotionsTab() {
                       <span className="text-muted-foreground">Mecânica:</span>
                       <span className="font-semibold text-foreground">
                         {promo.type === "PERCENTAGE_DISCOUNT" && `${promo.discount_value}% de Desconto`}
-                        {promo.type === "FIXED_DISCOUNT" && `R$ ${promo.discount_value?.toFixed(2).replace(".", ",")} OFF`}
+                        {promo.type === "FIXED_DISCOUNT" && `${formatBRL(promo.discount_value || 0)} OFF`}
                         {promo.type === "BUY_X_GET_Y" && "Compre e Ganhe Brinde"}
                       </span>
                     </div>
@@ -234,7 +233,7 @@ export function PromotionsTab() {
                         {promo.trigger_type === "all" && "Qualquer produto"}
                         {promo.trigger_type === "category" && `Categoria: ${promo.trigger_category}`}
                         {promo.trigger_type === "specific_items" && `${promo.trigger_item_ids?.length || 0} produto(s) específico(s)`}
-                        {promo.trigger_type === "min_total" && `Pedido acima de R$ ${promo.trigger_min_total?.toFixed(2)}`}
+                        {promo.trigger_type === "min_total" && `Pedido acima de ${formatBRL(promo.trigger_min_total || 0)}`}
                         {promo.trigger_min_qty && promo.trigger_min_qty > 1 ? ` (Mín: ${promo.trigger_min_qty}x)` : ""}
                       </span>
                     </div>

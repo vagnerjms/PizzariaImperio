@@ -80,8 +80,9 @@ export const getAdminSettings = createServerFn({ method: "GET" })
     if (!context.roles?.includes("admin")) {
       throw new Error("Acesso restrito a Administradores.");
     }
-    const { getSystemSettings } = await import("./settings.server");
-    return getSystemSettings();
+    const { getSystemSettings, maskSettingsForAdminClient } = await import("./settings.server");
+    const settings = await getSystemSettings();
+    return maskSettingsForAdminClient(settings);
   });
 
 export const updateAdminSettings = createServerFn({ method: "POST" })
