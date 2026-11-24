@@ -10,10 +10,15 @@ export type DeliveryMode = "delivery" | "pickup" | "dine_in";
 
 export interface OrderItemRow {
   id: string;
+  pizza_id?: string;
+  flavor2_id?: string | null;
+  crust_id?: string | null;
+  base_pizza_name?: string;
   pizza_name: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
+  is_reward?: boolean;
 }
 
 export interface OrderRow {

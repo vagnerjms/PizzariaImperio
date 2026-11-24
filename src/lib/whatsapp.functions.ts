@@ -40,11 +40,11 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 
         if (!createRes.ok) {
           console.error(`Falha ao criar instância '${instanceName}' na Evolution API:`, await createRes.text());
-          return { status: "close", message: "Instância não criada" };
+          return { status: "close", instanceName, message: "Instância não criada" };
         }
 
         console.log(`Instância '${instanceName}' criada com sucesso!`);
-        return { status: "close", message: "Instância criada. Aguardando conexão." };
+        return { status: "close", instanceName, message: "Instância criada. Aguardando conexão." };
       }
 
       if (!response.ok) {
@@ -53,14 +53,19 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 
       const data = await response.json();
       const state = data.instance?.state || "close";
-      
-      return { 
-        status: state === "open" ? "open" : "close", 
-        details: data.instance 
+
+      return {
+        status: state === "open" ? "open" : "close",
+        instanceName,
+        details: data.instance,
       };
     } catch (error) {
       console.error("Erro em getWhatsAppStatus:", error);
-      return { status: "error", error: error instanceof Error ? error.message : "Erro desconhecido" };
+      return {
+        status: "error",
+        instanceName,
+        error: error instanceof Error ? error.message : "Erro desconhecido",
+      };
     }
   });
 

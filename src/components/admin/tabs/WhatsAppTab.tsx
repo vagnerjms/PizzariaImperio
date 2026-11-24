@@ -84,6 +84,8 @@ export function WhatsAppTab() {
     }
   };
 
+  const instanceName = (statusRes as { instanceName?: string } | undefined)?.instanceName || "Disparo";
+
   return (
     <div className="mx-auto max-w-lg">
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -94,7 +96,7 @@ export function WhatsAppTab() {
           <div>
             <h2 className="font-serif text-lg leading-tight">Configurações do WhatsApp</h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-              Instância: <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground font-semibold">Disparo</span>
+              Instância: <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground font-semibold">{instanceName}</span>
             </p>
           </div>
         </header>
@@ -127,7 +129,7 @@ export function WhatsAppTab() {
             <div className="space-y-2 rounded-xl bg-secondary/30 p-4 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Nome da Instância</span>
-                <span className="font-semibold text-foreground">Disparo</span>
+                <span className="font-semibold text-foreground">{instanceName}</span>
               </div>
               <div className="flex justify-between">
                 <span>Status do Servidor</span>
@@ -239,7 +241,7 @@ export function WhatsAppTab() {
 
             <button
               type="button"
-              onClick={() => checkWhatsApp(true)}
+              onClick={() => checkWhatsApp()}
               className="flex w-full items-center justify-center gap-2 rounded-full border border-border px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground transition hover:text-foreground"
             >
               Tentar Novamente

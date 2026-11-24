@@ -24,6 +24,41 @@ export const Route = createFileRoute("/api/webhook")({
 
           // If the topic is 'payment' or not specified but we have a paymentId
           if (paymentId && (!topic || topic === "payment")) {
+            if (!/^\d+$/.test(paymentId)) {
+              console.warn(`Rejected invalid paymentId in webhook: "${paymentId}"`);
+              return new Response("Invalid payment id", { status: 400 });
+            }
+
+            // Optional Mercado Pago x-signature HMAC-SHA256 verification when secret is configured
+            const webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+            if (webhookSecret) {
+              const xSignature = request.headers.get("x-signature") || "";
+              const xRequestId = request.headers.get("x-request-id") || "";
+              const parts = Object.fromEntries(
+                xSignature.split(",").map((kv) => {
+                  const [k, v] = kv.trim().split("=");
+                  return [k, v];
+                })
+              );
+              const ts = parts.ts;
+              const v1 = parts.v1;
+              if (!ts || !v1) {
+                return new Response("Missing webhook signature", { status: 401 });
+              }
+              const { createHmac, timingSafeEqual } = await import("node:crypto");
+              const manifest = `id:${paymentId};request-id:${xRequestId};ts:${ts};`;
+              const expected = createHmac("sha256", webhookSecret).update(manifest).digest("hex");
+              const expectedBuf = Buffer.from(expected, "utf8");
+              const receivedBuf = Buffer.from(v1, "utf8");
+              if (
+                expectedBuf.length !== receivedBuf.length ||
+                !timingSafeEqual(expectedBuf, receivedBuf)
+              ) {
+                console.warn(`Invalid webhook signature for payment ${paymentId}`);
+                return new Response("Invalid webhook signature", { status: 401 });
+              }
+            }
+
             const { getSystemSettings } = await import("@/lib/settings.server");
             const settings = await getSystemSettings();
             const accessToken = settings.mercado_pago_access_token;
@@ -34,10 +69,10 @@ export const Route = createFileRoute("/api/webhook")({
             }
 
             console.log(`Verifying payment ${paymentId} with Mercado Pago API...`);
-            
-            const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+
+            const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
               headers: {
-                "Authorization": `Bearer ${accessToken}`,
+                Authorization: `Bearer ${accessToken}`,
               },
               signal: AbortSignal.timeout(5000),
             });
@@ -123,9 +158,10 @@ export const Route = createFileRoute("/api/webhook")({
                         customer_name: orderDoc.customer_name,
                         customer_phone: orderDoc.customer_phone,
                         customer_address: orderDoc.customer_address,
+                        delivery_mode: orderDoc.delivery_mode || "delivery",
                         total: orderDoc.total,
                         payment_method: orderDoc.payment_method,
-                      }
+                      },
                     }),
                   }).catch((err) => console.error("Failed to notify n8n webhook on payment approved:", err));
                 }

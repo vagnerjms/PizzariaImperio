@@ -21,24 +21,14 @@ import { ShoppingBag } from "lucide-react";
 export const Route = createFileRoute("/")({
   loader: async () => {
     try {
-      const [{ listPublicPromotionsFromDb }, { getMenuOverridesFromDb }] = await Promise.all([
-        import("@/lib/promotions.server"),
-        import("@/lib/menu.server"),
+      const [promos, overrides] = await Promise.all([
+        getPublicPromotions(),
+        getPublicMenuOverrides(),
       ]);
-      const [promos, overridesMap] = await Promise.all([
-        listPublicPromotionsFromDb(),
-        getMenuOverridesFromDb(),
-      ]);
-      const overrides: Record<string, PublicMenuOverride> = {};
-      for (const [id, doc] of Object.entries(overridesMap)) {
-        overrides[id] = {
-          id,
-          price: doc.price,
-          available: doc.available !== undefined ? doc.available : true,
-          badge: doc.badge,
-        };
-      }
-      return { promotions: promos || [], menuOverrides: overrides };
+      return {
+        promotions: promos || [],
+        menuOverrides: (overrides || {}) as Record<string, PublicMenuOverride>,
+      };
     } catch {
       return { promotions: [], menuOverrides: {} as Record<string, PublicMenuOverride> };
     }
@@ -126,7 +116,7 @@ function Home() {
     handleClearCart,
     handleOpenCart,
     handleCloseCart,
-  } = useCart(promotions);
+  } = useCart(promotions, effectiveMenuById);
 
   const filtered = useMemo(
     () => (cat === "todas" ? effectiveMenu : effectiveMenu.filter((p) => p.category === cat)),

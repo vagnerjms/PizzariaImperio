@@ -23,6 +23,15 @@ export async function initializeDatabase() {
     const settingsCol = db.collection("settings");
     await settingsCol.createIndex({ _id: 1 });
 
+    const promotionsCol = db.collection("promotions");
+    await promotionsCol.createIndex({ active: 1, created_at: -1 });
+
+    const addressCacheCol = db.collection("address_cache");
+    await addressCacheCol.createIndex(
+      { updated_at: 1 },
+      { expireAfterSeconds: 30 * 24 * 60 * 60 }
+    );
+
     // 2. Ensure initial admin user exists
     const adminEmail = process.env.ADMIN_EMAIL || "admin@pizzaria.com";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -43,8 +52,8 @@ export async function initializeDatabase() {
       console.log("[DB Init] Admin user already exists.");
     }
 
-    const supervisorEmail = "supervisor@pizzaria.com";
-    const supervisorPassword = "supervisor123";
+    const supervisorEmail = process.env.SUPERVISOR_EMAIL || "supervisor@pizzaria.com";
+    const supervisorPassword = process.env.SUPERVISOR_PASSWORD || "supervisor123";
     const supervisorExists = await usersCol.findOne({ email: supervisorEmail });
     if (!supervisorExists) {
       console.log(`[DB Init] Supervisor user not found. Creating default supervisor: ${supervisorEmail}`);
@@ -59,8 +68,8 @@ export async function initializeDatabase() {
       console.log("[DB Init] Default supervisor user created successfully.");
     }
 
-    const atendenteEmail = "atendente@pizzaria.com";
-    const atendentePassword = "atendente123";
+    const atendenteEmail = process.env.ATENDENTE_EMAIL || "atendente@pizzaria.com";
+    const atendentePassword = process.env.ATENDENTE_PASSWORD || "atendente123";
     const atendenteExists = await usersCol.findOne({ email: atendenteEmail });
     if (!atendenteExists) {
       console.log(`[DB Init] Atendente user not found. Creating default atendente: ${atendenteEmail}`);

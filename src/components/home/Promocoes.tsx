@@ -36,9 +36,14 @@ export function Promocoes({
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="rounded-full bg-gold/15 border border-gold/30 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gold">
-                    {promo.trigger_type === "all" && "Todos os Pedidos"}
-                    {promo.trigger_type === "min_total" && `Acima de ${formatBRL(promo.trigger_min_total || 0)}`}
-                    {promo.trigger_type === "category" && `Categoria: ${promo.trigger_category}`}
+                    {promo.badge_text ||
+                      (promo.trigger_type === "all"
+                        ? "Todos os Pedidos"
+                        : promo.trigger_type === "min_total"
+                        ? `Acima de ${formatBRL(promo.trigger_min_total || 0)}`
+                        : promo.trigger_type === "category"
+                        ? `Categoria: ${promo.trigger_category}`
+                        : "Itens Selecionados")}
                   </span>
                   <Sparkles className="h-4 w-4 text-gold" />
                 </div>

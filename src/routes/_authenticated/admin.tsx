@@ -62,6 +62,7 @@ function AdminPage() {
     data: orders = [],
     isLoading: loading,
     error: queryError,
+    refetch: refetchOrders,
   } = useQuery<OrderRow[]>({
     queryKey: ["admin", "orders"],
     queryFn: async () => {
@@ -264,7 +265,9 @@ function AdminPage() {
         onToggleSound={handleToggleSound}
         onConnectPrinter={handleConnectPrinter}
         onDisconnectPrinter={handleDisconnectPrinter}
-        onRefreshOrders={load}
+        onRefreshOrders={() => {
+          void refetchOrders();
+        }}
         onLogout={onLogout}
       />
 

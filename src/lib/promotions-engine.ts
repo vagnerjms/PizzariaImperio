@@ -5,6 +5,9 @@ export interface MenuItemRef {
   name: string;
   price: number;
   category: string;
+  available?: boolean;
+  categories?: string[];
+  flavorIds?: string[];
 }
 
 export interface GenericCartLine {
@@ -13,25 +16,29 @@ export interface GenericCartLine {
   subtotal: number;
 }
 
+export function getSaoPauloYMD(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 export function evaluateCartPromotions(
   cartOrLines: Record<string, number> | GenericCartLine[],
   menuById: Record<string, MenuItemRef>,
-  promotions: Promotion[]
+  promotions: Promotion[],
+  now: Date = new Date()
 ): AppliedPromotionResult | null {
   if (!promotions || promotions.length === 0) return null;
 
-  const now = new Date();
-  // Active promotions within optional date range
+  const todayYMD = getSaoPauloYMD(now);
+  // Active promotions within optional date range (America/Sao_Paulo YYYY-MM-DD)
   const activePromos = promotions.filter((p) => {
     if (!p.active) return false;
-    if (p.start_date) {
-      const start = new Date(`${p.start_date}T00:00:00`);
-      if (!isNaN(start.getTime()) && now < start) return false;
-    }
-    if (p.end_date) {
-      const end = new Date(`${p.end_date}T23:59:59`);
-      if (!isNaN(end.getTime()) && now > end) return false;
-    }
+    if (p.start_date && p.start_date > todayYMD) return false;
+    if (p.end_date && p.end_date < todayYMD) return false;
     return true;
   });
   if (activePromos.length === 0) return null;
@@ -70,13 +77,18 @@ export function evaluateCartPromotions(
       }
     } else if (promo.trigger_type === "category" && promo.trigger_category) {
       const cat = promo.trigger_category;
-      const matchingLines = cartLines.filter(
-        (l) =>
-          cat === "todas" ||
-          l.item.category === cat ||
-          (cat === "salgadas" &&
-            (l.item.category === "tradicionais" || l.item.category === "especiais"))
-      );
+      const matchingLines = cartLines.filter((l) => {
+        if (cat === "todas") return true;
+        const itemCats =
+          l.item.categories && l.item.categories.length > 0
+            ? l.item.categories
+            : [l.item.category];
+        return itemCats.some(
+          (c) =>
+            c === cat ||
+            (cat === "salgadas" && (c === "tradicionais" || c === "especiais"))
+        );
+      });
       const catQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
       const catSubtotal = matchingLines.reduce((sum, l) => sum + l.subtotal, 0);
       const requiredQty = promo.trigger_min_qty || 1;
@@ -88,7 +100,13 @@ export function evaluateCartPromotions(
       }
     } else if (promo.trigger_type === "specific_items" && Array.isArray(promo.trigger_item_ids)) {
       const allowedIds = new Set(promo.trigger_item_ids);
-      const matchingLines = cartLines.filter((l) => allowedIds.has(l.item.id));
+      const matchingLines = cartLines.filter((l) => {
+        const ids =
+          l.item.flavorIds && l.item.flavorIds.length > 0
+            ? l.item.flavorIds
+            : [l.item.id];
+        return ids.some((id) => allowedIds.has(id));
+      });
       const specQty = matchingLines.reduce((sum, l) => sum + l.qty, 0);
       const specSubtotal = matchingLines.reduce((sum, l) => sum + l.subtotal, 0);
       const requiredQty = promo.trigger_min_qty || 1;
@@ -107,17 +125,22 @@ export function evaluateCartPromotions(
     let reason = "";
 
     if (promo.type === "PERCENTAGE_DISCOUNT") {
-      const pct = (promo.discount_value || 0) / 100;
+      const pct = Math.min(100, Math.max(0, promo.discount_value || 0)) / 100;
       discountAmount = triggerSubtotal * pct;
       reason = `${promo.discount_value}% de desconto aplicado!`;
     } else if (promo.type === "FIXED_DISCOUNT") {
-      discountAmount = Math.min(cartSubtotal, promo.discount_value || 0);
+      discountAmount = Math.min(cartSubtotal, Math.max(0, promo.discount_value || 0));
       reason = `Desconto de R$ ${(promo.discount_value || 0).toFixed(2).replace(".", ",")} aplicado!`;
     } else if (promo.type === "BUY_X_GET_Y") {
       const rewardPizza = menuById[promo.reward_item_id || ""];
-      if (rewardPizza) {
-        const rewardDiscPct =
-          promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100;
+      if (rewardPizza && rewardPizza.available !== false) {
+        const rewardDiscPct = Math.min(
+          100,
+          Math.max(
+            0,
+            promo.reward_discount_percent !== undefined ? promo.reward_discount_percent : 100
+          )
+        );
         const unitPrice = Number(
           Math.max(0, rewardPizza.price * (1 - rewardDiscPct / 100)).toFixed(2)
         );

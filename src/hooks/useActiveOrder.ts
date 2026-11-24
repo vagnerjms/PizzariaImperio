@@ -166,6 +166,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
             pizza_name: fullName,
             quantity: i.quantity,
             unit_price: i.unitPrice,
+            is_reward_item: false,
           };
         });
 
@@ -179,6 +180,7 @@ export function useActiveOrder({ onOpenDrawer }: { onOpenDrawer?: () => void } =
             })`,
             quantity: 1,
             unit_price: appliedPromotion.rewardItem.unit_price,
+            is_reward_item: true,
           });
         }
 

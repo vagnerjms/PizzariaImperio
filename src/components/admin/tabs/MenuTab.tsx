@@ -20,6 +20,7 @@ export function MenuTab() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("todas");
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [badgeDrafts, setBadgeDrafts] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const load = async () => {
@@ -49,12 +50,18 @@ export function MenuTab() {
       const effectivePrice =
         typeof ov?.price === "number" && ov.price >= 0 ? ov.price : item.price;
       const available = ov?.available !== undefined ? ov.available : true;
+      const effectiveBadge = ov?.badge !== undefined ? ov.badge || "" : item.badge || "";
+      const hasPriceOverride =
+        typeof ov?.price === "number" && ov.price !== item.price;
       return {
         ...item,
         defaultPrice: item.price,
+        defaultBadge: item.badge || "",
         price: effectivePrice,
+        badge: effectiveBadge || undefined,
         available,
         hasOverride: Boolean(ov),
+        hasPriceOverride,
       };
     });
   }, [overrides]);
@@ -76,11 +83,13 @@ export function MenuTab() {
   const stats = useMemo(() => {
     const total = mergedItems.length;
     const paused = mergedItems.filter((i) => !i.available).length;
-    const customized = mergedItems.filter((i) => i.hasOverride).length;
+    const customized = mergedItems.filter((i) => i.hasPriceOverride).length;
     return { total, active: total - paused, paused, customized };
   }, [mergedItems]);
 
-  const handleToggleAvailable = async (item: Pizza & { available: boolean; price: number }) => {
+  const handleToggleAvailable = async (
+    item: Pizza & { available: boolean; price: number }
+  ) => {
     setSavingId(item.id);
     const nextAvailable = !item.available;
     try {
@@ -89,6 +98,7 @@ export function MenuTab() {
           id: item.id,
           available: nextAvailable,
           price: item.price,
+          badge: item.badge ?? null,
         },
       });
       setOverrides((prev) => ({
@@ -97,6 +107,7 @@ export function MenuTab() {
           id: item.id,
           price: item.price,
           available: nextAvailable,
+          badge: item.badge ?? null,
         },
       }));
       showToast(
@@ -111,30 +122,38 @@ export function MenuTab() {
     }
   };
 
-  const handleSavePrice = async (item: Pizza & { available: boolean; price: number }) => {
-    const rawDraft = priceDrafts[item.id];
-    if (rawDraft === undefined) return;
-    const parsed = Number(rawDraft.replace(",", "."));
-    if (isNaN(parsed) || parsed < 0) {
+  const handleSaveItem = async (
+    item: Pizza & { available: boolean; price: number }
+  ) => {
+    const rawPriceDraft = priceDrafts[item.id];
+    const parsedPrice =
+      rawPriceDraft !== undefined ? Number(rawPriceDraft.replace(",", ".")) : item.price;
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
       showToast("Informe um preço válido.", true);
       return;
     }
+
+    const rawBadge =
+      badgeDrafts[item.id] !== undefined ? badgeDrafts[item.id].trim() : item.badge || "";
+    const nextBadge = rawBadge.length > 0 ? rawBadge.slice(0, 40) : null;
 
     setSavingId(item.id);
     try {
       await saveOverride({
         data: {
           id: item.id,
-          price: parsed,
+          price: parsedPrice,
           available: item.available,
+          badge: nextBadge,
         },
       });
       setOverrides((prev) => ({
         ...prev,
         [item.id]: {
           id: item.id,
-          price: parsed,
+          price: parsedPrice,
           available: item.available,
+          badge: nextBadge,
         },
       }));
       setPriceDrafts((prev) => {
@@ -142,9 +161,14 @@ export function MenuTab() {
         delete copy[item.id];
         return copy;
       });
-      showToast(`Preço de "${item.name}" atualizado para ${formatBRL(parsed)}!`);
+      setBadgeDrafts((prev) => {
+        const copy = { ...prev };
+        delete copy[item.id];
+        return copy;
+      });
+      showToast(`"${item.name}" atualizado (${formatBRL(parsedPrice)})!`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Erro ao salvar preço.", true);
+      showToast(e instanceof Error ? e.message : "Erro ao salvar item.", true);
     } finally {
       setSavingId(null);
     }
@@ -160,6 +184,11 @@ export function MenuTab() {
         return copy;
       });
       setPriceDrafts((prev) => {
+        const copy = { ...prev };
+        delete copy[item.id];
+        return copy;
+      });
+      setBadgeDrafts((prev) => {
         const copy = { ...prev };
         delete copy[item.id];
         return copy;
@@ -180,7 +209,7 @@ export function MenuTab() {
             Gerenciamento de Cardápio
           </h2>
           <p className="text-sm text-muted-foreground">
-            Altere preços em tempo real ou pause sabores e bebidas temporariamente esgotados.
+            Altere preços, selos de destaque ou pause sabores e bebidas temporariamente esgotados.
           </p>
         </div>
 
@@ -251,6 +280,12 @@ export function MenuTab() {
               priceDrafts[item.id] !== undefined
                 ? priceDrafts[item.id]
                 : item.price.toFixed(2).replace(".", ",");
+            const badgeDraftVal =
+              badgeDrafts[item.id] !== undefined
+                ? badgeDrafts[item.id]
+                : item.badge || "";
+            const hasPendingDraft =
+              priceDrafts[item.id] !== undefined || badgeDrafts[item.id] !== undefined;
             const isSaving = savingId === item.id;
 
             return (
@@ -264,13 +299,18 @@ export function MenuTab() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-serif text-base font-bold text-foreground">
                         {item.name}
                       </span>
                       <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                         {item.category}
                       </span>
+                      {item.badge && (
+                        <span className="rounded-full bg-gold/15 border border-gold/30 px-2 py-0.5 text-[10px] font-bold text-gold">
+                          {item.badge}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                       {item.ingredients}
@@ -299,44 +339,57 @@ export function MenuTab() {
                   </button>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-muted-foreground">R$</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={draftVal}
-                      onChange={(e) =>
-                        setPriceDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
-                      }
-                      className="w-24 rounded-lg border border-border bg-secondary/40 px-2.5 py-1.5 text-sm font-bold text-gold focus:outline-none focus:ring-2 focus:ring-gold/50"
-                    />
+                <div className="mt-4 space-y-2.5 border-t border-border/60 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={draftVal}
+                        onChange={(e) =>
+                          setPriceDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        }
+                        className="w-24 rounded-lg border border-border bg-secondary/40 px-2.5 py-1.5 text-sm font-bold text-gold focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {hasPendingDraft && (
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleSaveItem(item)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-gold px-3 py-1.5 text-xs font-bold text-gold-foreground transition hover:brightness-110"
+                        >
+                          <Save className="h-3.5 w-3.5" /> Salvar
+                        </button>
+                      )}
+
+                      {item.hasOverride && (
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleReset(item)}
+                          title={`Restaurar padrão (${formatBRL(item.defaultPrice)})`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-gold/40 hover:text-foreground"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {priceDrafts[item.id] !== undefined && (
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => handleSavePrice(item)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-gold px-3 py-1.5 text-xs font-bold text-gold-foreground transition hover:brightness-110"
-                      >
-                        <Save className="h-3.5 w-3.5" /> Salvar
-                      </button>
-                    )}
-
-                    {item.hasOverride && (
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => handleReset(item)}
-                        title={`Restaurar padrão (${formatBRL(item.defaultPrice)})`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-gold/40 hover:text-foreground"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  <input
+                    type="text"
+                    maxLength={40}
+                    value={badgeDraftVal}
+                    onChange={(e) =>
+                      setBadgeDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                    }
+                    placeholder="Selo opcional (ex: Mais pedida, Novidade)"
+                    className="w-full rounded-lg border border-border/70 bg-secondary/30 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-gold/40"
+                  />
                 </div>
               </div>
             );

@@ -4,8 +4,8 @@ services:
     container_name: pizzaria_db
     restart: always
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=adminpassword
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
     volumes:
       - mongo_data:/data/db
     mem_limit: 768m
@@ -28,6 +28,7 @@ services:
     environment:
       - PORT=8080
       - HOST=0.0.0.0
+      - NODE_ENV=production
       - DOCKER=true
     env_file:
       - .env
@@ -53,14 +54,14 @@ services:
       - "8085:8080"
     environment:
       - SERVER_PORT=8080
-      - SERVER_URL=http://179.197.231.106:8085
+      - SERVER_URL=${EVOLUTION_API_URL:-http://localhost:8085}
       - SERVER_TYPE=http
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-evolution}?schema=public
       - CACHE_REDIS_ENABLED=false
       - AUTHENTICATION_TYPE=apikey
-      - AUTHENTICATION_API_KEY=pizzaria_evolution_secret_key_2026
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY in .env}
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
@@ -79,9 +80,9 @@ services:
     container_name: pizzaria_postgres
     restart: always
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=evolution
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-evolution}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     mem_limit: 384m
@@ -99,8 +100,8 @@ services:
     ports:
       - "8086:80"
     environment:
-      - VITE_EVOLUTION_API_URL=http://179.197.231.106:8085
-      - VITE_EVOLUTION_API_KEY=pizzaria_evolution_secret_key_2026
+      - VITE_EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://localhost:8085}
+      - VITE_EVOLUTION_API_KEY=${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY in .env}
       - VITE_APP_NAME=Evolution Manager - Pizzaria Império
     depends_on:
       - evolution_api

@@ -25,10 +25,17 @@ export function getBragancaNeighborhoodsList(defaultFee = 5.00): NeighborhoodFee
   }));
 }
 
+interface DeliverySettingsDoc {
+  _id: string;
+  default_fee: number;
+  neighborhoods: NeighborhoodFee[];
+  updated_at?: Date;
+}
+
 export async function getDeliverySettings(): Promise<DeliverySettings> {
   try {
     const db = await getDb();
-    const col = db.collection("delivery_settings");
+    const col = db.collection<DeliverySettingsDoc>("delivery_settings");
     const doc = await col.findOne({ _id: "global" });
 
     if (doc && doc.neighborhoods && Array.isArray(doc.neighborhoods)) {
@@ -66,18 +73,27 @@ export async function getDeliverySettings(): Promise<DeliverySettings> {
 
 export async function saveDeliverySettings(settings: { default_fee: number; neighborhoods: NeighborhoodFee[] }): Promise<void> {
   const db = await getDb();
-  const col = db.collection("delivery_settings");
+  const col = db.collection<DeliverySettingsDoc>("delivery_settings");
   
+  const parsedDefaultFee = Number(settings.default_fee);
+  const safeDefaultFee =
+    Number.isFinite(parsedDefaultFee) && parsedDefaultFee >= 0
+      ? parsedDefaultFee
+      : INITIAL_DEFAULT_FEE;
+
   await col.updateOne(
     { _id: "global" },
     {
       $set: {
-        default_fee: Number(settings.default_fee) || INITIAL_DEFAULT_FEE,
-        neighborhoods: settings.neighborhoods.map((n, idx) => ({
-          id: n.id || `bairro-${Date.now()}-${idx}`,
-          name: n.name.trim(),
-          fee: Number(n.fee) || 0,
-        })),
+        default_fee: safeDefaultFee,
+        neighborhoods: settings.neighborhoods.map((n, idx) => {
+          const parsedFee = Number(n.fee);
+          return {
+            id: n.id || `bairro-${Date.now()}-${idx}`,
+            name: n.name.trim(),
+            fee: Number.isFinite(parsedFee) && parsedFee >= 0 ? parsedFee : 0,
+          };
+        }),
         updated_at: new Date(),
       },
     },

@@ -418,7 +418,7 @@ export function useDeliveryAddress() {
     if (form.payment === "Dinheiro" && form.troco) {
       const trocoVal = Number(form.troco.replace(",", "."));
       if (isNaN(trocoVal) || trocoVal < totalAmount) {
-        e.troco = `O troco deve ser maior que o total do pedido (R$ ${totalAmount.toFixed(2).replace(".", ",")}).`;
+        e.troco = `O troco deve ser maior ou igual ao total do pedido (R$ ${totalAmount.toFixed(2).replace(".", ",")}).`;
       }
     }
 

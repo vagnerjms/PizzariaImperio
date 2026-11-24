@@ -25,16 +25,23 @@ export const loginFn = createServerFn({ method: "POST" })
       throw new Error("Usuário ou senha incorretos.");
     }
 
+    const roles: string[] =
+      Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : [];
+
+    if (roles.length === 0) {
+      throw new Error("Conta sem permissões atribuídas. Contate o administrador.");
+    }
+
     const token = await signToken({
       userId: user._id.toString(),
       email: user.email,
-      roles: user.roles || ["admin"],
+      roles,
     });
 
     return {
       token,
       email: user.email,
-      roles: user.roles || ["admin"],
+      roles,
     };
   });
 

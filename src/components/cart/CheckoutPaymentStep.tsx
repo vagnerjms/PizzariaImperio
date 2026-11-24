@@ -17,12 +17,7 @@ export function CheckoutPaymentStep({
   onChangeDelivery: () => void;
   onChangeField: (k: keyof DeliveryAddressForm) => (v: string) => void;
 }) {
-  const [onDeliveryExpanded, setOnDeliveryExpanded] = useState(
-    form.payment === "Cartão de crédito" ||
-      form.payment === "Cartão de débito" ||
-      form.payment === "Dinheiro" ||
-      true
-  );
+  const [onDeliveryExpanded, setOnDeliveryExpanded] = useState<boolean>(true);
 
   const deliverySummary =
     form.deliveryMode === "pickup"

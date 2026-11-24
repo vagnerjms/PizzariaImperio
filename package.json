@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:prod": "NITRO_PRESET=bun vite build",
     "build:dev": "vite build --mode development",
+    "start": "bun .output/server/index.mjs",
     "preview": "vite preview",
+    "test": "bun test src",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

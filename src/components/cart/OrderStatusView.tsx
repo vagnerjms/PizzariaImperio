@@ -17,10 +17,12 @@ import { formatBRL } from "@/data/catalog";
 
 export function OrderStatusView({
   order,
+  onClose,
   onDismiss,
   onBackToCart,
 }: {
   order: any;
+  onClose: () => void;
   onDismiss: () => void;
   onBackToCart?: () => void;
 }) {
@@ -329,10 +331,10 @@ export function OrderStatusView({
 
       <button
         type="button"
-        onClick={onDismiss}
+        onClick={isFailed || order.status === "entregue" ? onDismiss : onClose}
         className={`${onBackToCart ? "mt-2" : "mt-6"} w-full rounded-full bg-secondary border border-border px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground transition hover:bg-gold hover:text-gold-foreground active:scale-95`}
       >
-        {isPaid || isOnDelivery ? "Fechar e Acompanhar" : "Fechar"}
+        {isFailed || order.status === "entregue" ? "Fechar" : "Fechar e Acompanhar"}
       </button>
     </div>
   );

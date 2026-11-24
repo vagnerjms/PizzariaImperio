@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { CartItem, MENU_BY_ID } from "@/data/catalog";
 import { Promotion, AppliedPromotionResult } from "@/lib/promotions.types";
-import { evaluateCartPromotions } from "@/lib/promotions-engine";
+import { evaluateCartPromotions, MenuItemRef } from "@/lib/promotions-engine";
 
-export function useCart(promotions: Promotion[]) {
+export function useCart(
+  promotions: Promotion[],
+  menuById: Record<string, MenuItemRef> = MENU_BY_ID
+) {
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -42,24 +45,34 @@ export function useCart(promotions: Promotion[]) {
   }, [cart]);
 
   const genericCartLines = useMemo(() => {
-    return cart.map((i) => ({
-      item: {
-        id: i.pizzaId,
-        name: i.name,
-        price: i.unitPrice,
-        category: i.category,
-      },
-      qty: i.quantity,
-      subtotal: i.totalPrice,
-    }));
-  }, [cart]);
+    return cart.map((i) => {
+      const cat1 = menuById[i.pizzaId]?.category || i.category;
+      const cat2 = i.isHalf && i.flavor2?.id ? menuById[i.flavor2.id]?.category : undefined;
+      const categories = cat2 ? Array.from(new Set([cat1, cat2])) : [cat1];
+      const flavorIds =
+        i.isHalf && i.flavor2?.id ? [i.pizzaId, i.flavor2.id] : [i.pizzaId];
+      return {
+        item: {
+          id: i.pizzaId,
+          name: i.name,
+          price: i.unitPrice,
+          category: cat1,
+          categories,
+          flavorIds,
+        },
+        qty: i.quantity,
+        subtotal: i.totalPrice,
+      };
+    });
+  }, [cart, menuById]);
 
   const appliedPromotion = useMemo<AppliedPromotionResult | null>(() => {
-    return evaluateCartPromotions(genericCartLines, MENU_BY_ID as any, promotions);
-  }, [genericCartLines, promotions]);
+    return evaluateCartPromotions(genericCartLines, menuById, promotions);
+  }, [genericCartLines, menuById, promotions]);
 
   const discount = appliedPromotion?.discountAmount || 0;
-  const total = Math.max(0, subtotal - discount);
+  const rewardCost = appliedPromotion?.rewardItem?.unit_price || 0;
+  const total = Math.max(0, subtotal + rewardCost - discount);
 
   const handleAddCustomizedToCart = useCallback((item: CartItem) => {
     if (!item) return;

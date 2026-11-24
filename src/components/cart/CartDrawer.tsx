@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   ShoppingBag,
   X,
@@ -43,6 +43,11 @@ export function CartDrawer({
   const [step, setStep] = useState<CheckoutStep>("cart");
   const [viewMode, setViewMode] = useState<"cart" | "order_status">("cart");
 
+  const handleOpenOrderFromUrl = useCallback(() => {
+    setViewMode("order_status");
+    onOpen();
+  }, [onOpen]);
+
   const {
     activeOrder,
     loadingOrder,
@@ -50,7 +55,7 @@ export function CartDrawer({
     submitError,
     placeOrder,
     dismissOrder,
-  } = useActiveOrder({ onOpenDrawer: onOpen });
+  } = useActiveOrder({ onOpenDrawer: handleOpenOrderFromUrl });
 
   const {
     form,
@@ -84,7 +89,8 @@ export function CartDrawer({
     onClose();
   };
 
-  const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
+  const rewardItemCost = appliedPromotion?.rewardItem?.unit_price || 0;
+  const subtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0) + rewardItemCost;
   const discount = appliedPromotion?.discountAmount || 0;
   const deliveryFee =
     form.deliveryMode === "pickup" || form.deliveryMode === "dine_in"
@@ -212,6 +218,7 @@ export function CartDrawer({
           {viewMode === "order_status" && activeOrder ? (
             <OrderStatusView
               order={activeOrder}
+              onClose={onClose}
               onDismiss={handleDismissOrder}
               onBackToCart={cart.length > 0 ? () => setViewMode("cart") : undefined}
             />

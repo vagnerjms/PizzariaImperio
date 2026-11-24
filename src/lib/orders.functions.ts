@@ -10,6 +10,7 @@ const itemSchema = z.object({
   pizza_name: z.string().min(1).max(160),
   quantity: z.number().int().min(1).max(50),
   unit_price: z.number().min(0).max(5000),
+  is_reward_item: z.boolean().optional(),
 });
 
 const createOrderSchema = z.object({
@@ -37,111 +38,160 @@ export const createOrder = createServerFn({ method: "POST" })
     const { getEffectiveServerMenuPrices } = await import("./menu.server");
     const { calculateFeeForNeighborhood } = await import("./delivery-config.server");
     const { listPublicPromotionsFromDb } = await import("./promotions.server");
+    const { calculateVerifiedOrderPricing } = await import("./order-pricing");
+    const { getSystemSettings } = await import("./settings.server");
 
     const ordersCol = await getOrdersCollection();
     const orderId = randomUUID();
+    const deliveryMode = data.delivery_mode || "delivery";
 
-    const effectiveMenuPrices = await getEffectiveServerMenuPrices();
-    const activePromotions = await listPublicPromotionsFromDb();
-    const matchedPromo = data.promotion_id
-      ? activePromotions.find((p) => p._id === data.promotion_id)
-      : null;
+    const [effectiveMenuPrices, activePromotions, officialDeliveryFee, settings] =
+      await Promise.all([
+        getEffectiveServerMenuPrices(),
+        listPublicPromotionsFromDb(),
+        deliveryMode === "delivery"
+          ? calculateFeeForNeighborhood(data.neighborhood || "")
+          : Promise.resolve(0),
+        getSystemSettings(),
+      ]);
 
-    // 🔒 Server-Side Price Recalculation & Anti-Tampering (OWASP A04:2021)
-    let rewardGiftUsed = false;
-    const validatedItems = data.items.map((i) => {
-      let finalUnitPrice = Math.max(0, i.unit_price);
-      const catalogItem1 = effectiveMenuPrices[i.pizza_id];
-      const catalogItem2 = i.flavor2_id ? effectiveMenuPrices[i.flavor2_id] : null;
-      const crustItem = i.crust_id ? SERVER_CRUST_PRICES[i.crust_id] : null;
-
-      if (catalogItem1 && catalogItem1.available === false) {
-        throw new Error(`O item "${catalogItem1.name}" está temporariamente esgotado.`);
-      }
-      if (catalogItem2 && catalogItem2.available === false) {
-        throw new Error(`O sabor "${catalogItem2.name}" está temporariamente esgotado.`);
-      }
-
-      if (catalogItem1) {
-        const basePrice = catalogItem2
-          ? Math.max(catalogItem1.price, catalogItem2.price)
-          : catalogItem1.price;
-        const crustPrice = crustItem ? crustItem.price : 0;
-        const officialPrice = basePrice + crustPrice;
-
-        const isAllowedPromoReward =
-          !rewardGiftUsed &&
-          matchedPromo &&
-          matchedPromo.reward_item_id === i.pizza_id &&
-          i.quantity === 1 &&
-          matchedPromo.type === "BUY_X_GET_Y";
-
-        if (isAllowedPromoReward) {
-          rewardGiftUsed = true;
-          const rewardDiscPct =
-            matchedPromo.reward_discount_percent !== undefined
-              ? matchedPromo.reward_discount_percent
-              : 100;
-          const expectedRewardPrice = Number(
-            Math.max(0, officialPrice * (1 - rewardDiscPct / 100)).toFixed(2)
-          );
-          finalUnitPrice = Math.max(expectedRewardPrice, i.unit_price);
-        } else {
-          finalUnitPrice = Math.max(officialPrice, finalUnitPrice);
-        }
-      }
-
-      return {
-        pizza_id: i.pizza_id,
-        pizza_name: i.pizza_name,
-        quantity: Math.max(1, i.quantity),
-        unit_price: Number(finalUnitPrice.toFixed(2)),
-      };
+    // 🔒 Strict Server-Side Recalculation & Anti-Tampering (OWASP A04:2021)
+    const {
+      validatedItems,
+      subtotal,
+      verifiedDiscount,
+      verifiedDeliveryFee,
+      total,
+      promotionId,
+      promotionTitle,
+    } = calculateVerifiedOrderPricing({
+      items: data.items,
+      deliveryMode,
+      officialDeliveryFee,
+      effectiveMenuPrices,
+      crustPrices: SERVER_CRUST_PRICES,
+      activePromotions,
     });
 
-    const subtotal = validatedItems.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
-
-    // Server-side delivery fee verification
-    const deliveryMode = data.delivery_mode || "delivery";
-    let verifiedDeliveryFee = 0;
-    if (deliveryMode === "pickup" || deliveryMode === "dine_in") {
-      verifiedDeliveryFee = 0;
-    } else if (data.neighborhood) {
-      const officialFee = await calculateFeeForNeighborhood(data.neighborhood);
-      verifiedDeliveryFee = Math.max(officialFee, data.delivery_fee || 0);
-    } else {
-      verifiedDeliveryFee = Math.max(0, data.delivery_fee || 0);
-    }
-
-    // Server-side discount verification
-    let verifiedDiscount = Math.max(0, data.discount || 0);
-    if (matchedPromo) {
-      if (matchedPromo.type === "PERCENTAGE_DISCOUNT" && matchedPromo.discount_value) {
-        const maxAllowed = Number(((subtotal * matchedPromo.discount_value) / 100).toFixed(2));
-        verifiedDiscount = Math.min(verifiedDiscount, maxAllowed);
-      } else if (matchedPromo.type === "FIXED_DISCOUNT" && matchedPromo.discount_value) {
-        verifiedDiscount = Math.min(verifiedDiscount, matchedPromo.discount_value);
-      } else if (matchedPromo.type === "BUY_X_GET_Y") {
-        verifiedDiscount = 0;
-      }
-    } else if (!data.promotion_id) {
-      verifiedDiscount = 0;
-    }
-    verifiedDiscount = Math.min(subtotal, verifiedDiscount);
-
-    const total = Number(Math.max(0, subtotal - verifiedDiscount + verifiedDeliveryFee).toFixed(2));
-
     const isOnlinePix = data.payment_method === "Pix";
-    const isOnlineCard = false;
-    const isOnlinePayment = isOnlinePix;
-
-    let paymentDetails: any = null;
-    let gatewayPaymentId: string | null = null;
-    const paymentStatus: "pending" | "paid" | "failed" | "refunded" | "on_delivery" = isOnlinePayment
+    const paymentStatus: "pending" | "paid" | "failed" | "refunded" | "on_delivery" = isOnlinePix
       ? "pending"
       : "on_delivery";
 
-    // Insert order document
+    let paymentGateway: string | null = null;
+    let gatewayPaymentId: string | null = null;
+    let paymentDetails: {
+      type: "pix";
+      qr_code: string | null;
+      qr_code_base64: string | null;
+      expires_at: string | null;
+    } | null = null;
+
+    // Generate PIX payment BEFORE persisting the order to avoid orphaned pending orders on gateway failure
+    if (isOnlinePix) {
+      const accessToken = settings.mercado_pago_access_token;
+      const staticPixKey = process.env.STATIC_PIX_KEY;
+
+      if (!accessToken && !staticPixKey) {
+        console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment/database settings.");
+        throw new Error(
+          "Erro na configuração de pagamentos online. Entre em contato com a pizzaria."
+        );
+      }
+
+      try {
+        if (staticPixKey) {
+          paymentGateway = "static_pix";
+          const name = process.env.STATIC_PIX_NAME || "Pizzaria Imperio";
+          const city = process.env.STATIC_PIX_CITY || "Braganca Paulista";
+          const pixPayload = generateStaticPix(
+            staticPixKey,
+            name,
+            city,
+            total,
+            orderId.slice(0, 8)
+          );
+
+          let qrCodeBase64: string | null = null;
+          try {
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixPayload)}`;
+            const qrResponse = await fetch(qrCodeUrl, {
+              signal: AbortSignal.timeout(5000),
+            });
+            if (qrResponse.ok) {
+              const qrBuffer = await qrResponse.arrayBuffer();
+              qrCodeBase64 = Buffer.from(qrBuffer).toString("base64");
+            }
+          } catch (qrErr) {
+            console.warn("Static Pix QR image generation timed out, falling back to copy-paste code:", qrErr);
+          }
+
+          paymentDetails = {
+            type: "pix",
+            qr_code: pixPayload,
+            qr_code_base64: qrCodeBase64,
+            // Align displayed expiration with the 30-minute auto-cancel window in listOrders
+            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          };
+        } else {
+          paymentGateway = "mercadopago";
+          const phoneClean = data.customer_phone.replace(/\D/g, "");
+          const phoneArea = phoneClean.slice(0, 2) || "11";
+          const phoneNumber = phoneClean.slice(2) || "999999999";
+
+          const response = await fetch("https://api.mercadopago.com/v1/payments", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+              "X-Idempotency-Key": orderId,
+            },
+            signal: AbortSignal.timeout(6000),
+            body: JSON.stringify({
+              transaction_amount: Number(total.toFixed(2)),
+              description: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,
+              payment_method_id: "pix",
+              external_reference: orderId,
+              payer: {
+                email: "cliente@pizzariaimperio011.com",
+                first_name: data.customer_name.split(" ")[0] || "Cliente",
+                last_name: data.customer_name.split(" ").slice(1).join(" ") || "Pizzaria",
+                phone: {
+                  area_code: phoneArea,
+                  number: phoneNumber,
+                },
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            const errBody = await response.text();
+            console.error("Mercado Pago Pix creation failed:", errBody);
+            throw new Error("Erro ao gerar pagamento Pix no Mercado Pago.");
+          }
+
+          const paymentData = await response.json();
+          gatewayPaymentId = String(paymentData.id);
+
+          paymentDetails = {
+            type: "pix",
+            qr_code: paymentData.point_of_interaction?.transaction_data?.qr_code,
+            qr_code_base64: paymentData.point_of_interaction?.transaction_data?.qr_code_base64,
+            expires_at: paymentData.date_of_expiration,
+          };
+        }
+      } catch (err) {
+        console.error("Pix processing failed:", err);
+        throw new Error(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível gerar a cobrança Pix. Tente novamente."
+        );
+      }
+    }
+
+    // Insert verified order document (including payment metadata when Pix succeeded)
+    const now = new Date();
     const newOrder = {
       _id: orderId,
       customer_name: data.customer_name,
@@ -153,169 +203,23 @@ export const createOrder = createServerFn({ method: "POST" })
       notes: data.notes ?? null,
       subtotal,
       discount: verifiedDiscount,
-      promotion_id: matchedPromo ? matchedPromo._id : data.promotion_id ?? null,
-      promotion_title: matchedPromo ? matchedPromo.title : data.promotion_title ?? null,
+      promotion_id: promotionId,
+      promotion_title: promotionTitle,
       total,
       delivery_fee: verifiedDeliveryFee,
       status: "novo" as const,
       payment_status: paymentStatus,
-      payment_gateway: null as string | null,
-      gateway_payment_id: null as string | null,
-      payment_details: null as any,
-      created_at: new Date(),
-      updated_at: new Date(),
+      payment_gateway: paymentGateway,
+      gateway_payment_id: gatewayPaymentId,
+      payment_details: paymentDetails,
+      created_at: now,
+      updated_at: now,
       items: validatedItems,
     };
 
     await ordersCol.insertOne(newOrder);
 
-    if (isOnlinePayment) {
-      const { getSystemSettings } = await import("./settings.server");
-      const settings = await getSystemSettings();
-      const accessToken = settings.mercado_pago_access_token;
-      if (!accessToken && !process.env.STATIC_PIX_KEY) {
-        console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment/database settings.");
-        throw new Error("Erro na configuração de pagamentos online. Entre em contato com a pizzaria.");
-      }
-
-      if (isOnlinePix) {
-        try {
-          const staticPixKey = process.env.STATIC_PIX_KEY;
-          if (staticPixKey) {
-            const name = process.env.STATIC_PIX_NAME || "Pizzaria Imperio";
-            const city = process.env.STATIC_PIX_CITY || "Sao Paulo";
-            const pixPayload = generateStaticPix(staticPixKey, name, city, total, orderId.slice(0, 8));
-
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixPayload)}`;
-            const qrResponse = await fetch(qrCodeUrl);
-            const qrBuffer = await qrResponse.arrayBuffer();
-            const qrCodeBase64 = Buffer.from(qrBuffer).toString("base64");
-
-            paymentDetails = {
-              type: "pix",
-              qr_code: pixPayload,
-              qr_code_base64: qrCodeBase64,
-              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            };
-          } else {
-            const phoneClean = data.customer_phone.replace(/\D/g, "");
-            const phoneArea = phoneClean.slice(0, 2) || "11";
-            const phoneNumber = phoneClean.slice(2) || "999999999";
-
-            const response = await fetch("https://api.mercadopago.com/v1/payments", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${accessToken}`,
-                "X-Idempotency-Key": orderId,
-              },
-              signal: AbortSignal.timeout(6000),
-              body: JSON.stringify({
-                transaction_amount: Number(total.toFixed(2)),
-                description: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,
-                payment_method_id: "pix",
-                external_reference: orderId,
-                payer: {
-                  email: "cliente@pizzariaimperio011.com",
-                  first_name: data.customer_name.split(" ")[0] || "Cliente",
-                  last_name: data.customer_name.split(" ").slice(1).join(" ") || "Pizzaria",
-                  phone: {
-                    area_code: phoneArea,
-                    number: phoneNumber,
-                  },
-                },
-              }),
-            });
-
-            if (!response.ok) {
-              const errBody = await response.text();
-              console.error("Mercado Pago Pix creation failed:", errBody);
-              throw new Error("Erro ao gerar pagamento Pix no Mercado Pago.");
-            }
-
-            const paymentData = await response.json();
-            gatewayPaymentId = String(paymentData.id);
-
-            paymentDetails = {
-              type: "pix",
-              qr_code: paymentData.point_of_interaction?.transaction_data?.qr_code,
-              qr_code_base64: paymentData.point_of_interaction?.transaction_data?.qr_code_base64,
-              expires_at: paymentData.date_of_expiration,
-            };
-          }
-        } catch (err) {
-          console.error("Pix processing failed:", err);
-          throw new Error(err instanceof Error ? err.message : "Não foi possível gerar a cobrança Pix. Tente novamente.");
-        }
-      } else if (isOnlineCard) {
-        try {
-          const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-            },
-            signal: AbortSignal.timeout(6000),
-            body: JSON.stringify({
-              items: validatedItems.map((item) => ({
-                id: item.pizza_id,
-                title: item.pizza_name,
-                unit_price: Number(item.unit_price.toFixed(2)),
-                quantity: item.quantity,
-                currency_id: "BRL",
-              })),
-              shipments:
-                verifiedDeliveryFee > 0
-                  ? {
-                      cost: Number(verifiedDeliveryFee.toFixed(2)),
-                      mode: "not_specified",
-                    }
-                  : undefined,
-              external_reference: orderId,
-              back_urls: {
-                success: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
-                pending: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
-                failure: `${process.env.APP_URL || "https://imperio.embraganca.com.br"}?order_id=${orderId}`,
-              },
-              auto_return: "approved",
-              statement_descriptor: "PIZZARIA IMPERIO",
-            }),
-          });
-
-          if (!response.ok) {
-            const errBody = await response.text();
-            console.error("Mercado Pago Preference creation failed:", errBody);
-            throw new Error("Erro ao criar preferência de pagamento no Mercado Pago.");
-          }
-
-          const prefData = await response.json();
-          paymentDetails = {
-            type: "mercadopago_preference",
-            preference_id: prefData.id,
-            init_point: prefData.init_point,
-          };
-        } catch (err) {
-          console.error("Card processing failed:", err);
-          throw new Error(err instanceof Error ? err.message : "Não foi possível gerar o link de pagamento. Tente novamente.");
-        }
-      }
-
-      await ordersCol.updateOne(
-        { _id: orderId },
-        {
-          $set: {
-            payment_gateway: "mercadopago",
-            gateway_payment_id: gatewayPaymentId,
-            payment_details: paymentDetails,
-            updated_at: new Date(),
-          },
-        }
-      );
-    }
-
     // Trigger n8n webhook asynchronously if configured
-    const { getSystemSettings } = await import("./settings.server");
-    const settings = await getSystemSettings();
     const n8nWebhookUrl = settings.n8n_webhook_url;
 
     if (n8nWebhookUrl) {
@@ -358,6 +262,8 @@ export const createOrder = createServerFn({ method: "POST" })
       id: orderId,
       subtotal,
       discount: verifiedDiscount,
+      promotion_id: promotionId,
+      promotion_title: promotionTitle,
       delivery_fee: verifiedDeliveryFee,
       total,
       delivery_mode: deliveryMode,
@@ -428,10 +334,15 @@ export const listOrders = createServerFn({ method: "GET" })
       payment_details: o.payment_details,
       order_items: (o.items || []).map((item: any, idx: number) => ({
         id: item.id || `item-${idx}`,
+        pizza_id: item.pizza_id,
+        flavor2_id: item.flavor2_id ?? null,
+        crust_id: item.crust_id ?? null,
+        base_pizza_name: item.base_pizza_name,
         pizza_name: item.pizza_name,
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.quantity * item.unit_price,
+        is_reward: item.is_reward ?? false,
       })),
     }));
   });
@@ -485,6 +396,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
             customer_name: orderBefore?.customer_name,
             customer_phone: orderBefore?.customer_phone,
             customer_address: orderBefore?.customer_address,
+            delivery_mode: orderBefore?.delivery_mode || "delivery",
             status: data.status,
             previous_status: orderBefore?.status,
             total: orderBefore?.total,
@@ -545,6 +457,7 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
             customer_name: updatedOrder.customer_name,
             customer_phone: updatedOrder.customer_phone,
             customer_address: updatedOrder.customer_address,
+            delivery_mode: updatedOrder.delivery_mode || "delivery",
             payment_method: updatedOrder.payment_method,
             total: updatedOrder.total,
             status: updatedOrder.status,

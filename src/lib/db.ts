@@ -1,9 +1,10 @@
 import { MongoClient, Db, Collection, Document } from "mongodb";
 
-const uri = process.env.MONGODB_URI;
-if (!uri) {
+const rawUri = process.env.MONGODB_URI;
+if (!rawUri) {
   throw new Error("Missing MONGODB_URI environment variable.");
 }
+const uri: string = rawUri;
 
 let client: MongoClient | null = null;
 let dbPromise: Promise<Db> | null = null;
@@ -34,7 +35,13 @@ async function ensureIndexes(db: Db) {
     ]);
 
     const users = db.collection("users");
-    await users.createIndex({ email: 1 }, { unique: true });
+    const promotions = db.collection("promotions");
+    const addressCache = db.collection("address_cache");
+    await Promise.all([
+      users.createIndex({ email: 1 }, { unique: true }),
+      promotions.createIndex({ active: 1, created_at: -1 }),
+      addressCache.createIndex({ updated_at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }),
+    ]);
 
     indexesInitialized = true;
     console.log("MongoDB indexes verified and created successfully.");

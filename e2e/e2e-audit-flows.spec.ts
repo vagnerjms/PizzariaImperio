@@ -10,28 +10,31 @@ test.describe("Fluxo E2E 1: Montagem de Pedido e Checkout em Etapas (Identifica�
     await expect(page.locator("text=PIZZARIA IMPÉRIO").first()).toBeVisible();
 
     // 2. Clicar na primeira pizza para abrir o modal de montagem (1 Sabor)
-    const addBtn = page.locator('button:has-text("Adicionar"), button:has-text("Escolher")').first();
+    const addBtn = page
+      .locator('button:has-text("Pedir Pizza Inteira"), button:has-text("Adicionar ao Pedido")')
+      .first();
     await addBtn.click();
 
-    // Se abriu o modal de Pizza Inteira, confirmar adição ao carrinho
-    const confirmModalBtn = page.locator('button:has-text("Adicionar ao Carrinho")');
+    // Se abriu o modal de Pizza Inteira, confirmar adição ao pedido
+    const confirmModalBtn = page.locator('button:has-text("Adicionar ao Pedido")').last();
     if (await confirmModalBtn.isVisible()) {
       await confirmModalBtn.click();
     }
 
-    // 3. Abrir o Carrinho pelo botão do Header
-    const cartBtn = page.locator('button:has-text("CARRINHO")');
-    await expect(cartBtn).toBeVisible();
-    await cartBtn.click();
+    // 3. Garantir que o Carrinho está aberto (ou abrir pelo botão do Header)
+    const confirmarPedidoBtn = page.locator('button:has-text("Confirmar Pedido")');
+    if (!(await confirmarPedidoBtn.isVisible())) {
+      const cartBtn = page.locator('button:has-text("CARRINHO")');
+      await expect(cartBtn).toBeVisible();
+      await cartBtn.click();
+    }
 
     // 4. Etapa 0 (Carrinho) -> Clicar em Confirmar Pedido
-    const confirmarPedidoBtn = page.locator('button:has-text("Confirmar Pedido")');
     await expect(confirmarPedidoBtn).toBeVisible();
     await confirmarPedidoBtn.click();
 
-    // 5. Etapa 1 (Identifique-se) -> Preencher WhatsApp e Nome + Selo Ambiente seguro
+    // 5. Etapa 1 (Identifique-se) -> Preencher WhatsApp e Nome
     await expect(page.locator("text=Identifique-se")).toBeVisible();
-    await expect(page.locator("text=Ambiente seguro")).toBeVisible();
 
     await page.fill('input[placeholder="(11) 9 0000-0000"]', "11971756304");
     await page.fill('input[placeholder="Nome e sobrenome"]', "Vagner Moraes");
@@ -50,10 +53,20 @@ test.describe("Fluxo E2E 1: Montagem de Pedido e Checkout em Etapas (Identifica�
     await page.click('button:has-text("Buscar o pedido")');
     await expect(page.locator("text=Grátis").first()).toBeVisible();
 
-    // Alternar para Cadastrar novo endereço e consultar CEP de Bragança Paulista
+    // Alternar para Cadastrar novo endereço e preencher endereço de Bragança Paulista
     await page.click('button:has-text("Cadastrar novo endereço")');
     await page.fill('input[placeholder="12900-000"]', "12900-000");
     await page.fill('input[placeholder="123"]', "100");
+    // Aguarda retorno da consulta de CEP ou preenche manualmente rua/bairro se externo indisponível
+    await page.waitForTimeout(1500);
+    const ruaInput = page.locator('input[placeholder*="Rua"]').first();
+    if ((await ruaInput.isVisible()) && !(await ruaInput.inputValue())) {
+      await ruaInput.fill("Praça Raul Leme");
+    }
+    const bairroInput = page.locator('input[placeholder*="Bairro"]').first();
+    if ((await bairroInput.isVisible()) && !(await bairroInput.inputValue())) {
+      await bairroInput.fill("Centro");
+    }
 
     const avancarPagamentoBtn = page.locator('button:has-text("Avançar para pagamento")');
     await expect(avancarPagamentoBtn).toBeVisible();
@@ -81,12 +94,14 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
 
     // Abas administrativas NÃO devem existir para o Atendente
     await expect(page.locator('button:has-text("Cardápio")')).not.toBeVisible();
+    await expect(page.locator('button:has-text("Promoções")')).not.toBeVisible();
     await expect(page.locator('button:has-text("WhatsApp")')).not.toBeVisible();
+    await expect(page.locator('button:has-text("Usuários")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Configurações")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Taxas de Entrega")')).not.toBeVisible();
   });
 
-  test("Supervisor deve acessar Pedidos, Cardápio, WhatsApp, Indicadores e Taxas de Entrega", async ({
+  test("Supervisor deve acessar Pedidos, Cardápio, Promoções, WhatsApp, Indicadores e Taxas de Entrega", async ({
     page,
   }) => {
     await page.goto("http://localhost:3002/auth");
@@ -97,13 +112,15 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
 
     await expect(page.locator("text=Supervisor")).toBeVisible();
     await expect(page.locator('button:has-text("Cardápio")')).toBeVisible();
+    await expect(page.locator('button:has-text("Promoções")')).toBeVisible();
     await expect(page.locator('button:has-text("WhatsApp")')).toBeVisible();
     await expect(page.locator('button:has-text("Indicadores")')).toBeVisible();
     await expect(page.locator('button:has-text("Taxas de Entrega")')).toBeVisible();
+    await expect(page.locator('button:has-text("Usuários")')).not.toBeVisible();
     await expect(page.locator('button:has-text("Configurações")')).not.toBeVisible();
   });
 
-  test("Admin deve ter acesso a todos os módulos, incluindo Cardápio, Usuários e Configurações", async ({
+  test("Admin deve ter acesso a todos os módulos, incluindo Cardápio, Promoções, Usuários e Configurações", async ({
     page,
   }) => {
     await page.goto("http://localhost:3002/auth");
@@ -114,6 +131,8 @@ test.describe("Fluxo E2E 2: Controle de Acesso Baseado em Papéis (RBAC) e KDS",
 
     await expect(page.locator("text=Admin")).toBeVisible();
     await expect(page.locator('button:has-text("Cardápio")')).toBeVisible();
+    await expect(page.locator('button:has-text("Promoções")')).toBeVisible();
+    await expect(page.locator('button:has-text("Usuários")')).toBeVisible();
     await expect(page.locator('button:has-text("Configurações")')).toBeVisible();
     await expect(page.locator('button:has-text("Taxas de Entrega")')).toBeVisible();
   });

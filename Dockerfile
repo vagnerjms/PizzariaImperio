@@ -1,25 +1,33 @@
-# Usar a imagem oficial do Bun (alpine) para compatibilidade com o bun.lock do projeto
-FROM oven/bun:1-alpine
+# Stage 1: Build de produção (TanStack Start + Nitro Bun preset)
+FROM oven/bun:1-alpine AS builder
 
-# Instalar dependências essenciais
 RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# Copiar arquivos de pacotes para aproveitar cache do Bun
 COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile || bun install
 
-# Instalar as dependências de forma rápida e segura
-RUN bun install
-
-# Copiar o restante do código da aplicação
 COPY . .
 
-# Expor a porta do TanStack Start
-EXPOSE 8080
+ENV NODE_ENV=production
+ENV NITRO_PRESET=bun
+RUN bun run build
 
+# Stage 2: Runtime leve de produção
+FROM oven/bun:1-alpine AS runner
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
 
-# Iniciar o servidor usando Bun
-CMD ["bun", "run", "dev"]
+COPY --from=builder /app/.output ./.output
+COPY --from=builder /app/package.json ./package.json
+
+EXPOSE 8080
+
+CMD ["bun", ".output/server/index.mjs"]

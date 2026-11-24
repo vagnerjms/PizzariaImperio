@@ -163,7 +163,7 @@ export const reverseGeocodeGPS = createServerFn({ method: "POST" })
       try {
         const { getSystemSettings } = await import("./settings.server");
         const settings = await getSystemSettings();
-        const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
+        const apiKey = settings.google_maps_api_key;
         if (apiKey) {
           console.log("[reverseGeocodeGPS] Acionando Google Maps Geocoding Failover...");
           const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${data.lat},${data.lon}&key=${apiKey}&language=pt-BR&region=br`;
@@ -398,7 +398,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       try {
         const { getDb } = await import("./db");
         const db = await getDb();
-        const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "default_config" as any });
+        const settingsDoc = await db.collection("delivery_settings").findOne({ _id: "global" as any });
         const neighborhoods: Array<{ name: string; fee: number }> = settingsDoc?.neighborhoods || [];
 
         const queryClean = cleanString(cleanQuery);
@@ -431,7 +431,7 @@ export const searchStreetAddress = createServerFn({ method: "POST" })
       try {
         const { getSystemSettings } = await import("./settings.server");
         const settings = await getSystemSettings();
-        const apiKey = settings.google_maps_api_key || "AIzaSyB-WuyaubPcpknMh1Qz1RM09BbOEIXB1hA";
+        const apiKey = settings.google_maps_api_key;
         if (apiKey) {
           console.log(`[Google Maps Failover] Acionando Google Geocoding API para "${cleanQuery}"...`);
           

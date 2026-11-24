@@ -90,6 +90,15 @@ export const updateUserRole = createServerFn({ method: "POST" })
       throw new Error("Você não pode remover seu próprio privilégio de Administrador.");
     }
 
+    if (targetUser.roles?.includes("admin") && data.role !== "admin") {
+      const adminCount = await usersCol.countDocuments({ roles: "admin" });
+      if (adminCount <= 1) {
+        throw new Error(
+          "Operação bloqueada: não é permitido rebaixar o único Administrador ativo do sistema."
+        );
+      }
+    }
+
     await usersCol.updateOne(query, {
       $set: {
         roles: [data.role],

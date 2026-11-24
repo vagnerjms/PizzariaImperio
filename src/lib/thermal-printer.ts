@@ -321,6 +321,15 @@ export async function printOrderThermal(
   return { success: true, method: "browser" };
 }
 
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Browser Fallback Thermal Receipt
 export function printOrderBrowserFallback(order: PrintableOrder, settings: PrinterSettings): void {
   if (typeof window === "undefined") return;
@@ -329,17 +338,19 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
   const widthMm = is80mm ? "80mm" : "58mm";
 
   const createdDate = new Date(order.created_at || Date.now());
-  const dateFormatted = createdDate.toLocaleDateString("pt-BR");
-  const timeFormatted = createdDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const shortId = (order.id || "").slice(0, 8).toUpperCase();
+  const dateFormatted = escapeHtml(createdDate.toLocaleDateString("pt-BR"));
+  const timeFormatted = escapeHtml(
+    createdDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  );
+  const shortId = escapeHtml((order.id || "").slice(0, 8).toUpperCase());
   const isPaid = order.payment_status === "paid";
 
   const itemsHtml = (order.order_items || [])
     .map(
       (item) => `
       <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-weight:bold;">
-        <span>${item.quantity}x ${item.pizza_name}</span>
-        <span>${item.subtotal === 0 ? "GRÁTIS" : formatBRLText(item.subtotal)}</span>
+        <span>${escapeHtml(item.quantity)}x ${escapeHtml(item.pizza_name)}</span>
+        <span>${item.subtotal === 0 ? "GRÁTIS" : escapeHtml(formatBRLText(item.subtotal))}</span>
       </div>
     `
     )
@@ -400,13 +411,13 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
           ? "CONSUMIR NO LOCAL"
           : "ENTREGA DELIVERY"
       }</div>
-      <div><span class="bold">CLIENTE:</span> ${order.customer_name}</div>
-      <div><span class="bold">TEL:</span> ${order.customer_phone}</div>
-      <div><span class="bold">END:</span> ${order.customer_address}</div>
+      <div><span class="bold">CLIENTE:</span> ${escapeHtml(order.customer_name)}</div>
+      <div><span class="bold">TEL:</span> ${escapeHtml(order.customer_phone)}</div>
+      <div><span class="bold">END:</span> ${escapeHtml(order.customer_address)}</div>
 
       ${
         order.notes
-          ? `<div class="notes bold">OBS: ${order.notes}</div>`
+          ? `<div class="notes bold">OBS: ${escapeHtml(order.notes)}</div>`
           : ""
       }
       <div class="divider-double"></div>
@@ -422,14 +433,14 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
       <div class="divider"></div>
       <div class="row">
         <span>Subtotal:</span>
-        <span>${formatBRLText(subtotalCalc)}</span>
+        <span>${escapeHtml(formatBRLText(subtotalCalc))}</span>
       </div>
 
       ${
         order.discount && order.discount > 0
           ? `<div class="row bold" style="color: #000;">
-              <span>Desconto (${order.promotion_title || "Promoção"}):</span>
-              <span>-${formatBRLText(order.discount)}</span>
+              <span>Desconto (${escapeHtml(order.promotion_title || "Promoção")}):</span>
+              <span>-${escapeHtml(formatBRLText(order.discount))}</span>
             </div>`
           : ""
       }
@@ -438,7 +449,7 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
         order.delivery_fee !== undefined && order.delivery_fee !== null
           ? `<div class="row">
               <span>Taxa de Entrega:</span>
-              <span>${order.delivery_fee === 0 ? "GRÁTIS" : formatBRLText(order.delivery_fee)}</span>
+              <span>${order.delivery_fee === 0 ? "GRÁTIS" : escapeHtml(formatBRLText(order.delivery_fee))}</span>
             </div>`
           : ""
       }
@@ -446,19 +457,19 @@ export function printOrderBrowserFallback(order: PrintableOrder, settings: Print
 
       <div class="row total">
         <span>TOTAL:</span>
-        <span>${formatBRLText(order.total)}</span>
+        <span>${escapeHtml(formatBRLText(order.total))}</span>
       </div>
       <div class="divider"></div>
 
-      <div class="bold">FORMA PGTO: ${order.payment_method.toUpperCase()}</div>
-      ${order.troco ? `<div>TROCO PARA: ${formatBRLText(order.troco)}</div>` : ""}
+      <div class="bold">FORMA PGTO: ${escapeHtml((order.payment_method || "").toUpperCase())}</div>
+      ${order.troco ? `<div>TROCO PARA: ${escapeHtml(formatBRLText(order.troco))}</div>` : ""}
       <div class="bold">STATUS: ${isPaid ? "PAGO ONLINE (PIX/CARTÃO)" : "PAGAR NA ENTREGA"}</div>
 
       <div class="divider-double"></div>
       <div class="text-center" style="font-size:11px; margin-top:6px;">
         <div>Agradecemos a preferência!</div>
         <div>Pizzaria Império</div>
-        <div>Impresso às ${new Date().toLocaleTimeString("pt-BR")}</div>
+        <div>Impresso às ${escapeHtml(new Date().toLocaleTimeString("pt-BR"))}</div>
       </div>
       <br><br>
     </body>
