@@ -1,14 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin } from "./auth-middleware";
 import { z } from "zod";
+
+async function buildUserIdQuery(userId: string): Promise<Record<string, unknown>> {
+  const { ObjectId } = await import("mongodb");
+  try {
+    return { _id: new ObjectId(userId) };
+  } catch {
+    return { _id: userId };
+  }
+}
+
+function toIsoDate(val: unknown): string {
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === "string") return val;
+  return new Date().toISOString();
+}
 
 // 1. Listar Usuários (Apenas Admin)
 export const listUsers = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .middleware([requireAdmin])
+  .handler(async () => {
     const { getUsersCollection } = await import("./db");
     const usersCol = await getUsersCollection();
     const users = await usersCol.find({}).sort({ created_at: -1 }).toArray();
@@ -17,8 +29,8 @@ export const listUsers = createServerFn({ method: "GET" })
       id: u._id.toString(),
       email: u.email,
       roles: u.roles || ["atendente"],
-      created_at: u.created_at || new Date(),
-      updated_at: u.updated_at || new Date(),
+      created_at: toIsoDate(u.created_at),
+      updated_at: toIsoDate(u.updated_at),
     }));
   });
 
@@ -30,12 +42,9 @@ const createUserSchema = z.object({
 });
 
 export const createUser = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => createUserSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .handler(async ({ data }) => {
     const { getUsersCollection } = await import("./db");
     const { hashPassword } = await import("./hash");
     const usersCol = await getUsersCollection();
@@ -46,13 +55,20 @@ export const createUser = createServerFn({ method: "POST" })
     }
 
     const hashedPassword = await hashPassword(data.password);
-    await usersCol.insertOne({
-      email: data.email,
-      password_hash: hashedPassword,
-      roles: [data.role],
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
+    try {
+      await usersCol.insertOne({
+        email: data.email,
+        password_hash: hashedPassword,
+        roles: [data.role],
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        throw new Error("Já existe um usuário cadastrado com este e-mail.");
+      }
+      throw err;
+    }
 
     return { success: true };
   });
@@ -64,22 +80,12 @@ const updateRoleSchema = z.object({
 });
 
 export const updateUserRole = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => updateRoleSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
-    const { ObjectId } = await import("mongodb");
     const { getUsersCollection } = await import("./db");
     const usersCol = await getUsersCollection();
-
-    let query: any;
-    try {
-      query = { _id: new ObjectId(data.userId) };
-    } catch {
-      query = { _id: data.userId };
-    }
+    const query = await buildUserIdQuery(data.userId);
 
     const targetUser = await usersCol.findOne(query);
     if (!targetUser) {
@@ -116,23 +122,13 @@ const updatePasswordSchema = z.object({
 });
 
 export const updateUserPassword = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => updatePasswordSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
-    const { ObjectId } = await import("mongodb");
+  .handler(async ({ data }) => {
     const { getUsersCollection } = await import("./db");
     const { hashPassword } = await import("./hash");
     const usersCol = await getUsersCollection();
-
-    let query: any;
-    try {
-      query = { _id: new ObjectId(data.userId) };
-    } catch {
-      query = { _id: data.userId };
-    }
+    const query = await buildUserIdQuery(data.userId);
 
     const hashedPassword = await hashPassword(data.newPassword);
     const result = await usersCol.updateOne(query, {
@@ -155,22 +151,12 @@ const deleteUserSchema = z.object({
 });
 
 export const deleteUser = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => deleteUserSchema.parse(raw))
   .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
-    const { ObjectId } = await import("mongodb");
     const { getUsersCollection } = await import("./db");
     const usersCol = await getUsersCollection();
-
-    let query: any;
-    try {
-      query = { _id: new ObjectId(data.userId) };
-    } catch {
-      query = { _id: data.userId };
-    }
+    const query = await buildUserIdQuery(data.userId);
 
     const targetUser = await usersCol.findOne(query);
     if (!targetUser) {
@@ -184,7 +170,9 @@ export const deleteUser = createServerFn({ method: "POST" })
     if (targetUser.roles?.includes("admin")) {
       const adminCount = await usersCol.countDocuments({ roles: "admin" });
       if (adminCount <= 1) {
-        throw new Error("Operação bloqueada: não é permitido excluir o único Administrador ativo do sistema.");
+        throw new Error(
+          "Operação bloqueada: não é permitido excluir o único Administrador ativo do sistema."
+        );
       }
     }
 

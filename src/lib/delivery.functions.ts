@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
 import { z } from "zod";
 
 const neighborhoodSchema = z.object({
@@ -31,23 +31,17 @@ export const lookupDeliveryFee = createServerFn({ method: "POST" })
 
 // 3. Obter configurações completas para o painel Admin/Supervisor
 export const getAdminDeliverySettings = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.some(r => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
+  .middleware([requireSupervisorOrAdmin])
+  .handler(async () => {
     const { getDeliverySettings } = await import("./delivery-config.server");
     return getDeliverySettings();
   });
 
 // 4. Salvar novas taxas de entrega no MongoDB (Apenas Admin)
 export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => updateDeliverySettingsSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .handler(async ({ data }) => {
     const { saveDeliverySettings } = await import("./delivery-config.server");
     await saveDeliverySettings(data as any);
     return { success: true };
@@ -55,11 +49,8 @@ export const updateAdminDeliverySettings = createServerFn({ method: "POST" })
 
 // 5. Carregar e aplicar todos os bairros oficiais de Bragança Paulista (Apenas Admin)
 export const resetToBragancaNeighborhoods = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .middleware([requireAdmin])
+  .handler(async () => {
     const { getBragancaNeighborhoodsList, saveDeliverySettings } = await import("./delivery-config.server");
     const list = getBragancaNeighborhoodsList(5.00);
     await saveDeliverySettings({ default_fee: 7.00, neighborhoods: list });

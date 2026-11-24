@@ -48,24 +48,10 @@ export const loginFn = createServerFn({ method: "POST" })
 export const getCurrentUserFn = createServerFn({ method: "GET" })
   .handler(async () => {
     const { getRequest } = await import("@tanstack/react-start/server");
-    const request = getRequest();
-    if (!request) return null;
-
-    let token = "";
-    const authHeader = request.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.replace("Bearer ", "");
-    } else {
-      const cookieHeader = request.headers.get("cookie") || "";
-      const match = cookieHeader.match(/auth_token=([^;]+)/);
-      if (match) {
-        token = match[1];
-      }
-    }
-
+    const { extractAuthTokenFromRequest } = await import("./auth-middleware");
+    const token = extractAuthTokenFromRequest(getRequest());
     if (!token) return null;
 
     const { verifyToken } = await import("./jwt");
-    const payload = await verifyToken(token);
-    return payload;
+    return verifyToken(token);
   });

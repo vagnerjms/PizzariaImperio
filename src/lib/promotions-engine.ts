@@ -22,32 +22,9 @@ export interface GenericCartLine {
   subtotal: number;
 }
 
-export function getSaoPauloYMD(date: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
+import { getSaoPauloDayOfWeek, getSaoPauloYMD } from "./datetime";
 
-const WEEKDAY_EN_MAP: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
-export function getSaoPauloDayOfWeek(date: Date = new Date()): number {
-  const short = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    weekday: "short",
-  }).format(date);
-  return WEEKDAY_EN_MAP[short] ?? date.getDay();
-}
+export { getSaoPauloDayOfWeek, getSaoPauloYMD };
 
 export function isPromotionExhausted(promo: Promotion): boolean {
   if (typeof promo.max_uses !== "number" || promo.max_uses <= 0) return false;

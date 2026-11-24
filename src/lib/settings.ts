@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
+import { isValidGa4MeasurementId, isValidMetaPixelId } from "./analytics";
 import { z } from "zod";
 
 const hhmmRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -55,13 +56,13 @@ const updateSettingsSchema = z.object({
   meta_pixel_id: z
     .string()
     .trim()
-    .refine((v) => v === "" || /^\d{5,25}$/.test(v), "Meta Pixel ID deve conter apenas dígitos.")
+    .refine((v) => v === "" || isValidMetaPixelId(v), "Meta Pixel ID deve conter apenas dígitos.")
     .optional(),
   ga4_measurement_id: z
     .string()
     .trim()
     .refine(
-      (v) => v === "" || /^G-[A-Z0-9]{4,20}$/i.test(v),
+      (v) => v === "" || isValidGa4MeasurementId(v),
       "GA4 Measurement ID deve começar com G- (ex: G-XXXXXXXXXX)."
     )
     .optional(),
@@ -75,23 +76,17 @@ export const getPublicStoreConfig = createServerFn({ method: "GET" }).handler(as
 });
 
 export const getAdminSettings = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .middleware([requireAdmin])
+  .handler(async () => {
     const { getSystemSettings, maskSettingsForAdminClient } = await import("./settings.server");
     const settings = await getSystemSettings();
     return maskSettingsForAdminClient(settings);
   });
 
 export const updateAdminSettings = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => updateSettingsSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Acesso restrito a Administradores.");
-    }
+  .handler(async ({ data }) => {
     if (
       data.enabled_payment_methods &&
       !Object.values(data.enabled_payment_methods).some(Boolean)
@@ -116,12 +111,9 @@ const toggleStorePauseSchema = z.object({
 
 // Quick store pause/reopen toggle for Admin and Supervisor during shifts
 export const toggleStorePause = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => toggleStorePauseSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a Supervisores e Administradores.");
-    }
+  .handler(async ({ data }) => {
     const { saveSystemSettings, getSystemSettings, getPublicStoreConfigFromSettings } = await import(
       "./settings.server"
     );

@@ -184,30 +184,20 @@ export const Route = createFileRoute("/api/webhook")({
               }
 
               // Notify n8n ONLY upon the exact atomic transition to paid
-              const n8nWebhookUrl = settings.n8n_webhook_url;
-              if (n8nWebhookUrl && paidOrderDoc) {
-                fetch(n8nWebhookUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  signal: AbortSignal.timeout(8000),
-                  body: JSON.stringify({
-                    event: "order.paid",
-                    order: {
-                      id: orderId,
-                      customer_name: paidOrderDoc.customer_name,
-                      customer_phone: paidOrderDoc.customer_phone,
-                      customer_address: paidOrderDoc.customer_address,
-                      delivery_mode: paidOrderDoc.delivery_mode || "delivery",
-                      payment_method: paidOrderDoc.payment_method,
-                      total: paidOrderDoc.total,
-                      status: paidOrderDoc.status,
-                      payment_status: "paid",
-                      items: paidOrderDoc.items,
-                    },
-                  }),
-                }).catch((err) =>
-                  console.error("Failed to notify n8n webhook on payment approved:", err)
-                );
+              if (settings.n8n_webhook_url && paidOrderDoc) {
+                const { dispatchN8nEvent } = await import("@/lib/server/n8n.server");
+                dispatchN8nEvent(settings.n8n_webhook_url, "order.paid", {
+                  id: orderId,
+                  customer_name: paidOrderDoc.customer_name,
+                  customer_phone: paidOrderDoc.customer_phone,
+                  customer_address: paidOrderDoc.customer_address,
+                  delivery_mode: paidOrderDoc.delivery_mode || "delivery",
+                  payment_method: paidOrderDoc.payment_method,
+                  total: paidOrderDoc.total,
+                  status: paidOrderDoc.status,
+                  payment_status: "paid",
+                  items: paidOrderDoc.items,
+                });
               }
             }
           }

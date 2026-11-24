@@ -7,18 +7,11 @@ import { listCouriers } from "@/lib/couriers.functions";
 import { CourierRow } from "@/lib/couriers-domain";
 import { getPublicStoreConfig, toggleStorePause } from "@/lib/settings";
 import { PublicStoreConfig } from "@/lib/store-hours";
-import {
-  connectSerialPrinter,
-  disconnectSerialPrinter,
-  isPrinterConnected,
-  getStoredPrinterSettings,
-  savePrinterSettings,
-  printOrderThermal,
-  printTestReceipt,
-  PrinterSettings,
-} from "@/lib/thermal-printer";
+import { printOrderThermal } from "@/lib/thermal-printer";
+import { useThermalPrinter } from "@/hooks/useThermalPrinter";
+import { OrderRow } from "@/types/orders";
 import { AdminHeader, AdminViewMode } from "@/components/admin/AdminHeader";
-import { OrdersTab, OrderRow } from "@/components/admin/tabs/OrdersTab";
+import { OrdersTab } from "@/components/admin/tabs/OrdersTab";
 import { CashTab } from "@/components/admin/tabs/CashTab";
 import { CouriersTab } from "@/components/admin/tabs/CouriersTab";
 import { MenuTab } from "@/components/admin/tabs/MenuTab";
@@ -111,54 +104,18 @@ function AdminPage() {
     });
   };
 
-  // Configuração da Impressora Térmica Serial / USB
-  const [printerConnected, setPrinterConnected] = useState(false);
-  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(getStoredPrinterSettings);
-  const [printerMsg, setPrinterMsg] = useState<{ text: string; isError?: boolean } | null>(null);
-
-  useEffect(() => {
-    setPrinterConnected(isPrinterConnected());
-  }, []);
-
-  const handleConnectPrinter = async () => {
-    const res = await connectSerialPrinter(printerSettings.baudRate);
-    setPrinterConnected(isPrinterConnected());
-    setPrinterMsg({ text: res.message, isError: !res.success });
-    setTimeout(() => setPrinterMsg(null), 5000);
-  };
-
-  const handleDisconnectPrinter = async () => {
-    await disconnectSerialPrinter();
-    setPrinterConnected(false);
-    setPrinterMsg({ text: "Impressora desconectada." });
-    setTimeout(() => setPrinterMsg(null), 4000);
-  };
-
-  const handleTestPrint = async () => {
-    const res = await printTestReceipt(printerSettings);
-    setPrinterMsg({ text: res.message });
-    setTimeout(() => setPrinterMsg(null), 5000);
-  };
-
-  const handleUpdatePrinterSetting = <K extends keyof PrinterSettings>(
-    key: K,
-    value: PrinterSettings[K]
-  ) => {
-    const updated = savePrinterSettings({ [key]: value });
-    setPrinterSettings(updated);
-  };
-
-  const handlePrintOrder = async (order: OrderRow) => {
-    try {
-      const res = await printOrderThermal(order as any, printerSettings);
-      if (res.method === "serial") {
-        setPrinterMsg({ text: `Comanda #${order.id.slice(0, 8)} impressa via USB!` });
-        setTimeout(() => setPrinterMsg(null), 4000);
-      }
-    } catch (err) {
-      console.error("Erro ao imprimir:", err);
-    }
-  };
+  // Configuração da Impressora Térmica Serial / USB (encapsulada em hook dedicado)
+  const {
+    printerConnected,
+    printerSettings,
+    printerMsg,
+    showPrinterMessage,
+    handleConnectPrinter,
+    handleDisconnectPrinter,
+    handleTestPrint,
+    handlePrintOrder,
+    updatePrinterSetting: handleUpdatePrinterSetting,
+  } = useThermalPrinter();
 
   // Detecção reativa de novos pedidos para tocar chime sonoro
   useEffect(() => {
@@ -287,11 +244,11 @@ function AdminPage() {
       if (previousOrders) {
         queryClient.setQueryData(["admin", "orders"], previousOrders);
       }
-      setPrinterMsg({
-        text: err instanceof Error ? err.message : "Erro ao atualizar status do pedido.",
-        isError: true,
-      });
-      setTimeout(() => setPrinterMsg(null), 5000);
+      showPrinterMessage(
+        err instanceof Error ? err.message : "Erro ao atualizar status do pedido.",
+        true,
+        5000
+      );
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };
@@ -311,17 +268,16 @@ function AdminPage() {
         queryClient.invalidateQueries({ queryKey: ["admin", "financial-report"] }),
         queryClient.invalidateQueries({ queryKey: ["admin", "courier-settlements"] }),
       ]);
-      setPrinterMsg({ text: `Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!` });
-      setTimeout(() => setPrinterMsg(null), 4000);
+      showPrinterMessage(`Pagamento Pix do pedido #${id.slice(0, 6)} confirmado!`, false, 4000);
     } catch (err) {
       if (previousOrders) {
         queryClient.setQueryData(["admin", "orders"], previousOrders);
       }
-      setPrinterMsg({
-        text: err instanceof Error ? err.message : "Erro ao confirmar pagamento.",
-        isError: true,
-      });
-      setTimeout(() => setPrinterMsg(null), 5000);
+      showPrinterMessage(
+        err instanceof Error ? err.message : "Erro ao confirmar pagamento.",
+        true,
+        5000
+      );
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
     }
   };
@@ -355,18 +311,19 @@ function AdminPage() {
         },
       });
       queryClient.setQueryData(["admin", "store-config"], updated);
-      setPrinterMsg({
-        text: updated.status.isOpen
+      showPrinterMessage(
+        updated.status.isOpen
           ? "Loja aberta para novos pedidos!"
           : `Recebimento pausado: ${updated.status.reason}`,
-      });
-      setTimeout(() => setPrinterMsg(null), 5000);
+        false,
+        5000
+      );
     } catch (e) {
-      setPrinterMsg({
-        text: e instanceof Error ? e.message : "Erro ao atualizar status da loja.",
-        isError: true,
-      });
-      setTimeout(() => setPrinterMsg(null), 5000);
+      showPrinterMessage(
+        e instanceof Error ? e.message : "Erro ao atualizar status da loja.",
+        true,
+        5000
+      );
     } finally {
       setTogglingStore(false);
     }

@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireAuth } from "./auth-middleware";
-import { generateStaticPix } from "./pix";
+import { requireAdmin, requireStaff, requireSupervisorOrAdmin } from "./auth-middleware";
+import type { FinancialReportPeriod, FinancialReportResponse } from "./server/orders.server";
+
+export type { FinancialReportPeriod, FinancialReportResponse };
 
 const itemSchema = z.object({
   pizza_id: z.string().min(1).max(60),
@@ -48,6 +50,8 @@ export const createOrder = createServerFn({ method: "POST" })
       isDeliveryModeEnabled,
       isPaymentMethodEnabled,
     } = await import("./store-hours");
+    const { createOnlinePixPayment } = await import("./server/payments.server");
+    const { dispatchN8nEvent } = await import("./server/n8n.server");
 
     const ordersCol = await getOrdersCollection();
     const orderId = randomUUID();
@@ -61,8 +65,6 @@ export const createOrder = createServerFn({ method: "POST" })
         : Promise.resolve(0),
       getSystemSettings(),
     ]);
-    const effectiveMenuPrices = catalogPricing.menuPrices;
-    const effectiveCrustPrices = catalogPricing.crustPrices;
 
     // Store operational checks (hours/pause, enabled delivery modes & payment methods)
     const storeStatus = evaluateStoreOpenStatus(settings);
@@ -78,7 +80,7 @@ export const createOrder = createServerFn({ method: "POST" })
       );
     }
 
-    // 🔒 Strict Server-Side Recalculation & Anti-Tampering (OWASP A04:2021)
+    // Strict Server-Side Recalculation & Anti-Tampering (OWASP A04:2021)
     const {
       validatedItems,
       subtotal,
@@ -92,8 +94,8 @@ export const createOrder = createServerFn({ method: "POST" })
       items: data.items,
       deliveryMode,
       officialDeliveryFee,
-      effectiveMenuPrices,
-      crustPrices: effectiveCrustPrices,
+      effectiveMenuPrices: catalogPricing.menuPrices,
+      crustPrices: catalogPricing.crustPrices,
       activePromotions,
       couponCode: data.coupon_code,
     });
@@ -114,109 +116,19 @@ export const createOrder = createServerFn({ method: "POST" })
 
     // Generate PIX payment BEFORE persisting the order to avoid orphaned pending orders on gateway failure
     if (isOnlinePix) {
-      const accessToken = settings.mercado_pago_access_token;
-      const staticPixKey = process.env.STATIC_PIX_KEY;
-
-      if (!accessToken && !staticPixKey) {
-        console.error("MERCADO_PAGO_ACCESS_TOKEN is missing in environment/database settings.");
-        throw new Error(
-          "Erro na configuração de pagamentos online. Entre em contato com a pizzaria."
-        );
-      }
-
-      try {
-        if (staticPixKey) {
-          paymentGateway = "static_pix";
-          const name = process.env.STATIC_PIX_NAME || "Pizzaria Imperio";
-          const city = process.env.STATIC_PIX_CITY || "Braganca Paulista";
-          const pixPayload = generateStaticPix(
-            staticPixKey,
-            name,
-            city,
-            total,
-            orderId.slice(0, 8)
-          );
-
-          let qrCodeBase64: string | null = null;
-          try {
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixPayload)}`;
-            const qrResponse = await fetch(qrCodeUrl, {
-              signal: AbortSignal.timeout(5000),
-            });
-            if (qrResponse.ok) {
-              const qrBuffer = await qrResponse.arrayBuffer();
-              qrCodeBase64 = Buffer.from(qrBuffer).toString("base64");
-            }
-          } catch (qrErr) {
-            console.warn("Static Pix QR image generation timed out, falling back to copy-paste code:", qrErr);
-          }
-
-          paymentDetails = {
-            type: "pix",
-            qr_code: pixPayload,
-            qr_code_base64: qrCodeBase64,
-            // Align displayed expiration with the 30-minute auto-cancel window in listOrders
-            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-          };
-        } else {
-          paymentGateway = "mercadopago";
-          const phoneClean = data.customer_phone.replace(/\D/g, "");
-          const phoneArea = phoneClean.slice(0, 2) || "11";
-          const phoneNumber = phoneClean.slice(2) || "999999999";
-
-          const response = await fetch("https://api.mercadopago.com/v1/payments", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-              "X-Idempotency-Key": orderId,
-            },
-            signal: AbortSignal.timeout(6000),
-            body: JSON.stringify({
-              transaction_amount: Number(total.toFixed(2)),
-              description: `Pedido ${orderId.slice(0, 8)} - Pizzaria Império`,
-              payment_method_id: "pix",
-              external_reference: orderId,
-              payer: {
-                email: "cliente@pizzariaimperio011.com",
-                first_name: data.customer_name.split(" ")[0] || "Cliente",
-                last_name: data.customer_name.split(" ").slice(1).join(" ") || "Pizzaria",
-                phone: {
-                  area_code: phoneArea,
-                  number: phoneNumber,
-                },
-              },
-            }),
-          });
-
-          if (!response.ok) {
-            const errBody = await response.text();
-            console.error("Mercado Pago Pix creation failed:", errBody);
-            throw new Error("Erro ao gerar pagamento Pix no Mercado Pago.");
-          }
-
-          const paymentData = await response.json();
-          gatewayPaymentId = String(paymentData.id);
-
-          paymentDetails = {
-            type: "pix",
-            qr_code: paymentData.point_of_interaction?.transaction_data?.qr_code,
-            qr_code_base64: paymentData.point_of_interaction?.transaction_data?.qr_code_base64,
-            expires_at: paymentData.date_of_expiration,
-          };
-        }
-      } catch (err) {
-        console.error("Pix processing failed:", err);
-        throw new Error(
-          err instanceof Error
-            ? err.message
-            : "Não foi possível gerar a cobrança Pix. Tente novamente."
-        );
-      }
+      const pixResult = await createOnlinePixPayment({
+        orderId,
+        total,
+        customerName: data.customer_name,
+        customerPhone: data.customer_phone,
+        settings,
+      });
+      paymentGateway = pixResult.paymentGateway;
+      gatewayPaymentId = pixResult.gatewayPaymentId;
+      paymentDetails = pixResult.paymentDetails;
     }
 
     let promotionReserved = false;
-    // Atomically enforce promotion max_uses under concurrency right before persisting the order
     if (promotionId) {
       const reserved = await consumePromotionUse(promotionId);
       if (!reserved) {
@@ -229,7 +141,6 @@ export const createOrder = createServerFn({ method: "POST" })
       promotionReserved = true;
     }
 
-    // Insert verified order document (including payment metadata when Pix succeeded)
     const now = new Date();
     const newOrder = {
       _id: orderId,
@@ -275,46 +186,24 @@ export const createOrder = createServerFn({ method: "POST" })
       throw insertErr;
     }
 
-    // Trigger n8n webhook asynchronously if configured
-    const n8nWebhookUrl = settings.n8n_webhook_url;
-
-    if (n8nWebhookUrl) {
-      console.log(`[Order Created] Dispatching webhook to n8n: ${n8nWebhookUrl} (Order: ${orderId})`);
-      fetch(n8nWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({
-          event: "order.created",
-          order: {
-            id: orderId,
-            customer_name: data.customer_name,
-            customer_phone: data.customer_phone,
-            customer_address: data.customer_address,
-            delivery_mode: deliveryMode,
-            table_number: newOrder.table_number,
-            payment_method: data.payment_method,
-            troco: data.troco,
-            notes: data.notes,
-            subtotal,
-            discount: verifiedDiscount,
-            delivery_fee: verifiedDeliveryFee,
-            total,
-            items: validatedItems,
-            payment_status: paymentStatus,
-            payment_details: paymentDetails,
-          },
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            console.error(`[n8n Webhook Error] n8n returned HTTP ${res.status}:`, await res.text());
-          } else {
-            console.log(`[n8n Webhook Success] Event order.created delivered successfully for order ${orderId}.`);
-          }
-        })
-        .catch((err) => console.error("Failed to notify n8n webhook on order creation:", err));
-    }
+    dispatchN8nEvent(settings.n8n_webhook_url, "order.created", {
+      id: orderId,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      customer_address: data.customer_address,
+      delivery_mode: deliveryMode,
+      table_number: newOrder.table_number,
+      payment_method: data.payment_method,
+      troco: data.troco,
+      notes: data.notes,
+      subtotal,
+      discount: verifiedDiscount,
+      delivery_fee: verifiedDeliveryFee,
+      total,
+      items: validatedItems,
+      payment_status: paymentStatus,
+      payment_details: paymentDetails,
+    });
 
     return {
       id: orderId,
@@ -334,94 +223,18 @@ export const createOrder = createServerFn({ method: "POST" })
   });
 
 export const listOrders = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
+  .middleware([requireStaff])
+  .handler(async () => {
+    const { cancelExpiredPixOrders, findRecentOrdersForKds } = await import(
+      "./server/orders.server"
+    );
 
-    const { getOrdersCollection } = await import("./db");
-    const ordersCol = await getOrdersCollection();
+    // Non-blocking cleanup of Pix orders older than 30 minutes
+    cancelExpiredPixOrders().catch((err) =>
+      console.error("Error auto-canceling abandoned Pix orders:", err)
+    );
 
-    // Auto-cancel abandoned Pix orders older than 30 minutes (non-blocking)
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    ordersCol
-      .updateMany(
-        {
-          payment_method: "Pix",
-          payment_status: "pending",
-          status: "novo",
-          created_at: { $lt: thirtyMinutesAgo },
-        },
-        {
-          $set: {
-            status: "cancelado",
-            payment_status: "failed",
-            canceled_at: new Date(),
-            cancel_reason: "Pix expirado automaticamente após 30 minutos",
-            updated_at: new Date(),
-          },
-        }
-      )
-      .catch((err) => console.error("Error auto-canceling abandoned Pix orders:", err));
-
-    const orders = await ordersCol
-      .find({})
-      .sort({ created_at: -1 })
-      .limit(200)
-      .toArray();
-
-    const toIsoOrNull = (val: unknown): string | null => {
-      if (!val) return null;
-      if (val instanceof Date) return val.toISOString();
-      if (typeof val === "string") return val;
-      return null;
-    };
-
-    return orders.map((o: any) => ({
-      id: o._id,
-      customer_name: o.customer_name,
-      customer_phone: o.customer_phone,
-      customer_address: o.customer_address,
-      delivery_mode: o.delivery_mode || "delivery",
-      table_number: o.table_number || null,
-      courier_id: o.courier_id || null,
-      courier_name: o.courier_name || null,
-      courier_payout: typeof o.courier_payout === "number" ? o.courier_payout : null,
-      payment_method: o.payment_method,
-      troco: o.troco,
-      notes: o.notes || null,
-      subtotal: o.subtotal || o.total,
-      discount: o.discount || 0,
-      promotion_id: o.promotion_id || null,
-      promotion_title: o.promotion_title || null,
-      total: o.total,
-      delivery_fee: o.delivery_fee,
-      status: o.status,
-      created_at: o.created_at.toISOString(),
-      updated_at: o.updated_at.toISOString(),
-      preparing_at: toIsoOrNull(o.preparing_at),
-      dispatched_at: toIsoOrNull(o.dispatched_at),
-      delivered_at: toIsoOrNull(o.delivered_at),
-      canceled_at: toIsoOrNull(o.canceled_at),
-      cancel_reason: o.cancel_reason || null,
-      payment_status: o.payment_status,
-      payment_gateway: o.payment_gateway,
-      gateway_payment_id: o.gateway_payment_id,
-      payment_details: o.payment_details,
-      order_items: (o.items || []).map((item: any, idx: number) => ({
-        id: item.id || `item-${idx}`,
-        pizza_id: item.pizza_id,
-        flavor2_id: item.flavor2_id ?? null,
-        crust_id: item.crust_id ?? null,
-        base_pizza_name: item.base_pizza_name,
-        pizza_name: item.pizza_name,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        subtotal: item.quantity * item.unit_price,
-        is_reward: item.is_reward ?? false,
-      })),
-    }));
+    return findRecentOrdersForKds(200);
   });
 
 const updateStatusSchema = z.object({
@@ -432,13 +245,9 @@ const updateStatusSchema = z.object({
 });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireStaff])
   .validator((raw: unknown) => updateStatusSchema.parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
-
+  .handler(async ({ data }) => {
     const { getDb, getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
     const orderBefore = await ordersCol.findOne({ _id: data.id });
@@ -500,14 +309,14 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       }
     }
 
-    if (data.status === "cancelado" && orderBefore.promotion_id && !orderBefore.promotion_released) {
+    const shouldReleasePromo =
+      data.status === "cancelado" && Boolean(orderBefore.promotion_id) && !orderBefore.promotion_released;
+    if (shouldReleasePromo) {
       updateDoc.promotion_released = true;
     }
 
     const result = await ordersCol.updateOne(
-      data.status === "cancelado" && orderBefore.promotion_id && !orderBefore.promotion_released
-        ? { _id: data.id, promotion_released: { $ne: true } }
-        : { _id: data.id },
+      shouldReleasePromo ? { _id: data.id, promotion_released: { $ne: true } } : { _id: data.id },
       { $set: updateDoc }
     );
 
@@ -516,12 +325,11 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       if (!stillExists) {
         throw new Error("Pedido não encontrado.");
       }
-      await ordersCol.updateOne({ _id: data.id }, { $set: { ...updateDoc, promotion_released: true } });
-    } else if (
-      data.status === "cancelado" &&
-      orderBefore.promotion_id &&
-      !orderBefore.promotion_released
-    ) {
+      await ordersCol.updateOne(
+        { _id: data.id },
+        { $set: { ...updateDoc, promotion_released: true } }
+      );
+    } else if (shouldReleasePromo) {
       const { releasePromotionUse } = await import("./promotions.server");
       await releasePromotionUse(String(orderBefore.promotion_id)).catch((err) =>
         console.error("Failed to release promotion use on cancellation:", err)
@@ -529,53 +337,30 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     }
 
     // Notify n8n ONLY for essential delivery updates ("saiu" and "cancelado")
-    const { getSystemSettings } = await import("./settings.server");
-    const settings = await getSystemSettings();
-    const n8nWebhookUrl = settings.n8n_webhook_url;
-    const shouldNotify = ["saiu", "cancelado"].includes(data.status);
-
-    if (n8nWebhookUrl && shouldNotify) {
-      console.log(`[Order Status Updated] Dispatching webhook to n8n: ${n8nWebhookUrl} (Order: ${data.id}, Status: ${data.status})`);
-      fetch(n8nWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({
-          event: "order.status_updated",
-          order: {
-            id: data.id,
-            customer_name: orderBefore?.customer_name,
-            customer_phone: orderBefore?.customer_phone,
-            customer_address: orderBefore?.customer_address,
-            delivery_mode: orderBefore?.delivery_mode || "delivery",
-            courier_name: resolvedCourierName || undefined,
-            status: data.status,
-            previous_status: orderBefore?.status,
-            total: orderBefore?.total,
-          },
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            console.error(`[n8n Status Update Error] n8n returned HTTP ${res.status}:`, await res.text());
-          } else {
-            console.log(`[n8n Status Update Success] Event order.status_updated (${data.status}) delivered successfully.`);
-          }
-        })
-        .catch((err) => console.error("Failed to notify n8n webhook on status update:", err));
+    if (data.status === "saiu" || data.status === "cancelado") {
+      const { getSystemSettings } = await import("./settings.server");
+      const { dispatchN8nEvent } = await import("./server/n8n.server");
+      const settings = await getSystemSettings();
+      dispatchN8nEvent(settings.n8n_webhook_url, "order.status_updated", {
+        id: data.id,
+        customer_name: orderBefore?.customer_name,
+        customer_phone: orderBefore?.customer_phone,
+        customer_address: orderBefore?.customer_address,
+        delivery_mode: orderBefore?.delivery_mode || "delivery",
+        courier_name: resolvedCourierName || undefined,
+        status: data.status,
+        previous_status: orderBefore?.status,
+        total: orderBefore?.total,
+      });
     }
 
     return { ok: true };
   });
 
 export const confirmOrderPayment = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
-  .validator((raw: unknown) => z.object({ id: z.string() }).parse(raw))
-  .handler(async ({ data, context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
-
+  .middleware([requireStaff])
+  .validator((raw: unknown) => z.object({ id: z.string().min(1) }).parse(raw))
+  .handler(async ({ data }) => {
     const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
 
@@ -595,45 +380,34 @@ export const confirmOrderPayment = createServerFn({ method: "POST" })
     }
 
     const { getSystemSettings } = await import("./settings.server");
+    const { dispatchN8nEvent } = await import("./server/n8n.server");
     const settings = await getSystemSettings();
-    const n8nWebhookUrl = settings.n8n_webhook_url;
-
-    if (n8nWebhookUrl) {
-      fetch(n8nWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({
-          event: "order.paid",
-          order: {
-            id: updatedOrder._id,
-            customer_name: updatedOrder.customer_name,
-            customer_phone: updatedOrder.customer_phone,
-            customer_address: updatedOrder.customer_address,
-            delivery_mode: updatedOrder.delivery_mode || "delivery",
-            payment_method: updatedOrder.payment_method,
-            total: updatedOrder.total,
-            status: updatedOrder.status,
-            payment_status: "paid",
-            items: updatedOrder.items,
-          },
-        }),
-      }).catch((err) => console.error("Failed to notify n8n on manual payment confirmation:", err));
-    }
+    dispatchN8nEvent(settings.n8n_webhook_url, "order.paid", {
+      id: updatedOrder._id,
+      customer_name: updatedOrder.customer_name,
+      customer_phone: updatedOrder.customer_phone,
+      customer_address: updatedOrder.customer_address,
+      delivery_mode: updatedOrder.delivery_mode || "delivery",
+      payment_method: updatedOrder.payment_method,
+      total: updatedOrder.total,
+      status: updatedOrder.status,
+      payment_status: "paid",
+      items: updatedOrder.items,
+    });
 
     return { ok: true };
   });
 
-// A lightweight status checking helper function for clients
+const orderStatusQuerySchema = z
+  .union([
+    z.string().trim().min(1).max(80),
+    z.object({ id: z.string().trim().min(1).max(80) }).transform((o) => o.id),
+    z.object({ data: z.string().trim().min(1).max(80) }).transform((o) => o.data),
+  ]);
+
+// Lightweight public order status lookup for customer tracking
 export const getOrderStatus = createServerFn({ method: "GET" })
-  .validator((raw: unknown) => {
-    if (typeof raw === "string") return raw;
-    if (raw && typeof raw === "object") {
-      if ("id" in raw && typeof (raw as any).id === "string") return (raw as any).id;
-      if ("data" in raw && typeof (raw as any).data === "string") return (raw as any).data;
-    }
-    return String(raw || "");
-  })
+  .validator((raw: unknown) => orderStatusQuerySchema.parse(raw))
   .handler(async ({ data: orderId }) => {
     const { getOrdersCollection } = await import("./db");
     const ordersCol = await getOrdersCollection();
@@ -652,261 +426,23 @@ export const getOrderStatus = createServerFn({ method: "GET" })
     };
   });
 
-export type FinancialReportPeriod = "today" | "7d" | "30d" | "all";
-
-export interface FinancialReportResponse {
-  period: FinancialReportPeriod;
-  totalOrdersCount: number;
-  confirmedCount: number;
-  completedCount: number;
-  activeCount: number;
-  canceledCount: number;
-  revenue: number;
-  totalDiscounts: number;
-  totalDeliveryFees: number;
-  ticketMedio: number;
-  avgPrepMin: number | null;
-  prepSampleCount: number;
-  avgDeliveryMin: number | null;
-  deliverySampleCount: number;
-  topItems: Array<{ name: string; qty: number }>;
-  paymentBreakdown: Array<{ method: string; count: number; amount: number }>;
-}
-
-function getSaoPauloTodayStart(): Date {
-  const spDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  return new Date(`${spDate}T00:00:00-03:00`);
-}
-
-function normalizeRankingName(rawName: string, basePizzaName?: string): string {
-  if (basePizzaName && basePizzaName.trim()) return basePizzaName.trim();
-  return String(rawName || "")
-    .replace(/\s*\[[^\]]*\]/g, "")
-    .replace(/\s*\((?:Borda [^)]+|Sem Borda[^)]*)\)/gi, "")
-    .trim();
-}
-
 const financialReportSchema = z.object({
   period: z.enum(["today", "7d", "30d", "all"]).default("today"),
 });
 
-/**
- * Server-side aggregated Financial & Operational SLA report using America/Sao_Paulo timezone.
- * Eliminates the 200-order truncation limit from KDS listOrders and enforces Supervisor restrictions on the server.
- */
 export const getFinancialReport = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => financialReportSchema.parse(raw ?? {}))
   .handler(async ({ data, context }): Promise<FinancialReportResponse> => {
     const isAdmin = Boolean(context.roles?.includes("admin"));
-    const isSupervisorOrAdmin = Boolean(
-      context.roles?.some((r) => ["admin", "supervisor"].includes(r))
-    );
-    if (!isSupervisorOrAdmin) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
-
-    const effectivePeriod: FinancialReportPeriod = isAdmin ? data.period : "today";
-    const matchStage: Record<string, unknown> = {};
-    if (effectivePeriod === "today") {
-      matchStage.created_at = { $gte: getSaoPauloTodayStart() };
-    } else if (effectivePeriod === "7d") {
-      matchStage.created_at = { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
-    } else if (effectivePeriod === "30d") {
-      matchStage.created_at = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
-    }
-
-    const { getOrdersCollection } = await import("./db");
-    const ordersCol = await getOrdersCollection();
-
-    const docs = await ordersCol
-      .find(matchStage)
-      .project({
-        status: 1,
-        payment_method: 1,
-        payment_status: 1,
-        total: 1,
-        discount: 1,
-        delivery_fee: 1,
-        created_at: 1,
-        preparing_at: 1,
-        dispatched_at: 1,
-        delivered_at: 1,
-        items: 1,
-      })
-      .toArray();
-
-    let confirmedCount = 0;
-    let completedCount = 0;
-    let activeCount = 0;
-    let canceledCount = 0;
-    let revenue = 0;
-    let totalDiscounts = 0;
-    let totalDeliveryFees = 0;
-
-    const prepDeltas: number[] = [];
-    const deliveryDeltas: number[] = [];
-    const itemSales: Record<string, number> = {};
-    const paymentMap: Record<string, { count: number; amount: number }> = {};
-
-    const toMs = (v: unknown): number | null => {
-      if (!v) return null;
-      const ms = v instanceof Date ? v.getTime() : new Date(String(v)).getTime();
-      return Number.isFinite(ms) ? ms : null;
-    };
-
-    for (const o of docs as any[]) {
-      if (o.status === "cancelado") {
-        canceledCount += 1;
-        continue;
-      }
-      if (o.payment_method === "Pix" && o.payment_status !== "paid") {
-        continue;
-      }
-
-      confirmedCount += 1;
-      if (o.status === "entregue") completedCount += 1;
-      else activeCount += 1;
-
-      const orderTotal = Number(o.total || 0);
-      revenue += orderTotal;
-      totalDiscounts += Number(o.discount || 0);
-      totalDeliveryFees += Number(o.delivery_fee || 0);
-
-      const createdMs = toMs(o.created_at);
-      const startPrepMs = toMs(o.preparing_at) ?? createdMs;
-      const dispatchedMs = toMs(o.dispatched_at);
-      const deliveredMs = toMs(o.delivered_at);
-
-      if (startPrepMs !== null && dispatchedMs !== null) {
-        const d = dispatchedMs - startPrepMs;
-        if (d > 0 && d < 6 * 3600 * 1000) prepDeltas.push(d);
-      }
-      if (createdMs !== null && deliveredMs !== null) {
-        const d = deliveredMs - createdMs;
-        if (d > 0 && d < 6 * 3600 * 1000) deliveryDeltas.push(d);
-      }
-
-      for (const item of o.items || []) {
-        const key = normalizeRankingName(item.pizza_name, item.base_pizza_name);
-        if (!key) continue;
-        itemSales[key] = (itemSales[key] || 0) + Number(item.quantity || 0);
-      }
-
-      const method = String(o.payment_method || "Outros");
-      const bucket = paymentMap[method] || { count: 0, amount: 0 };
-      bucket.count += 1;
-      bucket.amount += orderTotal;
-      paymentMap[method] = bucket;
-    }
-
-    const avgMin = (arr: number[]): number | null =>
-      arr.length === 0
-        ? null
-        : Math.round(arr.reduce((sum, ms) => sum + ms / 60000, 0) / arr.length);
-
-    const topItems = Object.entries(itemSales)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, qty]) => ({ name, qty }));
-
-    const paymentBreakdown = Object.entries(paymentMap).map(([method, info]) => ({
-      method,
-      count: info.count,
-      amount: isAdmin ? Math.round(info.amount * 100) / 100 : 0,
-    }));
-
-    return {
-      period: effectivePeriod,
-      totalOrdersCount: docs.length,
-      confirmedCount,
-      completedCount,
-      activeCount,
-      canceledCount,
-      revenue: isAdmin ? Math.round(revenue * 100) / 100 : 0,
-      totalDiscounts: isAdmin ? Math.round(totalDiscounts * 100) / 100 : 0,
-      totalDeliveryFees: isAdmin ? Math.round(totalDeliveryFees * 100) / 100 : 0,
-      ticketMedio: isAdmin && confirmedCount > 0 ? Math.round((revenue / confirmedCount) * 100) / 100 : 0,
-      avgPrepMin: avgMin(prepDeltas),
-      prepSampleCount: prepDeltas.length,
-      avgDeliveryMin: avgMin(deliveryDeltas),
-      deliverySampleCount: deliveryDeltas.length,
-      topItems,
-      paymentBreakdown,
-    };
+    const { buildFinancialReportFromDb } = await import("./server/orders.server");
+    return buildFinancialReportFromDb(data.period, isAdmin);
   });
 
-/**
- * Full CSV export dataset for Admins (never truncated to 200 orders).
- */
 export const exportFinancialOrdersCsv = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => financialReportSchema.parse(raw ?? {}))
-  .handler(async ({ data, context }): Promise<string> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem exportar relatórios financeiros.");
-    }
-
-    const matchStage: Record<string, unknown> = {};
-    if (data.period === "today") {
-      matchStage.created_at = { $gte: getSaoPauloTodayStart() };
-    } else if (data.period === "7d") {
-      matchStage.created_at = { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
-    } else if (data.period === "30d") {
-      matchStage.created_at = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
-    }
-
-    const { getOrdersCollection } = await import("./db");
-    const ordersCol = await getOrdersCollection();
-    const docs = await ordersCol
-      .find(matchStage)
-      .sort({ created_at: -1 })
-      .project({
-        _id: 1,
-        created_at: 1,
-        customer_name: 1,
-        delivery_mode: 1,
-        payment_method: 1,
-        status: 1,
-        subtotal: 1,
-        discount: 1,
-        delivery_fee: 1,
-        total: 1,
-      })
-      .toArray();
-
-    const header = [
-      "ID",
-      "Data",
-      "Cliente",
-      "Modalidade",
-      "Pagamento",
-      "Status",
-      "Subtotal",
-      "Desconto",
-      "Taxa Entrega",
-      "Total",
-    ];
-    const rows = (docs as any[]).map((o) => {
-      const createdDate = o.created_at instanceof Date ? o.created_at : new Date(o.created_at);
-      return [
-        String(o._id).slice(0, 8),
-        createdDate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-        `"${String(o.customer_name || "").replace(/"/g, '""')}"`,
-        o.delivery_mode || "delivery",
-        `"${String(o.payment_method || "")}"`,
-        o.status,
-        Number(o.subtotal || 0).toFixed(2),
-        Number(o.discount || 0).toFixed(2),
-        Number(o.delivery_fee || 0).toFixed(2),
-        Number(o.total || 0).toFixed(2),
-      ];
-    });
-
-    return [header.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
+  .handler(async ({ data }): Promise<string> => {
+    const { exportFinancialCsvFromDb } = await import("./server/orders.server");
+    return exportFinancialCsvFromDb(data.period);
   });

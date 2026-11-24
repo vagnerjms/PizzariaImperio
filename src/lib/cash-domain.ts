@@ -55,23 +55,9 @@ export type CashOrderSample = Pick<
   "status" | "payment_method" | "payment_status" | "total" | "discount" | "delivery_fee"
 >;
 
-export function roundMoney(value: number): number {
-  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
-}
+import { normalizePaymentBucket, roundMoney } from "./money";
 
-export function normalizePaymentBucket(paymentMethod: string): keyof PaymentBreakdown {
-  const norm = (paymentMethod || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-
-  if (norm.includes("pix")) return "pix";
-  if (norm.includes("dinheiro")) return "dinheiro";
-  if (norm.includes("credito")) return "credito";
-  if (norm.includes("debito")) return "debito";
-  return "outros";
-}
+export { normalizePaymentBucket, roundMoney };
 
 /**
  * Only non-canceled orders count toward cash/sales.

@@ -1,16 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
 
 const EVOLUTION_TIMEOUT_MS = 10000;
 
 // 1. Obter Status da Conexão do WhatsApp
 export const getWhatsAppStatus = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
-
+  .middleware([requireSupervisorOrAdmin])
+  .handler(async () => {
     const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;
@@ -90,12 +86,8 @@ export const getWhatsAppStatus = createServerFn({ method: "GET" })
 
 // 2. Gerar/Obter QR Code para Conexão
 export const getWhatsAppQRCode = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
-
+  .middleware([requireSupervisorOrAdmin])
+  .handler(async () => {
     const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;
@@ -134,12 +126,8 @@ export const getWhatsAppQRCode = createServerFn({ method: "GET" })
 
 // 3. Desconectar WhatsApp (Logout - Apenas Admin)
 export const disconnectWhatsApp = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
-  .handler(async ({ context }) => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem desconectar a instância do WhatsApp.");
-    }
-
+  .middleware([requireAdmin])
+  .handler(async () => {
     const { getSystemSettings } = await import("./settings.server");
     const settings = await getSystemSettings();
     const url = settings.evolution_api_url;

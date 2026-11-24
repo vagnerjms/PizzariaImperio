@@ -1,13 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin, requireSupervisorOrAdmin } from "./auth-middleware";
 import {
   CatalogCrustOption,
   CatalogMenuItem,
-  normalizeImageForStorage,
   PublicCatalogResponse,
-  resolveMenuImage,
-  slugifyCatalogId,
 } from "./menu-domain";
 
 export interface PublicMenuOverride {
@@ -64,129 +61,19 @@ const saveMenuItemSchema = z.object({
 });
 
 export const saveMenuItem = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => saveMenuItemSchema.parse(raw))
-  .handler(async ({ data, context }): Promise<CatalogMenuItem> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem criar ou editar itens do cardápio.");
-    }
-
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const col = db.collection<{
-      _id: string;
-      name: string;
-      desc: string;
-      ingredients: string;
-      price: number;
-      image: string;
-      badge: string | null;
-      category: (typeof VALID_CATEGORIES)[number];
-      available: boolean;
-      sort_order: number;
-      created_at: Date;
-      updated_at: Date;
-    }>("menu_items");
-
-    const now = new Date();
-    const cleanPrice = Number(data.price.toFixed(2));
-    const cleanBadge = data.badge && data.badge.trim() ? data.badge.trim() : null;
-    const cleanDesc = data.desc?.trim() || data.ingredients.trim() || data.name;
-
-    if (data.id) {
-      const existing = await col.findOne({ _id: data.id });
-      if (!existing) throw new Error("Item do cardápio não encontrado.");
-
-      const nextSort = data.sort_order !== undefined ? data.sort_order : existing.sort_order;
-      const storedImage = normalizeImageForStorage(data.image || existing.image);
-
-      await col.updateOne(
-        { _id: data.id },
-        {
-          $set: {
-            name: data.name,
-            category: data.category,
-            ingredients: data.ingredients,
-            desc: cleanDesc,
-            price: cleanPrice,
-            badge: cleanBadge,
-            image: storedImage,
-            available: data.available,
-            sort_order: nextSort,
-            updated_at: now,
-          },
-        },
-      );
-
-      return {
-        id: data.id,
-        name: data.name,
-        desc: cleanDesc,
-        ingredients: data.ingredients,
-        price: cleanPrice,
-        image: resolveMenuImage(storedImage, data.id),
-        badge: cleanBadge || undefined,
-        category: data.category,
-        available: data.available,
-        sort_order: nextSort,
-      };
-    }
-
-    // Generate unique slug ID for new item
-    let candidateId = slugifyCatalogId(data.name);
-    const conflict = await col.findOne({ _id: candidateId });
-    if (conflict) {
-      candidateId = `${candidateId}-${crypto.randomUUID().slice(0, 4)}`;
-    }
-
-    const count = await col.estimatedDocumentCount();
-    const sortOrder = data.sort_order !== undefined ? data.sort_order : count + 1;
-    const storedImage = normalizeImageForStorage(data.image);
-
-    await col.insertOne({
-      _id: candidateId,
-      name: data.name,
-      desc: cleanDesc,
-      ingredients: data.ingredients,
-      price: cleanPrice,
-      image: storedImage,
-      badge: cleanBadge,
-      category: data.category,
-      available: data.available,
-      sort_order: sortOrder,
-      created_at: now,
-      updated_at: now,
-    });
-
-    return {
-      id: candidateId,
-      name: data.name,
-      desc: cleanDesc,
-      ingredients: data.ingredients,
-      price: cleanPrice,
-      image: resolveMenuImage(storedImage, candidateId),
-      badge: cleanBadge || undefined,
-      category: data.category,
-      available: data.available,
-      sort_order: sortOrder,
-    };
+  .handler(async ({ data }): Promise<CatalogMenuItem> => {
+    const { upsertMenuItemInDb } = await import("./menu.server");
+    return upsertMenuItemInDb(data);
   });
 
 export const deleteMenuItem = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => z.object({ id: z.string().min(1) }).parse(raw))
-  .handler(async ({ data, context }): Promise<{ ok: boolean }> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem excluir itens do cardápio.");
-    }
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const res = await db.collection<{ _id: string }>("menu_items").deleteOne({ _id: data.id });
-    if (res.deletedCount === 0) throw new Error("Item não encontrado.");
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { deleteMenuItemFromDb } = await import("./menu.server");
+    await deleteMenuItemFromDb(data.id);
     return { ok: true };
   });
 
@@ -198,39 +85,18 @@ const updateMenuOverrideSchema = z.object({
 });
 
 export const saveMenuOverride = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => updateMenuOverrideSchema.parse(raw))
   .handler(async ({ data, context }) => {
     const isAdmin = Boolean(context.roles?.includes("admin"));
-    const isSupervisor = Boolean(context.roles?.includes("supervisor"));
-
-    if (!isAdmin && !isSupervisor) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
 
     // Supervisor can ONLY toggle stock availability (no price or badge changes)
     if (!isAdmin && (data.price !== undefined || data.badge !== undefined)) {
       throw new Error("Apenas Administradores podem alterar preços ou selos do cardápio.");
     }
 
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const col = db.collection<{ _id: string }>("menu_items");
-
-    const updateFields: Record<string, unknown> = {
-      updated_at: new Date(),
-    };
-    if (isAdmin && data.price !== undefined) updateFields.price = Number(data.price.toFixed(2));
-    if (data.available !== undefined) updateFields.available = data.available;
-    if (isAdmin && data.badge !== undefined) updateFields.badge = data.badge;
-
-    const res = await col.updateOne({ _id: data.id }, { $set: updateFields });
-    if (res.matchedCount === 0) {
-      throw new Error("Item do cardápio não encontrado.");
-    }
-
+    const { upsertMenuOverrideInDb } = await import("./menu.server");
+    await upsertMenuOverrideInDb({ ...data, isAdmin });
     return { ok: true };
   });
 
@@ -245,123 +111,29 @@ const saveCrustSchema = z.object({
 });
 
 export const saveCrustOption = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => saveCrustSchema.parse(raw))
-  .handler(async ({ data, context }): Promise<CatalogCrustOption> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem criar ou editar bordas.");
-    }
-
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const col = db.collection<{
-      _id: string;
-      name: string;
-      price: number;
-      available: boolean;
-      sort_order: number;
-      created_at: Date;
-      updated_at: Date;
-    }>("crust_options");
-
-    const now = new Date();
-    const cleanPrice = data.id === "nenhuma" ? 0 : Number(data.price.toFixed(2));
-    const cleanAvailable = data.id === "nenhuma" ? true : data.available;
-
-    if (data.id) {
-      const existing = await col.findOne({ _id: data.id });
-      if (!existing) throw new Error("Borda não encontrada.");
-      const nextSort = data.sort_order !== undefined ? data.sort_order : existing.sort_order;
-      await col.updateOne(
-        { _id: data.id },
-        {
-          $set: {
-            name: data.name,
-            price: cleanPrice,
-            available: cleanAvailable,
-            sort_order: nextSort,
-            updated_at: now,
-          },
-        },
-      );
-      return {
-        id: data.id,
-        name: data.name,
-        price: cleanPrice,
-        available: cleanAvailable,
-        sort_order: nextSort,
-      };
-    }
-
-    let candidateId = slugifyCatalogId(data.name);
-    const conflict = await col.findOne({ _id: candidateId });
-    if (conflict) {
-      candidateId = `${candidateId}-${crypto.randomUUID().slice(0, 4)}`;
-    }
-    const count = await col.estimatedDocumentCount();
-    const sortOrder = data.sort_order !== undefined ? data.sort_order : count + 1;
-
-    await col.insertOne({
-      _id: candidateId,
-      name: data.name,
-      price: cleanPrice,
-      available: cleanAvailable,
-      sort_order: sortOrder,
-      created_at: now,
-      updated_at: now,
-    });
-
-    return {
-      id: candidateId,
-      name: data.name,
-      price: cleanPrice,
-      available: cleanAvailable,
-      sort_order: sortOrder,
-    };
+  .handler(async ({ data }): Promise<CatalogCrustOption> => {
+    const { upsertCrustOptionInDb } = await import("./menu.server");
+    return upsertCrustOptionInDb(data);
   });
 
 export const toggleCrustAvailability = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) =>
     z.object({ id: z.string().min(1), available: z.boolean() }).parse(raw),
   )
-  .handler(async ({ data, context }): Promise<{ ok: boolean }> => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
-    if (data.id === "nenhuma" && !data.available) {
-      throw new Error('A opção "Sem Borda Recheada" não pode ser desativada.');
-    }
-
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const res = await db
-      .collection<{ _id: string }>("crust_options")
-      .updateOne({ _id: data.id }, { $set: { available: data.available, updated_at: new Date() } });
-    if (res.matchedCount === 0) throw new Error("Borda não encontrada.");
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { toggleCrustAvailabilityInDb } = await import("./menu.server");
+    await toggleCrustAvailabilityInDb(data.id, data.available);
     return { ok: true };
   });
 
 export const deleteCrustOption = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => z.object({ id: z.string().min(1) }).parse(raw))
-  .handler(async ({ data, context }): Promise<{ ok: boolean }> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas Administradores podem excluir bordas.");
-    }
-    if (data.id === "nenhuma") {
-      throw new Error('A opção padrão "Sem Borda Recheada" não pode ser excluída.');
-    }
-
-    const { ensureCatalogSeeded } = await import("./menu.server");
-    await ensureCatalogSeeded();
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    const res = await db.collection<{ _id: string }>("crust_options").deleteOne({ _id: data.id });
-    if (res.deletedCount === 0) throw new Error("Borda não encontrada.");
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { deleteCrustOptionFromDb } = await import("./menu.server");
+    await deleteCrustOptionFromDb(data.id);
     return { ok: true };
   });

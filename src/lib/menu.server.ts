@@ -6,8 +6,10 @@ import {
   CatalogCrustOption,
   CatalogMenuItem,
   LegacyMenuOverride,
+  normalizeImageForStorage,
   PublicCatalogResponse,
   resolveMenuImage,
+  slugifyCatalogId,
 } from "./menu-domain";
 
 export interface MenuOverrideDoc extends LegacyMenuOverride {
@@ -242,4 +244,223 @@ export async function getEffectiveServerCrustPrices(): Promise<
 > {
   const { crustPrices } = await getEffectiveServerCatalogPricing();
   return crustPrices;
+}
+
+export async function upsertMenuItemInDb(input: {
+  id?: string;
+  name: string;
+  category: Category;
+  ingredients: string;
+  desc?: string;
+  price: number;
+  badge?: string | null;
+  image: string;
+  available: boolean;
+  sort_order?: number;
+}): Promise<CatalogMenuItem> {
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const col = db.collection<MenuItemDoc>("menu_items");
+
+  const now = new Date();
+  const cleanPrice = Number(input.price.toFixed(2));
+  const cleanBadge = input.badge && input.badge.trim() ? input.badge.trim() : null;
+  const cleanDesc = input.desc?.trim() || input.ingredients.trim() || input.name;
+
+  if (input.id) {
+    const existing = await col.findOne({ _id: input.id });
+    if (!existing) throw new Error("Item do cardápio não encontrado.");
+
+    const nextSort = input.sort_order !== undefined ? input.sort_order : existing.sort_order;
+    const storedImage = normalizeImageForStorage(input.image || existing.image);
+
+    await col.updateOne(
+      { _id: input.id },
+      {
+        $set: {
+          name: input.name,
+          category: input.category,
+          ingredients: input.ingredients,
+          desc: cleanDesc,
+          price: cleanPrice,
+          badge: cleanBadge,
+          image: storedImage,
+          available: input.available,
+          sort_order: nextSort,
+          updated_at: now,
+        },
+      }
+    );
+
+    return {
+      id: input.id,
+      name: input.name,
+      desc: cleanDesc,
+      ingredients: input.ingredients,
+      price: cleanPrice,
+      image: resolveMenuImage(storedImage, input.id),
+      badge: cleanBadge || undefined,
+      category: input.category,
+      available: input.available,
+      sort_order: nextSort,
+    };
+  }
+
+  let candidateId = slugifyCatalogId(input.name);
+  const conflict = await col.findOne({ _id: candidateId });
+  if (conflict) {
+    candidateId = `${candidateId}-${crypto.randomUUID().slice(0, 4)}`;
+  }
+
+  const count = await col.estimatedDocumentCount();
+  const sortOrder = input.sort_order !== undefined ? input.sort_order : count + 1;
+  const storedImage = normalizeImageForStorage(input.image);
+
+  await col.insertOne({
+    _id: candidateId,
+    name: input.name,
+    desc: cleanDesc,
+    ingredients: input.ingredients,
+    price: cleanPrice,
+    image: storedImage,
+    badge: cleanBadge,
+    category: input.category,
+    available: input.available,
+    sort_order: sortOrder,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return {
+    id: candidateId,
+    name: input.name,
+    desc: cleanDesc,
+    ingredients: input.ingredients,
+    price: cleanPrice,
+    image: resolveMenuImage(storedImage, candidateId),
+    badge: cleanBadge || undefined,
+    category: input.category,
+    available: input.available,
+    sort_order: sortOrder,
+  };
+}
+
+export async function deleteMenuItemFromDb(id: string): Promise<void> {
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const res = await db.collection<MenuItemDoc>("menu_items").deleteOne({ _id: id });
+  if (res.deletedCount === 0) throw new Error("Item não encontrado.");
+}
+
+export async function upsertMenuOverrideInDb(input: {
+  id: string;
+  isAdmin: boolean;
+  price?: number;
+  available?: boolean;
+  badge?: string | null;
+}): Promise<void> {
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const col = db.collection<MenuItemDoc>("menu_items");
+
+  const updateFields: Record<string, unknown> = {
+    updated_at: new Date(),
+  };
+  if (input.isAdmin && input.price !== undefined) updateFields.price = Number(input.price.toFixed(2));
+  if (input.available !== undefined) updateFields.available = input.available;
+  if (input.isAdmin && input.badge !== undefined) updateFields.badge = input.badge;
+
+  const res = await col.updateOne({ _id: input.id }, { $set: updateFields });
+  if (res.matchedCount === 0) {
+    throw new Error("Item do cardápio não encontrado.");
+  }
+}
+
+export async function upsertCrustOptionInDb(input: {
+  id?: string;
+  name: string;
+  price: number;
+  available: boolean;
+  sort_order?: number;
+}): Promise<CatalogCrustOption> {
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const col = db.collection<CrustOptionDoc>("crust_options");
+
+  const now = new Date();
+  const cleanPrice = input.id === "nenhuma" ? 0 : Number(input.price.toFixed(2));
+  const cleanAvailable = input.id === "nenhuma" ? true : input.available;
+
+  if (input.id) {
+    const existing = await col.findOne({ _id: input.id });
+    if (!existing) throw new Error("Borda não encontrada.");
+    const nextSort = input.sort_order !== undefined ? input.sort_order : existing.sort_order;
+    await col.updateOne(
+      { _id: input.id },
+      {
+        $set: {
+          name: input.name,
+          price: cleanPrice,
+          available: cleanAvailable,
+          sort_order: nextSort,
+          updated_at: now,
+        },
+      }
+    );
+    return {
+      id: input.id,
+      name: input.name,
+      price: cleanPrice,
+      available: cleanAvailable,
+      sort_order: nextSort,
+    };
+  }
+
+  let candidateId = slugifyCatalogId(input.name);
+  const conflict = await col.findOne({ _id: candidateId });
+  if (conflict) {
+    candidateId = `${candidateId}-${crypto.randomUUID().slice(0, 4)}`;
+  }
+  const count = await col.estimatedDocumentCount();
+  const sortOrder = input.sort_order !== undefined ? input.sort_order : count + 1;
+
+  await col.insertOne({
+    _id: candidateId,
+    name: input.name,
+    price: cleanPrice,
+    available: cleanAvailable,
+    sort_order: sortOrder,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return {
+    id: candidateId,
+    name: input.name,
+    price: cleanPrice,
+    available: cleanAvailable,
+    sort_order: sortOrder,
+  };
+}
+
+export async function toggleCrustAvailabilityInDb(id: string, available: boolean): Promise<void> {
+  if (id === "nenhuma" && !available) {
+    throw new Error('A opção "Sem Borda Recheada" não pode ser desativada.');
+  }
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const res = await db
+    .collection<CrustOptionDoc>("crust_options")
+    .updateOne({ _id: id }, { $set: { available, updated_at: new Date() } });
+  if (res.matchedCount === 0) throw new Error("Borda não encontrada.");
+}
+
+export async function deleteCrustOptionFromDb(id: string): Promise<void> {
+  if (id === "nenhuma") {
+    throw new Error('A opção padrão "Sem Borda Recheada" não pode ser excluída.');
+  }
+  await ensureCatalogSeeded();
+  const db = await getDb();
+  const res = await db.collection<CrustOptionDoc>("crust_options").deleteOne({ _id: id });
+  if (res.deletedCount === 0) throw new Error("Borda não encontrada.");
 }

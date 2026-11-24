@@ -1,16 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Collection } from "mongodb";
-import { requireAuth } from "./auth-middleware";
+import { requireSupervisorOrAdmin } from "./auth-middleware";
 import {
   calculateCashClosingDifference,
   CashMovement,
   CashShiftRow,
   CashShiftSummary,
-  normalizePaymentBucket,
   PaymentBreakdown,
-  roundMoney,
 } from "./cash-domain";
+import { normalizePaymentBucket, roundMoney } from "./money";
 
 interface CashMovementDoc {
   id: string;
@@ -194,15 +193,9 @@ async function aggregateShiftSummaryFromDb(
 }
 
 export const getCashDashboard = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .handler(async ({ context }): Promise<CashDashboardResponse> => {
     const isAdmin = Boolean(context.roles?.includes("admin"));
-    const isSupervisorOrAdmin = Boolean(
-      context.roles?.some((r) => ["admin", "supervisor"].includes(r)),
-    );
-    if (!isSupervisorOrAdmin) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
 
     const { getDb } = await import("./db");
     const db = await getDb();
@@ -247,13 +240,9 @@ const openShiftSchema = z.object({
 });
 
 export const openCashShift = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => openShiftSchema.parse(raw))
   .handler(async ({ data, context }): Promise<CashShiftRow> => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
-
     const { getDb } = await import("./db");
     const db = await getDb();
     const shiftsCol = db.collection<CashShiftDoc>("cash_shifts");
@@ -308,13 +297,9 @@ const movementSchema = z.object({
 });
 
 export const addCashMovement = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => movementSchema.parse(raw))
   .handler(async ({ data, context }): Promise<CashShiftRow> => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
-
     const { getDb } = await import("./db");
     const db = await getDb();
     const shiftsCol = db.collection<CashShiftDoc>("cash_shifts");
@@ -349,12 +334,9 @@ const closeShiftSchema = z.object({
 });
 
 export const closeCashShift = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => closeShiftSchema.parse(raw))
   .handler(async ({ data, context }): Promise<CloseCashShiftResponse> => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
 
     const { getDb } = await import("./db");
     const db = await getDb();

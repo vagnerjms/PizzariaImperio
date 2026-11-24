@@ -1,8 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireAuth } from "./auth-middleware";
+import { requireAdmin, requireStaff, requireSupervisorOrAdmin } from "./auth-middleware";
 import { CourierPayoutMode, CourierRow } from "./couriers-domain";
-import { roundMoney } from "./cash-domain";
+import { roundMoney } from "./money";
+import { getSaoPauloTodayStartDate } from "./datetime";
 
 export interface CourierDoc {
   _id: string;
@@ -33,13 +34,8 @@ function serializeCourier(doc: CourierDoc): CourierRow {
 }
 
 export const listCouriers = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
-  .handler(async ({ context }): Promise<CourierRow[]> => {
-    // Atendente also needs active couriers when dispatching orders in the KDS
-    if (!context.roles?.some((r) => ["admin", "supervisor", "atendente"].includes(r))) {
-      throw new Error("Acesso restrito.");
-    }
-
+  .middleware([requireStaff])
+  .handler(async (): Promise<CourierRow[]> => {
     const { getDb } = await import("./db");
     const db = await getDb();
     const col = db.collection<CourierDoc>("couriers");
@@ -59,13 +55,9 @@ const upsertCourierSchema = z.object({
 });
 
 export const saveCourier = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => upsertCourierSchema.parse(raw))
-  .handler(async ({ data, context }): Promise<CourierRow> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas administradores podem cadastrar ou editar entregadores.");
-    }
-
+  .handler(async ({ data }): Promise<CourierRow> => {
     const { getDb } = await import("./db");
     const db = await getDb();
     const col = db.collection<CourierDoc>("couriers");
@@ -113,13 +105,9 @@ const toggleCourierSchema = z.object({
 });
 
 export const toggleCourierActive = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => toggleCourierSchema.parse(raw))
-  .handler(async ({ data, context }): Promise<CourierRow> => {
-    if (!context.roles?.some((r) => ["admin", "supervisor"].includes(r))) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
-
+  .handler(async ({ data }): Promise<CourierRow> => {
     const { getDb } = await import("./db");
     const db = await getDb();
     const col = db.collection<CourierDoc>("couriers");
@@ -135,13 +123,9 @@ export const toggleCourierActive = createServerFn({ method: "POST" })
   });
 
 export const deleteCourier = createServerFn({ method: "POST" })
-  .middleware([requireAuth])
+  .middleware([requireAdmin])
   .validator((raw: unknown) => z.object({ id: z.string().min(1) }).parse(raw))
-  .handler(async ({ data, context }): Promise<{ ok: boolean }> => {
-    if (!context.roles?.includes("admin")) {
-      throw new Error("Apenas administradores podem excluir entregadores.");
-    }
-
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const { getDb } = await import("./db");
     const db = await getDb();
     const col = db.collection<CourierDoc>("couriers");
@@ -151,31 +135,15 @@ export const deleteCourier = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-function getSaoPauloTodayStartDate(): Date {
-  const spDate = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  return new Date(`${spDate}T00:00:00-03:00`);
-}
-
 const courierSettlementSchema = z.object({
   period: z.enum(["shift", "today", "7d"]).default("today"),
 });
 
 export const getCourierSettlementReport = createServerFn({ method: "GET" })
-  .middleware([requireAuth])
+  .middleware([requireSupervisorOrAdmin])
   .validator((raw: unknown) => courierSettlementSchema.parse(raw ?? {}))
   .handler(async ({ data, context }) => {
     const isAdmin = Boolean(context.roles?.includes("admin"));
-    const isSupervisorOrAdmin = Boolean(
-      context.roles?.some((r) => ["admin", "supervisor"].includes(r)),
-    );
-    if (!isSupervisorOrAdmin) {
-      throw new Error("Acesso restrito a supervisores e administradores.");
-    }
 
     const { getDb } = await import("./db");
     const { calculateCourierSettlements } = await import("./couriers-domain");

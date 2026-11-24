@@ -102,22 +102,7 @@ export async function saveDeliverySettings(settings: { default_fee: number; neig
 }
 
 export async function calculateFeeForNeighborhood(neighborhood: string): Promise<number> {
+  const { matchDeliveryFee } = await import("./delivery-config");
   const config = await getDeliverySettings();
-  if (!neighborhood) return config.default_fee;
-  
-  const cleanTarget = cleanString(neighborhood);
-
-  // 1. Busca exata
-  const exact = config.neighborhoods.find(n => cleanString(n.name) === cleanTarget);
-  if (exact) return exact.fee;
-
-  // 2. Busca parcial
-  const partial = config.neighborhoods.find(n => {
-    const cleanName = cleanString(n.name);
-    return cleanTarget.includes(cleanName) || cleanName.includes(cleanTarget);
-  });
-  if (partial) return partial.fee;
-
-  // 3. Fallback
-  return config.default_fee;
+  return matchDeliveryFee(neighborhood, config.neighborhoods, config.default_fee);
 }
